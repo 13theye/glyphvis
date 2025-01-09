@@ -1,9 +1,13 @@
+#![allow(unused_imports)]
+
 use nannou::prelude::*;
-use models::Project;
+use glyphvis::models::Project;
+use glyphvis::services::grid_service;
 
 struct Model {}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", std::any::type_name::<Project>());
     // Load the project file
     let project = Project::load("../glyphmaker/projects/small-cir-d.json")?;
 

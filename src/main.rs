@@ -1,71 +1,138 @@
-#![allow(unused_imports)]
-
 use nannou::prelude::*;
-use glyphvis::models::Project;
-use glyphvis::services::grid_service;
+use glyphvis::models::data_model::Project;
+use glyphvis::models::grid_model::Grid;
+use glyphvis::services::grid_service::{PathElement, ViewBox};
+use ui::color::DARK_CHARCOAL;
 
-struct Model {}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("{}", std::any::type_name::<Project>());
-    // Load the project file
-    let project = Project::load("../glyphmaker/projects/small-cir-d.json")?;
-
-    // Access grid dimensions
-    println!("Grid dimensions: {}x{}", project.grid_x, project.grid_y);
-    
-    // Get a specific glyph
-    if let Some(glyph) = project.get_glyph("다") {
-        println!("\nGlyph '{}' segments:", glyph.name);
-        for (col, row, segment_type) in glyph.get_parsed_segments() {
-            println!("Position ({}, {}): {}", col, row, segment_type);
-        }
-    }
-    
-    // Get a specific show
-    if let Some(show) = project.get_show("b") {
-        println!("\nShow '{}' elements:", show.name);
-        for (pos, element) in &show.show_order {
-            println!("Position {}: {} ({})", pos, element.name, element.element_type);
-        }
-    }
-
-
-
-    nannou::app(model)
-        .update(update) 
-        .simple_window(view)
-        .run();
-
-    Ok(())
-
-
+struct Model {
+    grid: Grid,
+    tile_size: f32,
 }
 
-fn model(_app: &App) -> Model {
-    Model {}
+fn main() {
+    nannou::app(model)
+        .update(update)
+        .run();
+}
+
+fn model(app: &App) -> Model {
+    // Create window
+    app.new_window().size(800, 600).view(view).build().unwrap();
+    
+    // Load project
+    let project = Project::load("../glyphmaker/projects/small-cir-d.json")
+        .expect("Failed to load project file");
+    
+    // Create grid from project
+    let grid = Grid::new(&project);
+    println!("Created grid with {} elements", grid.elements.len());
+    
+    // Calculate tile size based on window dimensions
+    let window = app.window_rect();
+    let max_tile_size = f32::min(
+        window.w() / grid.width as f32,
+        window.h() / grid.height as f32
+    ) * 0.9; // 90% of available space
+    
+    Model {
+        grid,
+        tile_size: max_tile_size,
+    }
 }
 
 fn update(_app: &App, _model: &mut Model, _update: Update) {
 }
 
-
-fn view(app: &App, _model: &Model, frame: Frame) {
+fn view(app: &App, model: &Model, frame: Frame) {
     let draw = app.draw();
-
-    let sine = app.time.sin();
-    let slowersine = (app.time / 2.0).sin();
-
-    let boundary = app.window_rect();
-
-    let x = map_range(sine, -1.0, 1.0, boundary.bottom(), boundary.top());
-    let y = map_range(slowersine, -1.0, 1.0, boundary.bottom(), boundary.top());
-
-
-    draw.background().color(PLUM);
-
-    draw.ellipse().color(STEELBLUE).x_y(x,y);
-
+    draw.background().color(BLACK);
+    
+    // Calculate grid layout
+    let grid_width = model.tile_size * model.grid.width as f32;
+    let grid_height = model.tile_size * model.grid.height as f32;
+    let offset_x = -grid_width / 2.0;
+    let offset_y = -grid_height / 2.0;
+    
+    // Draw grid elements
+    for y in 0..model.grid.height {
+        for x in 0..model.grid.width {
+            let pos_x = offset_x + (x as f32 * model.tile_size) + (model.tile_size / 2.0);
+            let pos_y = offset_y + (y as f32 * model.tile_size) + (model.tile_size / 2.0);
+            
+            // Draw tile boundary for debugging
+            /*draw.rect()
+                .x_y(pos_x, pos_y)
+                .w_h(model.tile_size, model.tile_size)
+                .stroke(RED)
+                .stroke_weight(4.0)
+                .no_fill();
+            */
+            
+            // Draw all elements at this grid position
+            let elements = model.grid.get_elements_at(x, y);
+            let scale = model.tile_size / model.grid.viewbox.width;
+            //println!("Drawing elements: {:#?}", elements);
+            
+            for element in elements {
+                // Only draw if the element should be visible
+                if model.grid.should_draw_element(element) {
+                    //println!("Drawing element {} at position ({}, {})", element.id, x, y);
+                    draw_element(&draw, &element.path, pos_x, pos_y, scale);
+                }
+            }
+        }
+    }
+    
     draw.to_frame(app, &frame).unwrap();
+}
 
+fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scale: f32) {
+    //println!("Drawing element: {:#?}", element);
+    match element {
+        PathElement::Line { x1, y1, x2, y2 } => {
+            let start = pt2(
+                pos_x + (x1 - 50.0) * scale, 
+                pos_y - (y1 - 50.0) * scale
+            );
+            let end = pt2(
+                pos_x + (x2 - 50.0) * scale, 
+                pos_y - (y2 - 50.0) * scale
+            );
+            
+            draw.line()
+                .start(start)
+                .end(end)
+                .color(rgb(0.1, 0.1, 0.1))
+                .stroke_weight(4.0);
+        },
+        PathElement::Circle { cx, cy, r } => {
+            let center = pt2(
+                pos_x + (cx - 50.0) * scale, 
+                pos_y - (cy - 50.0) * scale
+            );
+            
+            draw.ellipse()
+                .x_y(center.x, center.y)
+                .radius(r * scale)
+                .stroke(rgb(0.1, 0.1, 0.1))
+                .stroke_weight(4.0)
+                .no_fill();
+        },
+        PathElement::Arc { start_x, start_y, end_x, end_y, .. } => {
+            let start = pt2(
+                pos_x + (start_x - 50.0) * scale, 
+                pos_y - (start_y - 50.0) * scale
+            );
+            let end = pt2(
+                pos_x + (end_x - 50.0) * scale, 
+                pos_y - (end_y - 50.0) * scale
+            );
+            
+            draw.line()
+                .start(start)
+                .end(end)
+                .color(rgb(0.1, 0.1, 0.1))
+                .stroke_weight(4.0);
+        }
+    }
 }

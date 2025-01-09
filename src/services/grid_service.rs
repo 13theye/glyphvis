@@ -41,6 +41,22 @@ pub enum PathElement {
     }
 }
 
+impl PathElement {
+    pub fn clone(&self) -> PathElement {
+        match self {
+            PathElement::Line { x1, y1, x2, y2 } => {
+                PathElement::Line { x1: *x1, y1: *y1, x2: *x2, y2: *y2 }
+            },
+            PathElement::Arc { start_x, start_y, radius_x, radius_y, x_axis_rotation, large_arc, sweep, end_x, end_y } => {
+                PathElement::Arc { start_x: *start_x, start_y: *start_y, radius_x: *radius_x, radius_y: *radius_y, x_axis_rotation: *x_axis_rotation, large_arc: *large_arc, sweep: *sweep, end_x: *end_x, end_y: *end_y }
+            },
+            PathElement::Circle { cx, cy, r } => {
+                PathElement::Circle { cx: *cx, cy: *cy, r: *r }
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ViewBox {
     pub min_x: f32,
@@ -54,24 +70,27 @@ impl ViewBox {
     pub fn max_y(&self) -> f32 { self.min_y + self.height }
 }
 
+// supported SVG elements: path & circle
 pub fn parse_svg_element(element: &str) -> Option<PathElement> {
     if element.starts_with("<circle") {
         return parse_circle(element);
     }
+    if let Some((_, second_part)) = element.split_once("id=") {
 
-    // Look for d="..." pattern
-    let d = element
-        .split("d=\"")
-        .nth(1)?
-        .split('"')
-        .next()?
-        .trim();
+        // Look for d="..." pattern
+        let d = second_part
+            .split("d=\"")
+            .nth(1)?
+            .split('"')
+            .next()?
+            .trim();
 
-    if d.contains('A') {
-        parse_arc(d)
-    } else {
-        parse_line(d)
-    }
+        if d.contains('A') {
+            parse_arc(d)
+        } else {
+            parse_line(d)
+        }
+    } else {None}
 }
 
 fn parse_line(d: &str) -> Option<PathElement> {

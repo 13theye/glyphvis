@@ -27,8 +27,8 @@ pub enum PathElement {
     Arc {
         start_x: f32,
         start_y: f32,
-        radius_x: f32,
-        radius_y: f32,
+        rx: f32,
+        ry: f32,
         x_axis_rotation: f32,
         large_arc: bool,
         sweep: bool,
@@ -109,8 +109,8 @@ fn parse_arc(d: &str) -> Option<PathElement> {
     Some(PathElement::Arc {
         start_x: f32::from_str(&caps[1]).ok()?,
         start_y: f32::from_str(&caps[2]).ok()?,
-        radius_x: f32::from_str(&caps[3]).ok()?,
-        radius_y: f32::from_str(&caps[4]).ok()?,
+        rx: f32::from_str(&caps[3]).ok()?,
+        ry: f32::from_str(&caps[4]).ok()?,
         x_axis_rotation: f32::from_str(&caps[5]).ok()?,
         large_arc: &caps[6] == "1",
         sweep: &caps[7] == "1",
@@ -621,11 +621,11 @@ mod tests {
         let d = "M50,0A50,50 0 0,0 100,50";
         let element = parse_arc(d).unwrap();
         match element {
-            PathElement::Arc { start_x, start_y, radius_x, radius_y, .. } => {
+            PathElement::Arc { start_x, start_y, rx, ry, .. } => {
                 assert_eq!(start_x, 50.0);
                 assert_eq!(start_y, 0.0);
-                assert_eq!(radius_x, 50.0);
-                assert_eq!(radius_y, 50.0);
+                assert_eq!(rx, 50.0);
+                assert_eq!(ry, 50.0);
             },
             _ => panic!("Expected Arc"),
         }

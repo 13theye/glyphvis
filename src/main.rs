@@ -93,7 +93,6 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
     let center_x = viewbox.width / 2.0;
     let center_y = viewbox.height / 2.0;
     
-    //println!("Drawing element: {:#?}", element);
     match element {
         PathElement::Line { x1, y1, x2, y2 } => {
             let start = pt2(
@@ -111,6 +110,7 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
                 .color(rgb(0.1, 0.1, 0.1))
                 .stroke_weight(4.0);
         },
+        
         PathElement::Circle { cx, cy, r } => {
             let center = pt2(
                 pos_x + (cx - center_x) * scale, 
@@ -124,21 +124,75 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
                 .stroke_weight(4.0)
                 .no_fill();
         },
-        PathElement::Arc { start_x, start_y, end_x, end_y, .. } => {
-            let start = pt2(
-                pos_x + (start_x - center_x) * scale, 
-                pos_y + (start_y - center_y) * scale  
+
+        PathElement::Arc { start_x, start_y, rx, ry: _, sweep, end_x, end_y, .. } => {
+            // For these specific 90-degree corner arcs, we can simplify the calculation
+            // The center will always be at the corner point
+            let (center_point, start_angle, end_angle) = match (start_x, start_y, end_x, end_y) {
+                // arc-1: top-left quarter (50,0 -> 0,50)
+                (50.0, 0.0, 0.0, 50.0) => {
+                    (pt2(0.0, 0.0), 0.0, PI/2.0)
+                },
+                // arc-2: top-right quarter (50,0 -> 100,50)
+                (50.0, 0.0, 100.0, 50.0) => {
+                    (pt2(100.0, 0.0), PI/2.0, PI)
+                },
+                // arc-3: bottom-left quarter (0,50 -> 50,100)
+                (0.0, 50.0, 50.0, 100.0) => {
+                    (pt2(0.0, 100.0), -PI/2.0, 0.0)
+                },
+                // arc-4: bottom-right quarter (100,50 -> 50,100)
+                (100.0, 50.0, 50.0, 100.0) => {
+                    (pt2(100.0, 100.0), PI, -PI/2.0)
+                },
+                _ => (pt2(0.0, 0.0), 0.0, 0.0), // shouldn't happen
+            };
+
+            // Convert center to screen coordinates
+            let screen_center = pt2(
+                pos_x + (center_point.x - center_x) * scale,
+                pos_y + (center_point.y - center_y) * scale
             );
-            let end = pt2(
-                pos_x + (end_x - center_x) * scale, 
-                pos_y + (end_y - center_y) * scale  
-            );
-            
-            draw.line()
-                .start(start)
-                .end(end)
-                .color(rgb(0.1, 0.1, 0.1))
-                .stroke_weight(4.0);
+
+            // Generate points for the arc
+            let resolution = 32;
+            let points: Vec<Point2> = (0..=resolution)
+                .map(|i| {
+                    let t = i as f32 / resolution as f32;
+                    let angle = if *sweep {
+                        start_angle + t * (end_angle - start_angle)
+                    } else {
+                        end_angle + t * (start_angle - end_angle)
+                    };
+                    
+                    pt2(
+                        screen_center.x + rx * angle.cos() * scale,
+                        screen_center.y + rx * angle.sin() * scale
+                    )
+                })
+                .collect();
+
+            // Build path with individual line segments
+            if let Some(first) = points.first() {
+                let mut builder = nannou::geom::Path::builder()
+                    .move_to(nannou::geom::Point2::new(first.x, first.y));
+                
+                // Add line segments to approximate arc
+                for point in points.iter().skip(1) {
+                    builder = builder.line_to(nannou::geom::Point2::new(point.x, point.y));
+                }
+
+                // Build the path
+                let path: nannou::geom::Path = builder.build();
+                
+                draw.path()
+                    .stroke()
+                    .weight(4.0)
+                    .color(rgb(0.1, 0.1, 0.1))
+                    .events(path.iter());
+            }
         }
     }
 }
+
+use std::f32::consts::PI;

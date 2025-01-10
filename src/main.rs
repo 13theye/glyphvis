@@ -31,7 +31,7 @@ fn model(app: &App) -> Model {
     let max_tile_size = f32::min(
         window.w() / grid.width as f32,
         window.h() / grid.height as f32
-    ) * 0.95; // 95% of available space
+    ) * 0.55; // 95% of available space
     
     Model {
         grid,
@@ -125,66 +125,152 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
                 .no_fill();
         },
 
-        PathElement::Arc { start_x, start_y, rx, ry: _, sweep, end_x, end_y, .. } => {
-            // For these specific 90-degree corner arcs, we can simplify the calculation
-            // The center will always be at the corner point
-            let (center_point, start_angle, end_angle) = match (start_x, start_y, end_x, end_y) {
-                // arc-1: top-left quarter (50,0 -> 0,50)
-                (50.0, 0.0, 0.0, 50.0) => {
-                    (pt2(0.0, 0.0), 0.0, PI/2.0)
-                },
-                // arc-2: top-right quarter (50,0 -> 100,50)
-                (50.0, 0.0, 100.0, 50.0) => {
-                    (pt2(100.0, 0.0), PI/2.0, PI)
-                },
-                // arc-3: bottom-left quarter (0,50 -> 50,100)
-                (0.0, 50.0, 50.0, 100.0) => {
-                    (pt2(0.0, 100.0), -PI/2.0, 0.0)
-                },
-                // arc-4: bottom-right quarter (100,50 -> 50,100)
-                (100.0, 50.0, 50.0, 100.0) => {
-                    (pt2(100.0, 100.0), PI, -PI/2.0)
-                },
-                _ => (pt2(0.0, 0.0), 0.0, 0.0), // shouldn't happen
-            };
+        PathElement::Arc { start_x, start_y, rx, ry, x_axis_rotation, large_arc, sweep, end_x, end_y } => {
+            println!("\nArc path at grid position ({}, {})", pos_x, pos_y);
+            println!("Input params:");
+            println!("  Start: ({}, {}), End: ({}, {})", start_x, start_y, end_x, end_y);
+            println!("  rx: {}, ry: {}, rotation: {}", rx, ry, x_axis_rotation);
+            println!("  large_arc: {}, sweep: {}", large_arc, sweep);
 
-            // Convert center to screen coordinates
-            let screen_center = pt2(
-                pos_x + (center_point.x - center_x) * scale,
-                pos_y + (center_point.y - center_y) * scale
+            // Convert coordinates to screen space first
+            let screen_start = pt2(
+                pos_x + (start_x - center_x) * scale,
+                pos_y + (start_y - center_y) * scale
+            );
+            let screen_end = pt2(
+                pos_x + (end_x - center_x) * scale,
+                pos_y + (end_y - center_y) * scale
             );
 
-            // Generate points for the arc
-            let resolution = 32;
-            let points: Vec<Point2> = (0..=resolution)
-                .map(|i| {
-                    let t = i as f32 / resolution as f32;
-                    let angle = if *sweep {
-                        start_angle + t * (end_angle - start_angle)
-                    } else {
-                        end_angle + t * (start_angle - end_angle)
-                    };
-                    
-                    pt2(
-                        screen_center.x + rx * angle.cos() * scale,
-                        screen_center.y + rx * angle.sin() * scale
-                    )
-                })
-                .collect();
+            println!("Screen coordinates:");
+            println!("  Start: ({:.2}, {:.2})", screen_start.x, screen_start.y);
+            println!("  End: ({:.2}, {:.2})", screen_end.x, screen_end.y);
 
-            // Build path with individual line segments
+            // SVG to center parameterization conversion
+            // Step 1: Transform to origin
+            let x1p = (screen_start.x - screen_end.x) / 2.0;
+            let y1p = (screen_start.y - screen_end.y) / 2.0;
+
+            println!("Step 1 - Transform to origin:");
+            println!("  x1p: {:.2}, y1p: {:.2}", x1p, y1p);
+
+            // Rotate to align with coordinate axes
+            let angle_rad = x_axis_rotation.to_radians();
+            let cos_angle = angle_rad.cos();
+            let sin_angle = angle_rad.sin();
+
+            let xp = cos_angle * x1p + sin_angle * y1p;
+            let yp = -sin_angle * x1p + cos_angle * y1p;
+
+            println!("After rotation:");
+            println!("  xp: {:.2}, yp: {:.2}", xp, yp);
+
+            // Step 2: Compute center
+            let rx_sq = rx * rx * scale * scale;
+            let ry_sq = ry * ry * scale * scale;
+            let xp_sq = xp * xp;
+            let yp_sq = yp * yp;
+
+            // Ensure radii are large enough
+            let radii_scale = xp_sq / rx_sq + yp_sq / ry_sq;
+            let (rx_scaled, ry_scaled) = if radii_scale > 1.0 {
+                let sqrt_scale = radii_scale.sqrt();
+                println!("Scaling up radii by factor: {:.2}", sqrt_scale);
+                (rx * scale * sqrt_scale, ry * scale * sqrt_scale)
+            } else {
+                (rx * scale, ry * scale)
+            };
+
+            println!("Scaled radii:");
+            println!("  rx: {:.2}, ry: {:.2}", rx_scaled, ry_scaled);
+
+            let rx_sq = rx_scaled * rx_scaled;
+            let ry_sq = ry_scaled * ry_scaled;
+
+            let term = (rx_sq * ry_sq - rx_sq * yp_sq - ry_sq * xp_sq) / 
+                      (rx_sq * yp_sq + ry_sq * xp_sq);
+            
+            println!("Center calculation:");
+            println!("  Term under sqrt: {:.2}", term);
+
+            // Guard against numerical errors that might make term slightly negative
+            let s = if term <= 0.0 { 
+                println!("  Warning: Non-positive term, using s = 0");
+                0.0 
+            } else { 
+                term.sqrt() 
+            };
+            let cp = if *large_arc == *sweep {-s} else {s};
+
+            let cxp = cp * rx_scaled * yp / ry_scaled;
+            let cyp = -cp * ry_scaled * xp / rx_scaled;
+
+            // Step 3: Transform back
+            let center_x = cos_angle * cxp - sin_angle * cyp + (screen_start.x + screen_end.x) / 2.0;
+            let center_y = sin_angle * cxp + cos_angle * cyp + (screen_start.y + screen_end.y) / 2.0;
+
+            println!("Calculated center: ({:.2}, {:.2})", center_x, center_y);
+
+            // Calculate angles
+            let start_angle = ((yp - cyp) / ry_scaled).atan2((xp - cxp) / rx_scaled);
+            let end_angle = ((-yp - cyp) / ry_scaled).atan2((-xp - cxp) / rx_scaled);
+            
+            println!("Angles:");
+            println!("  Start: {:.2}, End: {:.2}", start_angle, end_angle);
+
+            // Handle negative radii by flipping sweep flag
+            let (rx_abs, ry_abs, sweep_adjusted) = if *rx < 0.0 || *ry < 0.0 {
+                (rx.abs(), ry.abs(), !sweep)
+            } else {
+                (*rx, *ry, *sweep)
+            };
+
+            // Generate points
+            let resolution = 64;
+            let mut points = Vec::with_capacity(resolution + 1);
+            
+            // Calculate total angle sweep
+            let mut delta_angle = end_angle - start_angle;
+            
+            // Ensure we're sweeping in the correct direction
+            if sweep_adjusted {
+                if delta_angle < 0.0 {
+                    delta_angle += 2.0 * PI;
+                }
+            } else {
+                if delta_angle > 0.0 {
+                    delta_angle -= 2.0 * PI;
+                }
+            }
+
+            for i in 0..=resolution {
+                let t = i as f32 / resolution as f32;
+                let angle = start_angle + t * delta_angle;
+
+                let x = center_x + rx_scaled * (cos_angle * angle.cos() - sin_angle * angle.sin());
+                let y = center_y + ry_scaled * (sin_angle * angle.cos() + cos_angle * angle.sin());
+
+                points.push(pt2(x, y));
+            }
+
+            println!("Generated {} points", points.len());
+            if let Some(first) = points.first() {
+                println!("First point: ({:.2}, {:.2})", first.x, first.y);
+            }
+            if let Some(last) = points.last() {
+                println!("Last point: ({:.2}, {:.2})", last.x, last.y);
+            }
+
+            // Build and draw the path
             if let Some(first) = points.first() {
                 let mut builder = nannou::geom::Path::builder()
                     .move_to(nannou::geom::Point2::new(first.x, first.y));
                 
-                // Add line segments to approximate arc
                 for point in points.iter().skip(1) {
                     builder = builder.line_to(nannou::geom::Point2::new(point.x, point.y));
                 }
 
-                // Build the path
-                let path: nannou::geom::Path = builder.build();
-                
+                let path = builder.build();
                 draw.path()
                     .stroke()
                     .weight(4.0)

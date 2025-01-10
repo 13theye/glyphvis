@@ -1,13 +1,13 @@
 glyphvis
 ├── src
-    ├── main.rs
-    └── lib.rs
-    └── Cargo.lock
-    └── Cargo.toml
-    ├── models
-    │   ├── data_model.rs
-    │   └── grid_model.rs
-    │   └── mod.rs
-    ├── services
-        ├── grid_service.rs
-        └── mod.rs
+│   ├── main.rs
+│   └── lib.rs
+│   ├── models
+│   │   ├── data_model.rs
+│   │   └── grid_model.rs
+│   │   └── mod.rs
+│   ├── services
+│       ├── grid_service.rs
+│       └── mod.rs
+├──Cargo.lock
+└──Cargo.toml

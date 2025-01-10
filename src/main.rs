@@ -1,7 +1,7 @@
 use nannou::prelude::*;
 use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
-use glyphvis::services::grid_service::PathElement;
+use glyphvis::services::grid_service::{PathElement, ViewBox};
 
 struct Model {
     grid: Grid,
@@ -78,7 +78,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 // Only draw if the element should be visible
                 if model.grid.should_draw_element(element) {
                     //println!("Drawing element {} at position ({}, {})", element.id, x, y);
-                    draw_element(&draw, &element.path, pos_x, pos_y, scale);
+                    draw_element(&draw, &element.path, pos_x, pos_y, scale, &model.grid.viewbox);
                 }
             }
         }
@@ -87,17 +87,22 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.to_frame(app, &frame).unwrap();
 }
 
-fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scale: f32) {
+// transforms path instructions from SVG to Nannou draw instructions.
+// SVG instructions have origin at top left, Nannou at center.
+fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scale: f32, viewbox: &ViewBox) {
+    let center_x = viewbox.width / 2.0;
+    let center_y = viewbox.height / 2.0;
+    
     //println!("Drawing element: {:#?}", element);
     match element {
         PathElement::Line { x1, y1, x2, y2 } => {
             let start = pt2(
-                pos_x + (x1 - 50.0) * scale, 
-                pos_y - (y1 - 50.0) * scale
+                pos_x + (x1 - center_x) * scale, 
+                pos_y + (y1 - center_y) * scale 
             );
             let end = pt2(
-                pos_x + (x2 - 50.0) * scale, 
-                pos_y - (y2 - 50.0) * scale
+                pos_x + (x2 - center_x) * scale, 
+                pos_y + (y2 - center_y) * scale  
             );
             
             draw.line()
@@ -108,8 +113,8 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
         },
         PathElement::Circle { cx, cy, r } => {
             let center = pt2(
-                pos_x + (cx - 50.0) * scale, 
-                pos_y - (cy - 50.0) * scale
+                pos_x + (cx - center_x) * scale, 
+                pos_y + (cy - center_y) * scale  
             );
             
             draw.ellipse()
@@ -121,12 +126,12 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
         },
         PathElement::Arc { start_x, start_y, end_x, end_y, .. } => {
             let start = pt2(
-                pos_x + (start_x - 50.0) * scale, 
-                pos_y - (start_y - 50.0) * scale
+                pos_x + (start_x - center_x) * scale, 
+                pos_y + (start_y - center_y) * scale  
             );
             let end = pt2(
-                pos_x + (end_x - 50.0) * scale, 
-                pos_y - (end_y - 50.0) * scale
+                pos_x + (end_x - center_x) * scale, 
+                pos_y + (end_y - center_y) * scale  
             );
             
             draw.line()

@@ -120,6 +120,7 @@ fn parse_arc(d: &str) -> Option<PathElement> {
 }
 
 fn parse_circle(element: &str) -> Option<PathElement> {
+    println!("Trying to parse circle: '{}'", element);
     let re = regex::Regex::new(r#"cx="([\d.-]+)".*cy="([\d.-]+)".*r="([\d.-]+)""#).ok()?;
     let caps = re.captures(element)?;
     

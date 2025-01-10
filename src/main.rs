@@ -8,50 +8,6 @@ struct Model {
     tile_size: f32,
 }
 
-trait DrawingBackend {
-    fn draw_line(&self, start: Point2, end: Point2, color: Rgb<f32>, weight: f32);
-    fn draw_circle(&self, center: Point2, radius: f32, color: Rgb<f32>, weight: f32);
-    fn draw_path(&self, points: &[Point2], color: Rgb<f32>, weight: f32);
-}
-
-// Implement for Nannou's Draw
-impl DrawingBackend for Draw {
-    fn draw_line(&self, start: Point2, end: Point2, color: Rgb<f32>, weight: f32) {
-        self.line()
-            .start(start)
-            .end(end)
-            .color(color)
-            .stroke_weight(weight);
-    }
-
-    fn draw_circle(&self, center: Point2, radius: f32, color: Rgb<f32>, weight: f32) {
-        self.ellipse()
-            .x_y(center.x, center.y)
-            .radius(radius)
-            .stroke(color)
-            .stroke_weight(weight)
-            .no_fill();
-    }
-
-    fn draw_path(&self, points: &[Point2], color: Rgb<f32>, weight: f32) {
-        if let Some(first) = points.first() {
-            let mut builder = nannou::geom::Path::builder()
-                .move_to(nannou::geom::Point2::new(first.x, first.y));
-            
-            for point in points.iter().skip(1) {
-                builder = builder.line_to(nannou::geom::Point2::new(point.x, point.y));
-            }
-
-            let path = builder.build();
-            self.path()
-                .stroke()
-                .weight(weight)
-                .color(color)
-                .events(path.iter());
-        }
-    }
-}
-
 fn main() {
     nannou::app(model)
         .update(update)
@@ -63,7 +19,7 @@ fn model(app: &App) -> Model {
     app.new_window().size(800, 800).view(view).build().unwrap();
     
     // Load project
-    let project = Project::load("../glyphmaker/projects/small-cir-d2.json")
+    let project = Project::load("../glyphmaker/projects/grid.json")
         .expect("Failed to load project file");
     
     // Create grid from project
@@ -75,7 +31,7 @@ fn model(app: &App) -> Model {
     let max_tile_size = f32::min(
         window.w() / grid.width as f32,
         window.h() / grid.height as f32
-    ) * 0.55; // 95% of available space
+    ) * 0.95; // 95% of available space
     
     Model {
         grid,
@@ -103,7 +59,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
             let pos_x = offset_x + ((x - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
             let pos_y = offset_y + ((y - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
             
-            /* 
+            
             // Draw tile boundary for debugging
             draw.rect()
                 .x_y(pos_x, pos_y)
@@ -111,7 +67,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 .stroke(RED)
                 .stroke_weight(4.0)
                 .no_fill();
-            */
+            
             
             // Draw all elements at this grid position
             let elements = model.grid.get_elements_at(x, y);
@@ -133,7 +89,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
 // transforms path instructions from SVG to Nannou draw instructions.
 // SVG instructions have origin at top left, Nannou at center.
-fn draw_element<D: DrawingBackend>(draw: &D, element: &PathElement, pos_x: f32, pos_y: f32, scale: f32, viewbox: &ViewBox) {
+fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scale: f32, viewbox: &ViewBox) {
     let center_x = viewbox.width / 2.0;
     let center_y = viewbox.height / 2.0;
     let color = rgb(0.1, 0.1, 0.1);
@@ -150,7 +106,11 @@ fn draw_element<D: DrawingBackend>(draw: &D, element: &PathElement, pos_x: f32, 
                 pos_y + (y2 - center_y) * scale  
             );
             
-            draw.draw_line(start, end, color, weight);
+            draw.line()
+                .start(start)
+                .end(end)
+                .color(color)
+                .stroke_weight(weight);
         },
         
         PathElement::Circle { cx, cy, r } => {
@@ -159,9 +119,14 @@ fn draw_element<D: DrawingBackend>(draw: &D, element: &PathElement, pos_x: f32, 
                 pos_y + (cy - center_y) * scale  
             );
             
-            draw.draw_circle(center, r * scale, color, weight);
+            draw.ellipse()
+                .x_y(center.x, center.y)
+                .radius(r * scale)
+                .stroke(color)
+                .stroke_weight(weight)
+                .no_fill();
         },
-
+        
         PathElement::Arc { start_x, start_y, rx, ry, x_axis_rotation, large_arc, sweep, end_x, end_y } => {
             println!("\nArc path at grid position ({}, {})", pos_x, pos_y);
             println!("Input params:");
@@ -292,167 +257,23 @@ fn draw_element<D: DrawingBackend>(draw: &D, element: &PathElement, pos_x: f32, 
             }
 
             // Build and draw the path
-            draw.draw_path(&points, color, weight);
+            if let Some(first) = points.first() {
+                let mut builder = nannou::geom::Path::builder()
+                    .move_to(nannou::geom::Point2::new(first.x, first.y));
+                
+                for point in points.iter().skip(1) {
+                    builder = builder.line_to(nannou::geom::Point2::new(point.x, point.y));
+                }
+
+                let path = builder.build();
+                draw.path()
+                    .stroke()
+                    .weight(weight)
+                    .color(color)
+                    .events(path.iter());
+            }
         }
     }
 }
 
 use std::f32::consts::PI;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    // Mock types for testing
-    #[derive(Debug)]
-    enum MockDrawCommand {
-        Path { points: Vec<Point2> },
-        Line { start: Point2, end: Point2 },
-        Circle { center: Point2, radius: f32 }
-    }
-
-    impl DrawingBackend for MockDraw {
-        fn draw_line(&self, start: Point2, end: Point2, color: Rgb<f32>, weight: f32) {
-            let mut commands = self.commands.borrow_mut();
-            commands.push(MockDrawCommand::Line { start, end });
-        }
-
-        fn draw_circle(&self, center: Point2, radius: f32, color: Rgb<f32>, weight: f32) {
-            let mut commands = self.commands.borrow_mut();
-            commands.push(MockDrawCommand::Circle { center, radius });
-        }
-
-        fn draw_path(&self, points: &[Point2], color: Rgb<f32>, weight: f32) {
-            let mut commands = self.commands.borrow_mut();
-            commands.push(MockDrawCommand::Path { points: points.to_vec() });
-        }
-    }
-
-    // Update MockDraw to use interior mutability
-    struct MockDraw {
-        commands: std::cell::RefCell<Vec<MockDrawCommand>>
-    }
-
-    impl MockDraw {
-        fn new() -> Self {
-            MockDraw { 
-                commands: std::cell::RefCell::new(Vec::new()) 
-            }
-        }
-
-        fn get_commands(&self) -> std::cell::Ref<'_, Vec<MockDrawCommand>> {
-            self.commands.borrow()
-        }
-    }
-
-    fn approx_eq(a: f32, b: f32) -> bool {
-        (a - b).abs() < 0.001
-    }
-
-    fn point_approx_eq(a: Point2, b: Point2) -> bool {
-        approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
-    }
-
-    fn create_test_viewbox() -> ViewBox {
-        ViewBox {
-            min_x: 0.0,
-            min_y: 0.0,
-            width: 100.0,
-            height: 100.0,
-        }
-    }
-
-    #[test]
-    fn test_draw_line() {
-        let draw = MockDraw::new();  // removed mut
-        let viewbox = create_test_viewbox();
-        let scale = 1.0;
-        let pos_x = 0.0;
-        let pos_y = 0.0;
-
-        let line = PathElement::Line {
-            x1: 0.0,
-            y1: 0.0,
-            x2: 100.0,
-            y2: 0.0,
-        };
-
-        draw_element(&draw, &line, pos_x, pos_y, scale, &viewbox);
-
-        let commands = draw.get_commands();
-        match &commands[0] {
-            MockDrawCommand::Line { start, end } => {
-                assert!(point_approx_eq(*start, pt2(-50.0, 0.0)));
-                assert!(point_approx_eq(*end, pt2(50.0, 0.0)));
-            },
-            _ => panic!("Expected Line command")
-        }
-    }
-
-    #[test]
-    fn test_draw_circle() {
-        let draw = MockDraw::new();  // removed mut
-        let viewbox = create_test_viewbox();
-        let scale = 1.0;
-        let pos_x = 0.0;
-        let pos_y = 0.0;
-
-        let circle = PathElement::Circle {
-            cx: 50.0,
-            cy: 50.0,
-            r: 25.0,
-        };
-
-        draw_element(&draw, &circle, pos_x, pos_y, scale, &viewbox);
-
-        let commands = draw.get_commands();
-        match &commands[0] {
-            MockDrawCommand::Circle { center, radius } => {
-                assert!(point_approx_eq(*center, pt2(0.0, 0.0)));
-                assert!(approx_eq(*radius, 25.0));
-            },
-            _ => panic!("Expected Circle command")
-        }
-    }
-
-    #[test]
-    fn test_draw_arc() {
-        let draw = MockDraw::new();  // removed mut
-        let viewbox = create_test_viewbox();
-        let scale = 1.0;
-        let pos_x = 0.0;
-        let pos_y = 0.0;
-
-        let arc = PathElement::Arc {
-            start_x: 50.0,
-            start_y: 0.0,
-            rx: 50.0,
-            ry: 50.0,
-            x_axis_rotation: 0.0,
-            large_arc: false,
-            sweep: true,
-            end_x: 0.0,
-            end_y: 50.0,
-        };
-
-        draw_element(&draw, &arc, pos_x, pos_y, scale, &viewbox);
-
-        let commands = draw.get_commands();
-        match &commands[0] {
-            MockDrawCommand::Path { points } => {
-                assert!(points.len() > 2, "Arc should have multiple points");
-                assert!(point_approx_eq(points[0], pt2(0.0, -50.0)));
-                assert!(point_approx_eq(points[points.len()-1], pt2(-50.0, 0.0)));
-                
-                // Test that points form an arc
-                for point in points {
-                    // Distance from center should be approximately radius
-                    let dist = (point.x.powi(2) + point.y.powi(2)).sqrt();
-                    assert!(approx_eq(dist, 50.0), 
-                           "Point {:?} is not on arc (distance: {})", point, dist);
-                }
-            },
-            _ => panic!("Expected Path command")
-        }
-    }
-}

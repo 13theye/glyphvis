@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_invalid_segment() {
-        let segment = "invalid";
+        let segment = "1,2:ver-3-1";
         let parsed = Glyph::parse_segment(segment);
         assert_eq!(parsed, None);
     }

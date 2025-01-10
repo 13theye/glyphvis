@@ -188,28 +188,28 @@ pub fn get_neighbor_direction(x: u32, y: u32, neighbor_x: u32, neighbor_y: u32) 
 pub fn get_neighbor_coords(col: u32, row: u32, edge_type: EdgeType, grid_width: u32, grid_height: u32) -> Option<(u32, u32)> {
     match edge_type {
         EdgeType::North => {
-            if row > 0 { Some((col, row - 1)) } else { None }
+            if row > 1 { Some((col, row - 1)) } else { None }
         },
         EdgeType::South => {
-            if row < grid_height - 1 { Some((col, row + 1)) } else { None }
+            if row < grid_height { Some((col, row + 1)) } else { None }
         },
         EdgeType::East => {
-            if col < grid_width - 1 { Some((col + 1, row)) } else { None }
+            if col < grid_width { Some((col + 1, row)) } else { None }
         },
         EdgeType::West => {
-            if col > 0 { Some((col - 1, row)) } else { None }
+            if col > 1 { Some((col - 1, row)) } else { None }
         },
         EdgeType::Northwest => {
-            if row > 0 && col > 0 { Some((col - 1, row - 1)) } else { None }
+            if row > 1 && col > 1 { Some((col - 1, row - 1)) } else { None }
         },
         EdgeType::Northeast => {
-            if row > 0 && col < grid_width - 1 { Some((col + 1, row - 1)) } else { None }
+            if row > 1 && col < grid_width { Some((col + 1, row - 1)) } else { None }
         },
         EdgeType::Southwest => {
-            if row < grid_height - 1 && col > 0 { Some((col - 1, row + 1)) } else { None }
+            if row < grid_height && col > 0 { Some((col - 1, row + 1)) } else { None }
         },
         EdgeType::Southeast => {
-            if row < grid_height - 1 && col < grid_width - 1 { Some((col + 1, row + 1)) } else { None }
+            if row < grid_height && col < grid_width { Some((col + 1, row + 1)) } else { None }
         },
         EdgeType::None => None
     }
@@ -321,42 +321,49 @@ pub fn should_draw_element(
     grid_height: u32,
     elements: &HashMap<String, GridElement>
 ) -> bool {
-    // Get neighbor coordinates based on edge type
-    let (x, y) = element.position;
-    
-    if let Some((neighbor_x, neighbor_y)) = get_neighbor_coords(x, y, element.edge_type, grid_width, grid_height) {
-        let neighbor_elements = get_elements_at(elements, neighbor_x, neighbor_y);
-        let direction = get_neighbor_direction(x, y, neighbor_x, neighbor_y);
-        
-        // Check each potential neighbor for alignment
-        !neighbor_elements.iter().any(|neighbor| {
-            let expected_edge = match element.edge_type {
-                EdgeType::North => EdgeType::South,
-                EdgeType::South => EdgeType::North,
-                EdgeType::East => EdgeType::West,
-                EdgeType::West => EdgeType::East,
-                EdgeType::Northwest => EdgeType::Southeast,
-                EdgeType::Northeast => EdgeType::Southwest,
-                EdgeType::Southwest => EdgeType::Northeast,
-                EdgeType::Southeast => EdgeType::Northwest,
-                EdgeType::None => return false,
-            };
-            
-            if neighbor.edge_type != expected_edge {
-                return false;
-            }
+    //println!("\nEvaluating element {} at position {:?} with edge type {:?}", 
+    //         element.id, element.position, element.edge_type);
 
-            check_path_alignment(
-                &element.path,
-                element.edge_type,
-                &neighbor.path,
-                neighbor.edge_type,
-                direction
-            )
-        })
-    } else {
-        true // No neighbor exists, so we should draw
+    // If it's not an edge, always draw it
+    if element.edge_type == EdgeType::None {
+        //println!("Not an edge element, should draw");
+        return true;
     }
+
+    let (x, y) = element.position;
+
+    // Get potential neighbor position
+    if let Some((neighbor_x, neighbor_y)) = get_neighbor_coords(x, y, element.edge_type, grid_width, grid_height) {
+        //println!("Found potential neighbor position: ({}, {})", neighbor_x, neighbor_y);
+        
+        // Check if neighbor has priority (lower grid position)
+        let neighbor_has_priority = neighbor_x < x || (neighbor_x == x && neighbor_y < y);
+        //println!("Neighbor has priority: {}", neighbor_has_priority);
+        
+        // If neighbor has priority and we find a matching path, don't draw this one
+        if neighbor_has_priority {
+            let neighbor_elements = get_elements_at(elements, neighbor_x, neighbor_y);
+            //println!("Found {} neighbor elements", neighbor_elements.len());
+            
+            for neighbor in neighbor_elements {
+                //println!("Checking neighbor {} with edge type {:?}", neighbor.id, neighbor.edge_type);
+                let direction = get_neighbor_direction(x, y, neighbor_x, neighbor_y);
+                if check_path_alignment(
+                    &element.path,
+                    element.edge_type,
+                    &neighbor.path,
+                    neighbor.edge_type,
+                    direction
+                ) {
+                    //println!("Found matching neighbor path, should not draw");
+                    return false;
+                }
+            }
+        }
+    }
+    
+    //println!("No matching neighbor found or neighbor doesn't have priority, should draw");
+    true
 }
 
 
@@ -379,23 +386,23 @@ mod tests {
         let mut elements = HashMap::new();
         
         // Add a few test elements
-        elements.insert("0,0 : test1".to_string(), GridElement {
+        elements.insert("1,1 : test1".to_string(), GridElement {
             id: "test1".to_string(),
-            position: (0, 0),
+            position: (1, 1),
             path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 100.0, y2: 0.0 },
             edge_type: EdgeType::North,
         });
         
-        elements.insert("0,0 : test2".to_string(), GridElement {
+        elements.insert("1,1 : test2".to_string(), GridElement {
             id: "test2".to_string(),
-            position: (0, 0),
+            position: (1, 1),
             path: PathElement::Circle { cx: 0.0, cy: 0.0, r: 5.0 },
             edge_type: EdgeType::Northwest,
         });
         
-        elements.insert("1,0 : test3".to_string(), GridElement {
+        elements.insert("2,1 : test3".to_string(), GridElement {
             id: "test3".to_string(),
-            position: (1, 0),
+            position: (2, 1),
             path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 100.0, y2: 0.0 },
             edge_type: EdgeType::North,
         });
@@ -407,12 +414,12 @@ mod tests {
     fn test_get_elements_at() {
         let elements = create_test_elements();
         
-        // Test getting elements at 0,0
-        let elements_at_origin = get_elements_at(&elements, 0, 0);
+        // Test getting elements at 1,1
+        let elements_at_origin = get_elements_at(&elements, 1, 1);
         assert_eq!(elements_at_origin.len(), 2);
         
-        // Test getting elements at 1,0
-        let elements_at_one = get_elements_at(&elements, 1, 0);
+        // Test getting elements at 2,1
+        let elements_at_one = get_elements_at(&elements, 2, 1);
         assert_eq!(elements_at_one.len(), 1);
         
         // Test getting elements at empty position
@@ -421,59 +428,24 @@ mod tests {
     }
 
     #[test]
-    fn test_should_draw_element() {
-        let mut elements = create_test_elements();
-        
-        // Create two matching elements on neighboring tiles
-        let element1 = GridElement {
-            id: "edge1".to_string(),
-            position: (0, 0),
-            path: PathElement::Line { x1: 100.0, y1: 0.0, x2: 100.0, y2: 50.0 },
-            edge_type: EdgeType::East,
-        };
-        
-        let element2 = GridElement {
-            id: "edge2".to_string(),
-            position: (1, 0),
-            path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 0.0, y2: 50.0 },
-            edge_type: EdgeType::West,
-        };
-        
-        elements.insert("0,0 : edge1".to_string(), element1.clone());
-        elements.insert("1,0 : edge2".to_string(), element2);
-        
-        // Test that element with matching neighbor is not drawn
-        assert!(!should_draw_element(&element1, 2, 2, &elements));
-        
-        // Test that element without neighbors is drawn
-        let solo_element = GridElement {
-            id: "solo".to_string(),
-            position: (0, 0),
-            path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 0.0, y2: 50.0 },
-            edge_type: EdgeType::West,
-        };
-        assert!(should_draw_element(&solo_element, 2, 2, &elements));
-    }
-
-    #[test]
     fn test_get_neighbor_coords() {
         let tests = vec![
             // Format: (x, y, edge_type, grid_width, grid_height, expected)
-            (1, 1, EdgeType::North, 3, 3, Some((1, 0))),
-            (1, 1, EdgeType::South, 3, 3, Some((1, 2))),
-            (1, 1, EdgeType::East, 3, 3, Some((2, 1))),
-            (1, 1, EdgeType::West, 3, 3, Some((0, 1))),
-            (1, 1, EdgeType::Northwest, 3, 3, Some((0, 0))),
-            (1, 1, EdgeType::Northeast, 3, 3, Some((2, 0))),
-            (1, 1, EdgeType::Southwest, 3, 3, Some((0, 2))),
-            (1, 1, EdgeType::Southeast, 3, 3, Some((2, 2))),
+            (2, 2, EdgeType::North, 4, 4, Some((2, 1))),
+            (2, 2, EdgeType::South, 4, 4, Some((2, 3))),
+            (2, 2, EdgeType::East, 4, 4, Some((3, 2))),
+            (2, 2, EdgeType::West, 4, 4, Some((1, 2))),
+            (2, 2, EdgeType::Northwest, 4, 4, Some((1, 1))),
+            (2, 2, EdgeType::Northeast, 4, 4, Some((3, 1))),
+            (2, 2, EdgeType::Southwest, 4, 4, Some((1, 3))),
+            (2, 2, EdgeType::Southeast, 4, 4, Some((3, 3))),
             // Test edge cases
-            (0, 0, EdgeType::West, 3, 3, None),
-            (0, 0, EdgeType::North, 3, 3, None),
-            (2, 2, EdgeType::South, 3, 3, None),
-            (2, 2, EdgeType::East, 3, 3, None),
-            (0, 0, EdgeType::Northwest, 3, 3, None),
-            (2, 2, EdgeType::Southeast, 3, 3, None),
+            (1, 1, EdgeType::West, 4, 4, None),
+            (1, 1, EdgeType::North, 4, 4, None),
+            (1, 4, EdgeType::South, 4, 4, None),
+            (4, 1, EdgeType::East, 4, 4, None),
+            (1, 1, EdgeType::Northwest, 4, 4, None),
+            (4, 4, EdgeType::Southeast, 4, 4, None),
         ];
 
         for (x, y, edge_type, width, height, expected) in tests {
@@ -677,5 +649,125 @@ mod tests {
         let corner_path =
             PathElement::Circle { cx: 0.0, cy: 0.0, r: 5.0 };
         assert_eq!(detect_edge_type(&corner_path, &viewbox), EdgeType::Northwest);
+    }
+}
+
+#[cfg(test)]
+mod drawing_tests {
+    use super::*;
+
+    fn create_test_elements() -> HashMap<String, GridElement> {
+        let mut elements = HashMap::new();
+
+        // Test elements for a 3x3 grid
+        // Create a vertical line on the east edge of (1,1) and west edge of (2,1)
+        elements.insert("1,1 : ver-3-1".to_string(), GridElement {
+            id: "ver-3-1".to_string(),
+            position: (1, 1),
+            path: PathElement::Line {
+                x1: 100.0,
+                y1: 50.0,
+                x2: 100.0,
+                y2: 0.0,
+            },
+            edge_type: EdgeType::East,
+        });
+
+        elements.insert("2,1 : ver-1-1".to_string(), GridElement {
+            id: "ver-1-1".to_string(),
+            position: (2, 1),
+            path: PathElement::Line {
+                x1: 0.0,
+                y1: 0.0,
+                x2: 0.0,
+                y2: 50.0,
+            },
+            edge_type: EdgeType::West,
+        });
+
+        // Create a horizontal line on the south edge of (1,1) and north edge of (1,2)
+        elements.insert("1,1 : hor-3-1".to_string(), GridElement {
+            id: "hor-3-1".to_string(),
+            position: (1, 1),
+            path: PathElement::Line {
+                x1: 0.0,
+                y1: 100.0,
+                x2: 50.0,
+                y2: 100.0,
+            },
+            edge_type: EdgeType::South,
+        });
+
+        elements.insert("1,2 : hor-1-1".to_string(), GridElement {
+            id: "hor-1-1".to_string(),
+            position: (1, 2),
+            path: PathElement::Line {
+                x1: 0.0,
+                y1: 0.0,
+                x2: 50.0,
+                y2: 0.0,
+            },
+            edge_type: EdgeType::North,
+        });
+
+        elements
+    }
+
+    #[test]
+    fn test_should_draw_horizontal_edge() {
+        let elements = create_test_elements();
+        let grid_width = 4;
+        let grid_height = 4;
+
+        // Get our test elements
+        let east_element = elements.get("1,1 : ver-3-1").unwrap();
+        let west_element = elements.get("2,1 : ver-1-1").unwrap();
+
+        // The element at (1,1) should take priority over (2,1) for the shared edge
+        assert!(!should_draw_element(west_element, grid_width, grid_height, &elements),
+                "Should not draw east edge of (2,1) because (1,1) has priority");
+        assert!(should_draw_element(east_element, grid_width, grid_height, &elements),
+                "Should draw east edge of (1,1) because it has priority");
+    }
+
+    #[test]
+    fn test_should_draw_vertical_edge() {
+        let elements = create_test_elements();
+        let grid_width = 4;
+        let grid_height = 4;
+
+        // Get our test elements
+        let south_element = elements.get("1,1 : hor-3-1").unwrap();
+        let north_element = elements.get("1,2 : hor-1-1").unwrap();
+
+        // The element at (1,2) should take priority over (1,1) for the shared edge
+        assert!(should_draw_element(south_element, grid_width, grid_height, &elements),
+                "Should draw south edge of (1,1) because (1,2) has priority");
+        assert!(!should_draw_element(north_element, grid_width, grid_height, &elements),
+                "Should not draw north edge of (1,2) because (1,1) has priority");
+    }
+
+    #[test]
+    fn test_should_draw_non_edge() {
+        let mut elements = create_test_elements();
+        let grid_width = 4;
+        let grid_height = 4;
+
+        // Add a non-edge element
+        elements.insert("1,1 : center".to_string(), GridElement {
+            id: "center".to_string(),
+            position: (1, 1),
+            path: PathElement::Line {
+                x1: 25.0,
+                y1: 25.0,
+                x2: 75.0,
+                y2: 75.0,
+            },
+            edge_type: EdgeType::None,
+        });
+
+        let center_element = elements.get("1,1 : center").unwrap();
+        assert!(should_draw_element(center_element, grid_width, grid_height, &elements),
+                "Should always draw non-edge elements");
     }
 }

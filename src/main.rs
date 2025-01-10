@@ -1,8 +1,7 @@
 use nannou::prelude::*;
 use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
-use glyphvis::services::grid_service::{PathElement, ViewBox};
-use ui::color::DARK_CHARCOAL;
+use glyphvis::services::grid_service::PathElement;
 
 struct Model {
     grid: Grid,
@@ -17,7 +16,7 @@ fn main() {
 
 fn model(app: &App) -> Model {
     // Create window
-    app.new_window().size(800, 600).view(view).build().unwrap();
+    app.new_window().size(800, 800).view(view).build().unwrap();
     
     // Load project
     let project = Project::load("../glyphmaker/projects/small-cir-d.json")
@@ -32,7 +31,7 @@ fn model(app: &App) -> Model {
     let max_tile_size = f32::min(
         window.w() / grid.width as f32,
         window.h() / grid.height as f32
-    ) * 0.9; // 90% of available space
+    ) * 0.95; // 95% of available space
     
     Model {
         grid,
@@ -54,13 +53,15 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let offset_y = -grid_height / 2.0;
     
     // Draw grid elements
-    for y in 0..model.grid.height {
-        for x in 0..model.grid.width {
-            let pos_x = offset_x + (x as f32 * model.tile_size) + (model.tile_size / 2.0);
-            let pos_y = offset_y + (y as f32 * model.tile_size) + (model.tile_size / 2.0);
+    for y in 1..=model.grid.height {
+        for x in 1..=model.grid.width {
+            // offset accounts for grid starting at 1, not 0
+            let pos_x = offset_x + ((x - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
+            let pos_y = offset_y + ((y - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
             
+            /* 
             // Draw tile boundary for debugging
-            /*draw.rect()
+            draw.rect()
                 .x_y(pos_x, pos_y)
                 .w_h(model.tile_size, model.tile_size)
                 .stroke(RED)

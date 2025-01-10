@@ -1,7 +1,7 @@
 use crate::models::data_model::Project;
 use std::collections::HashMap;
 use crate::services::grid_service;
-use crate::services::grid_service::{ PathElement, GridElement, ViewBox };
+use crate::services::grid_service::{ PathElement, GridElement, ViewBox, EdgeType };
 
 #[derive(Debug)]
 pub struct Grid {
@@ -13,6 +13,7 @@ pub struct Grid {
 
 impl Grid {
     pub fn new(project: &Project) -> Self {
+        println!("\n=== Creating Grid ({}x{}) ===", project.grid_x, project.grid_y);
         let mut elements = HashMap::new();
         let viewbox = ViewBox {
             min_x: 0.0,
@@ -26,8 +27,6 @@ impl Grid {
             .lines()
             .filter(|line| line.contains("<path") || line.contains("<circle"))
             .filter_map(|line| {
-                // Extract ID
-                //println!("line: {}", line);
                 if let Some(id_start) = line.find("id=\"") {
                     if let Some(id_end) = line[id_start + 4..].find('\"') {
                         let id = line[id_start + 4..id_start + 4 + id_end].to_string();
@@ -40,9 +39,15 @@ impl Grid {
             })
             .collect();
 
-        // Generate grid elements
-        for y in 0..project.grid_y {
-            for x in 0..project.grid_x {
+        println!("\n=== Base Elements ===");
+        for (id, path) in &base_elements {
+            println!("{}: {:?}", id, path);
+        }
+
+        // Generate grid elements with 1-based coordinates
+        println!("\n=== Generating Grid Elements ===");
+        for y in 1..=project.grid_y {
+            for x in 1..=project.grid_x {
                 for (base_id, base_path) in &base_elements {
                     let grid_id = format!("{},{} : {}", x, y, base_id);
                     let edge_type = grid_service::detect_edge_type(base_path, &viewbox);
@@ -52,17 +57,45 @@ impl Grid {
                         path: base_path.clone(),
                         edge_type,
                     };
+                    
+                    // Only print edge elements for brevity
+                    if edge_type != EdgeType::None {
+                        println!("Created {} at ({},{}) - {:?}", base_id, x, y, edge_type);
+                    }
+                    
                     elements.insert(grid_id, element);
                 }
             }
         }
 
-        Grid {
+        // Pre-calculate and print which elements should be drawn
+        println!("\n=== Drawing Decisions ===");
+        let grid = Grid {
             elements,
             width: project.grid_x,
             height: project.grid_y,
             viewbox,
+        };
+
+        for y in 1..=project.grid_y {
+            for x in 1..=project.grid_x {
+                for element in grid.get_elements_at(x, y) {
+                    if element.edge_type != EdgeType::None {
+                        let should_draw = grid_service::should_draw_element(
+                            element,
+                            grid.width,
+                            grid.height,
+                            &grid.elements
+                        );
+                        println!("{} at ({},{}) - Draw: {}", 
+                                element.id, x, y, should_draw);
+                    }
+                }
+            }
         }
+
+        println!("\n=== Grid Creation Complete ===\n");
+        grid
     }
 
     pub fn get_elements_at(&self, x: u32, y: u32) -> Vec<&GridElement> {

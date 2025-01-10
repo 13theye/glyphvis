@@ -65,7 +65,8 @@ impl ViewBox {
 
 // supported SVG elements: path & circle
 pub fn parse_svg_element(element: &str) -> Option<PathElement> {
-    if element.starts_with("<circle") {
+    println!("Parsing SVG element: '{}'", element);
+    if element.trim().starts_with("<circle") {
         return parse_circle(element);
     }
     if let Some((_, second_part)) = element.split_once("id=") {
@@ -650,6 +651,10 @@ mod tests {
         let corner_path =
             PathElement::Circle { cx: 0.0, cy: 0.0, r: 5.0 };
         assert_eq!(detect_edge_type(&corner_path, &viewbox), EdgeType::Northwest);
+
+        let center_path =
+        PathElement::Circle { cx: 50.0, cy: 50.0, r: 5.0 };
+    assert_eq!(detect_edge_type(&center_path, &viewbox), EdgeType::None);
     }
 }
 

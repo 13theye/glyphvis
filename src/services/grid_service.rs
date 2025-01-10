@@ -1,6 +1,7 @@
 // src/grid_service.rs
 
 use std::str::FromStr;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EdgeType {
@@ -15,7 +16,7 @@ pub enum EdgeType {
     None
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PathElement {
     Line {
         x1: f32,
@@ -41,20 +42,12 @@ pub enum PathElement {
     }
 }
 
-impl PathElement {
-    pub fn clone(&self) -> PathElement {
-        match self {
-            PathElement::Line { x1, y1, x2, y2 } => {
-                PathElement::Line { x1: *x1, y1: *y1, x2: *x2, y2: *y2 }
-            },
-            PathElement::Arc { start_x, start_y, radius_x, radius_y, x_axis_rotation, large_arc, sweep, end_x, end_y } => {
-                PathElement::Arc { start_x: *start_x, start_y: *start_y, radius_x: *radius_x, radius_y: *radius_y, x_axis_rotation: *x_axis_rotation, large_arc: *large_arc, sweep: *sweep, end_x: *end_x, end_y: *end_y }
-            },
-            PathElement::Circle { cx, cy, r } => {
-                PathElement::Circle { cx: *cx, cy: *cy, r: *r }
-            }
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct GridElement {
+    pub id: String,
+    pub position: (u32, u32),
+    pub path: PathElement,
+    pub edge_type: EdgeType,
 }
 
 #[derive(Debug)]
@@ -167,7 +160,7 @@ pub fn detect_edge_type(element: &PathElement, viewbox: &ViewBox) -> EdgeType {
             EdgeType::None
         },
         PathElement::Arc { .. } => {
-            // Arcs themselves aren't typically on edges in
+            // Arcs themselves can't be on edges.
             EdgeType::None
         }
     }
@@ -314,19 +307,179 @@ pub fn adjust_viewbox_for_edges(viewbox: &mut ViewBox, edge_stroke_width: f32) {
     viewbox.height += edge_stroke_width;
 }
 
+pub fn get_elements_at(elements: &HashMap<String, GridElement>, x: u32, y: u32) -> Vec<&GridElement> {
+    elements
+        .iter()
+        .filter(|(_, element)| element.position == (x, y))
+        .map(|(_, element)| element)
+        .collect()
+}
 
+pub fn should_draw_element(
+    element: &GridElement,
+    grid_width: u32,
+    grid_height: u32,
+    elements: &HashMap<String, GridElement>
+) -> bool {
+    // Get neighbor coordinates based on edge type
+    let (x, y) = element.position;
+    
+    if let Some((neighbor_x, neighbor_y)) = get_neighbor_coords(x, y, element.edge_type, grid_width, grid_height) {
+        let neighbor_elements = get_elements_at(elements, neighbor_x, neighbor_y);
+        let direction = get_neighbor_direction(x, y, neighbor_x, neighbor_y);
+        
+        // Check each potential neighbor for alignment
+        !neighbor_elements.iter().any(|neighbor| {
+            let expected_edge = match element.edge_type {
+                EdgeType::North => EdgeType::South,
+                EdgeType::South => EdgeType::North,
+                EdgeType::East => EdgeType::West,
+                EdgeType::West => EdgeType::East,
+                EdgeType::Northwest => EdgeType::Southeast,
+                EdgeType::Northeast => EdgeType::Southwest,
+                EdgeType::Southwest => EdgeType::Northeast,
+                EdgeType::Southeast => EdgeType::Northwest,
+                EdgeType::None => return false,
+            };
+            
+            if neighbor.edge_type != expected_edge {
+                return false;
+            }
+
+            check_path_alignment(
+                &element.path,
+                element.edge_type,
+                &neighbor.path,
+                neighbor.edge_type,
+                direction
+            )
+        })
+    } else {
+        true // No neighbor exists, so we should draw
+    }
+}
 
 
 #[cfg(test)]
 mod tests {
-use super::*;
+    use super::*;
 
+    // Keep existing test helper
     fn create_viewbox() -> ViewBox {
         ViewBox {
             min_x: 0.0,
             min_y: 0.0,
             width: 100.0,
             height: 100.0,
+        }
+    }
+
+    // Add new helper to create test elements
+    fn create_test_elements() -> HashMap<String, GridElement> {
+        let mut elements = HashMap::new();
+        
+        // Add a few test elements
+        elements.insert("0,0 : test1".to_string(), GridElement {
+            id: "test1".to_string(),
+            position: (0, 0),
+            path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 100.0, y2: 0.0 },
+            edge_type: EdgeType::North,
+        });
+        
+        elements.insert("0,0 : test2".to_string(), GridElement {
+            id: "test2".to_string(),
+            position: (0, 0),
+            path: PathElement::Circle { cx: 0.0, cy: 0.0, r: 5.0 },
+            edge_type: EdgeType::Northwest,
+        });
+        
+        elements.insert("1,0 : test3".to_string(), GridElement {
+            id: "test3".to_string(),
+            position: (1, 0),
+            path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 100.0, y2: 0.0 },
+            edge_type: EdgeType::North,
+        });
+
+        elements
+    }
+    
+    #[test]
+    fn test_get_elements_at() {
+        let elements = create_test_elements();
+        
+        // Test getting elements at 0,0
+        let elements_at_origin = get_elements_at(&elements, 0, 0);
+        assert_eq!(elements_at_origin.len(), 2);
+        
+        // Test getting elements at 1,0
+        let elements_at_one = get_elements_at(&elements, 1, 0);
+        assert_eq!(elements_at_one.len(), 1);
+        
+        // Test getting elements at empty position
+        let elements_at_empty = get_elements_at(&elements, 2, 2);
+        assert_eq!(elements_at_empty.len(), 0);
+    }
+
+    #[test]
+    fn test_should_draw_element() {
+        let mut elements = create_test_elements();
+        
+        // Create two matching elements on neighboring tiles
+        let element1 = GridElement {
+            id: "edge1".to_string(),
+            position: (0, 0),
+            path: PathElement::Line { x1: 100.0, y1: 0.0, x2: 100.0, y2: 50.0 },
+            edge_type: EdgeType::East,
+        };
+        
+        let element2 = GridElement {
+            id: "edge2".to_string(),
+            position: (1, 0),
+            path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 0.0, y2: 50.0 },
+            edge_type: EdgeType::West,
+        };
+        
+        elements.insert("0,0 : edge1".to_string(), element1.clone());
+        elements.insert("1,0 : edge2".to_string(), element2);
+        
+        // Test that element with matching neighbor is not drawn
+        assert!(!should_draw_element(&element1, 2, 2, &elements));
+        
+        // Test that element without neighbors is drawn
+        let solo_element = GridElement {
+            id: "solo".to_string(),
+            position: (0, 0),
+            path: PathElement::Line { x1: 0.0, y1: 0.0, x2: 0.0, y2: 50.0 },
+            edge_type: EdgeType::West,
+        };
+        assert!(should_draw_element(&solo_element, 2, 2, &elements));
+    }
+
+    #[test]
+    fn test_get_neighbor_coords() {
+        let tests = vec![
+            // Format: (x, y, edge_type, grid_width, grid_height, expected)
+            (1, 1, EdgeType::North, 3, 3, Some((1, 0))),
+            (1, 1, EdgeType::South, 3, 3, Some((1, 2))),
+            (1, 1, EdgeType::East, 3, 3, Some((2, 1))),
+            (1, 1, EdgeType::West, 3, 3, Some((0, 1))),
+            (1, 1, EdgeType::Northwest, 3, 3, Some((0, 0))),
+            (1, 1, EdgeType::Northeast, 3, 3, Some((2, 0))),
+            (1, 1, EdgeType::Southwest, 3, 3, Some((0, 2))),
+            (1, 1, EdgeType::Southeast, 3, 3, Some((2, 2))),
+            // Test edge cases
+            (0, 0, EdgeType::West, 3, 3, None),
+            (0, 0, EdgeType::North, 3, 3, None),
+            (2, 2, EdgeType::South, 3, 3, None),
+            (2, 2, EdgeType::East, 3, 3, None),
+            (0, 0, EdgeType::Northwest, 3, 3, None),
+            (2, 2, EdgeType::Southeast, 3, 3, None),
+        ];
+
+        for (x, y, edge_type, width, height, expected) in tests {
+            let result = get_neighbor_coords(x, y, edge_type, width, height);
+            assert_eq!(result, expected, 
+                "Failed for x:{}, y:{}, edge_type:{:?}", x, y, edge_type);
         }
     }
 

@@ -1,7 +1,21 @@
 use crate::models::data_model::Project;
 use std::collections::HashMap;
 use crate::services::grid_service;
-use crate::services::grid_service::{ PathElement, GridElement, ViewBox, EdgeType };
+use crate::services::grid_service::{ PathElement, GridElement, EdgeType };
+
+
+#[derive(Debug)]
+pub struct ViewBox {
+    pub min_x: f32,
+    pub min_y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl ViewBox {
+    pub fn max_x(&self) -> f32 { self.min_x + self.width }
+    pub fn max_y(&self) -> f32 { self.min_y + self.height }
+}
 
 #[derive(Debug)]
 pub struct Grid {
@@ -15,11 +29,67 @@ impl Grid {
     pub fn new(project: &Project) -> Self {
         println!("\n=== Creating Grid ({}x{}) ===", project.grid_x, project.grid_y);
         let mut elements = HashMap::new();
+        /* 
         let viewbox = ViewBox {
             min_x: 0.0,
             min_y: 0.0,
             width: 100.0,
             height: 100.0,
+        };
+        */
+
+        // parse viewbox
+        let parse_viewbox = |svg_content: &str | -> Option<ViewBox>{
+            let viewbox_data: Vec<String> = svg_content
+                .lines()
+                .filter(|line| line.contains("<svg id"))
+                .filter_map(|line| {
+                    if let Some(viewbox_start) = line.find("viewBox=\"") {
+                        if let Some(viewbox_end) = line[viewbox_start + 9..].find('\"') {
+                            return Some(line[viewbox_start + 9..viewbox_start + 9 + viewbox_end].to_string());
+                        }
+                    }
+                    None
+                })
+                .collect();
+        
+            if viewbox_data.is_empty() {
+                eprintln!("Error: No SVG element with viewBox attribute found");
+                eprintln!("SVG content:\n{}", project.svg_base_tile);
+                std::process::exit(1);
+            }
+        
+            viewbox_data.get(0)
+                .and_then(|data| {
+                    let viewbox_values: Vec<f32> = data
+                        .split(' ')
+                        .filter_map(|value| value.parse::<f32>().ok())
+                        .collect();
+                    
+                    if viewbox_values.len() != 4 {
+                        eprintln!("Error: ViewBox must contain exactly 4 values");
+                        eprintln!("Found viewBox=\"{}\" with {} values", data, viewbox_values.len());
+                        eprintln!("Values parsed: {:?}", viewbox_values);
+                        std::process::exit(1);
+                    }
+        
+                    Some(ViewBox {
+                        min_x: viewbox_values[0],
+                        min_y: viewbox_values[1],
+                        width: viewbox_values[2],
+                        height: viewbox_values[3],
+                    })
+                })
+        };
+        
+        let viewbox = match parse_viewbox(&project.svg_base_tile) {
+            Some(viewbox) => viewbox,
+            None => {
+                eprintln!("Error: Failed to parse viewBox values");
+                eprintln!("Please ensure the SVG contains a valid viewBox attribute");
+                eprintln!("Format should be: viewBox=\"<min-x> <min-y> <width> <height>\"");
+                std::process::exit(1);
+            }
         };
         
         // Parse base SVG elements

@@ -1,7 +1,7 @@
 use nannou::prelude::*;
 use glyphvis::models::data_model::Project;
-use glyphvis::models::grid_model::Grid;
-use glyphvis::services::grid_service::{PathElement, ViewBox};
+use glyphvis::models::grid_model:: { Grid, ViewBox };
+use glyphvis::services::grid_service::PathElement;
 
 struct Model {
     grid: Grid,
@@ -19,7 +19,7 @@ fn model(app: &App) -> Model {
     app.new_window().size(800, 800).view(view).build().unwrap();
     
     // Load project
-    let project = Project::load("../glyphmaker/projects/grid.json")
+    let project = Project::load("../glyphmaker/projects/small-cir-d2.json")
         .expect("Failed to load project file");
     
     // Create grid from project
@@ -59,15 +59,15 @@ fn view(app: &App, model: &Model, frame: Frame) {
             let pos_x = offset_x + ((x - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
             let pos_y = offset_y + ((y - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
             
-            
-            // Draw tile boundary for debugging
+            /*
+            // Draw tile boundary for debugging.
             draw.rect()
                 .x_y(pos_x, pos_y)
                 .w_h(model.tile_size, model.tile_size)
                 .stroke(RED)
                 .stroke_weight(4.0)
                 .no_fill();
-            
+            */
             
             // Draw all elements at this grid position
             let elements = model.grid.get_elements_at(x, y);
@@ -124,7 +124,7 @@ fn draw_element(draw: &Draw, element: &PathElement, pos_x: f32, pos_y: f32, scal
                 .radius(r * scale)
                 .stroke(color)
                 .stroke_weight(weight)
-                .no_fill();
+                .color(color);
         },
         
         PathElement::Arc { start_x, start_y, rx, ry, x_axis_rotation, large_arc, sweep, end_x, end_y } => {

@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 use std::collections::HashMap;
+use crate::models::grid_model::ViewBox;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EdgeType {
@@ -50,27 +51,14 @@ pub struct GridElement {
     pub edge_type: EdgeType,
 }
 
-#[derive(Debug)]
-pub struct ViewBox {
-    pub min_x: f32,
-    pub min_y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl ViewBox {
-    pub fn max_x(&self) -> f32 { self.min_x + self.width }
-    pub fn max_y(&self) -> f32 { self.min_y + self.height }
-}
-
 // supported SVG elements: path & circle
 pub fn parse_svg_element(element: &str) -> Option<PathElement> {
     println!("Parsing SVG element: '{}'", element);
-    if element.trim().starts_with("<circle") {
+    if element.contains("<circle") {
         return parse_circle(element);
     }
-    if let Some((_, second_part)) = element.split_once("id=") {
 
+    if let Some((_, second_part)) = element.split_once("id=") {
         // Look for d="..." pattern
         let d = second_part
             .split("d=\"")
@@ -301,6 +289,7 @@ pub fn check_path_alignment(
     }
 }
 
+// this was ported from Glyphmaker is not currently used
 pub fn adjust_viewbox_for_edges(viewbox: &mut ViewBox, edge_stroke_width: f32) {
     let half_stroke = edge_stroke_width / 2.0;
     viewbox.min_x -= half_stroke;
@@ -317,6 +306,8 @@ pub fn get_elements_at(elements: &HashMap<String, GridElement>, x: u32, y: u32) 
         .collect()
 }
 
+// Unlike Glyphmaker, where we draw all elements and then handle selection logic, 
+// in Glyphvis we decide on whether to draw an element at the beginning.
 pub fn should_draw_element(
     element: &GridElement,
     grid_width: u32,

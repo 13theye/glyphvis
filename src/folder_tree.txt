@@ -7,7 +7,16 @@ glyphvis
 │   │   └── grid_model.rs
 │   │   └── mod.rs
 │   ├── services
-│       ├── grid_service.rs
+│   │   ├── grid_service.rs
+│   │   └── mod.rs
+│   ├── anim
+│   │   ├── free_anim.rs
+│   │   ├── grid_anim.rs
+│   │   └── segment_anim.rs
+│   │   └── mod.rs
+│   ├── render
+│       ├── cache.rs
+│       ├── path_render.rs
 │       └── mod.rs
 ├──Cargo.lock
 └──Cargo.toml

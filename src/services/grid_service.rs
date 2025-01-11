@@ -1,4 +1,6 @@
-// src/grid_service.rs
+/// src/services/grid_service.rs
+/// turns SVG elements into PathElements
+/// performs edge detection and neighbor hinding calculations
 
 use std::str::FromStr;
 use std::collections::HashMap;
@@ -150,7 +152,7 @@ pub fn detect_edge_type(element: &PathElement, viewbox: &ViewBox) -> EdgeType {
             EdgeType::None
         },
         PathElement::Arc { .. } => {
-            // Arcs themselves can't be on edges.
+            // Arcs themselves can't be on edges. { .. } means ignore the rest of the fields.
             EdgeType::None
         }
     }

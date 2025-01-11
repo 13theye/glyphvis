@@ -1,3 +1,6 @@
+/// src/models/data_model.rs
+/// the project data model and its components
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

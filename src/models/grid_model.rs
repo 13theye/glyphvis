@@ -1,3 +1,6 @@
+/// src/models/grid_model.rs
+/// data model and constructors for the assembled grid of SVG elements
+
 use crate::models::data_model::Project;
 use std::collections::HashMap;
 use crate::services::grid_service;
@@ -29,14 +32,6 @@ impl Grid {
     pub fn new(project: &Project) -> Self {
         println!("\n=== Creating Grid ({}x{}) ===", project.grid_x, project.grid_y);
         let mut elements = HashMap::new();
-        /* 
-        let viewbox = ViewBox {
-            min_x: 0.0,
-            min_y: 0.0,
-            width: 100.0,
-            height: 100.0,
-        };
-        */
 
         // parse viewbox
         let parse_viewbox = |svg_content: &str | -> Option<ViewBox>{

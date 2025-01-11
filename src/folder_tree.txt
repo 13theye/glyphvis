@@ -14,9 +14,9 @@ glyphvis
 │   │   ├── grid_anim.rs
 │   │   └── segment_anim.rs
 │   │   └── mod.rs
-│   ├── render
+│   ├── renderer
 │       ├── cache.rs
-│       ├── path_render.rs
+│       ├── path_renderer.rs
 │       └── mod.rs
 ├──Cargo.lock
 └──Cargo.toml

@@ -1,5 +1,5 @@
 /// src/services/grid_service.rs
-/// turns SVG elements into PathElements
+/// parses SVG raw data into PathElements
 /// performs edge detection and neighbor hinding calculations
 
 use std::str::FromStr;

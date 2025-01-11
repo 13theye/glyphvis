@@ -7,7 +7,7 @@ use crate::services::grid_service;
 use crate::services::grid_service::{ PathElement, GridElement, EdgeType };
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ViewBox {
     pub min_x: f32,
     pub min_y: f32,

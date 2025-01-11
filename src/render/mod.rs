@@ -4,8 +4,10 @@
 
 //pub mod cache;
 pub mod path_renderer;
+pub mod glyph_display;
 
 pub use path_renderer::PathRenderer;
+pub use glyph_display::GlyphDisplay;
 
 use nannou::prelude::*;
 

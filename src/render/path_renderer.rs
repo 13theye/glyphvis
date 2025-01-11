@@ -6,6 +6,8 @@ use crate::services::grid_service::PathElement;
 use crate::models::grid_model::ViewBox;
 use super::{Transform2D, RenderParams};
 
+use std::f32::consts::PI;
+
 pub struct PathRenderer {
     viewbox: ViewBox,
 }
@@ -222,11 +224,11 @@ impl PathRenderer {
         // Ensure we're sweeping in the correct direction
         if sweep {
             if delta_angle < 0.0 {
-                delta_angle += 2.0 * std::f32::consts::PI;
+                delta_angle += 2.0 * PI;
             }
         } else {
             if delta_angle > 0.0 {
-                delta_angle -= 2.0 * std::f32::consts::PI;
+                delta_angle -= 2.0 * PI;
             }
         }
     

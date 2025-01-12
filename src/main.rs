@@ -26,7 +26,7 @@ fn model(app: &App) -> Model {
     app.new_window().size(1000, 1000).view(view).build().unwrap();
     
     // Load project
-    let project = Project::load("../glyphmaker/projects/small-cir-d2.json")
+    let project = Project::load("../glyphmaker/projects/small-cir-d.json")
         .expect("Failed to load project file");
     
     // Create grid from project
@@ -52,7 +52,7 @@ fn model(app: &App) -> Model {
     }
 }
 
-fn event(app: &App, model: &mut Model, event: Event) {
+fn event(_app: &App, model: &mut Model, event: Event) {
     if let Event::WindowEvent { simple: Some(KeyPressed(key)), .. } = event {
         match key {
             Key::Space => model.glyph_display.next_glyph(),
@@ -65,6 +65,10 @@ fn update(_app: &App, _model: &mut Model, _update: Update) {
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
+
+    let debug_flag = true;
+    let debug_color = |x:u32, y:u32| -> f32 {((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()};
+
     let draw = app.draw();
     draw.background().color(BLACK);
     
@@ -90,8 +94,10 @@ fn view(app: &App, model: &Model, frame: Frame) {
     // Draw grid elements
     for y in 1..=model.grid.height {
         for x in 1..=model.grid.width {
+            let b: f32;
+            if debug_flag {b = debug_color(x, y);} else {b = 0.1};
             let grid_params = RenderParams {
-                color: rgb(0.1, 0.1, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap())),  // Dark gray for inactive grid
+                color: rgb(0.1, 0.1, b),  // Dark gray for inactive grid
                 stroke_weight: 5.0,
             };
             // offset accounts for grid starting at 1, not 0
@@ -105,7 +111,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
             );
             
             /*
-            // Draw tile boundary for debugging
+            // Draw tile boundary for debug
             draw.rect()
                 .x_y(pos_x, pos_y)
                 .w_h(model.tile_size, model.tile_size)
@@ -164,8 +170,10 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 if model.grid.should_draw_element(element) {
                     let segment_id = format!("{},{} : {}", x, y, element.id);
                     if active_segments.contains(&segment_id) {
+                        let g: f32;
+                        if debug_flag {g = debug_color(x, y);} else {g = 0.1};
                         let glyph_params = RenderParams {
-                            color: rgb(0.9, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()), 0.0),
+                            color: rgb(0.9, g, 0.0),
                             stroke_weight: 10.0,
                         };
                         model.path_renderer.draw_element(

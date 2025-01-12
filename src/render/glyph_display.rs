@@ -2,7 +2,7 @@
 use nannou::prelude::*;
 use crate::models::data_model::{Project, Glyph};
 use std::collections::HashSet;
-use super::{Transform2D, RenderParams};
+use super::RenderParams;
 
 pub struct GlyphDisplay {
     glyph_names: Vec<String>,

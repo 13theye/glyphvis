@@ -34,7 +34,7 @@ impl PathRenderer {
         let scaled_x = local_x * transform.scale;
         let scaled_y = local_y * transform.scale;
         
-        // 3. Apply rotation if needed (currently not used but included for completeness)
+        // 3. Apply rotation if needed
         let cos_rot = transform.rotation.cos();
         let sin_rot = transform.rotation.sin();
         let rotated_x = scaled_x * cos_rot - scaled_y * sin_rot;
@@ -139,137 +139,63 @@ impl PathRenderer {
         transform: &Transform2D,
         params: &RenderParams,
     ) {
-        /*
-        // Debug inputs
-        println!("\nArc path at position: {:?}", transform.translation);
-        println!("Input params:");
-        println!("  Start: ({}, {}), End: ({}, {})", start_x, start_y, end_x, end_y);
-        println!("  rx: {}, ry: {}, rotation: {}", rx, ry, x_axis_rotation);
-        println!("  large_arc: {}, sweep: {}", large_arc, sweep);
-        */
-    
+
+        let debug_flag = false;
+
+        if debug_flag {
+            println!("\n=== Arc Debug ===");
+            println!("Input parameters:");
+            println!("  start: ({}, {})", start_x, start_y);
+            println!("  end: ({}, {})", end_x, end_y);
+            println!("  rx, ry: {}, {}", rx, ry);
+            println!("  x_axis_rotation: {}", x_axis_rotation);
+            println!("  large_arc: {}", large_arc);
+            println!("  sweep: {}", sweep);
+        }
+
         // Convert coordinates to screen space
         let screen_start = self.transform_point(start_x, start_y, center_x, center_y, transform);
         let screen_end = self.transform_point(end_x, end_y, center_x, center_y, transform);
+
+        if debug_flag {
+            println!("\nTransformed points:");
+            println!("  screen_start: ({:.2}, {:.2})", screen_start.x, screen_start.y);
+            println!("  screen_end: ({:.2}, {:.2})", screen_end.x, screen_end.y);
+        }
         
-        /*
-        println!("Screen coordinates:");
-        println!("  Start: ({:.2}, {:.2})", screen_start.x, screen_start.y);
-        println!("  End: ({:.2}, {:.2})", screen_end.x, screen_end.y);
-        */
-        // SVG to center parameterization conversion
-        // Step 1: Transform to origin
-        let x1p = (screen_start.x - screen_end.x) / 2.0;
-        let y1p = (screen_start.y - screen_end.y) / 2.0;
-    
-        //println!("Step 1 - Transform to origin:");
-        //println!("  x1p: {:.2}, y1p: {:.2}", x1p, y1p);
-    
-        // Rotate to align with coordinate axes
-        let angle_rad = x_axis_rotation.to_radians();
-        let cos_angle = angle_rad.cos();
-        let sin_angle = angle_rad.sin();
-    
-        let xp = cos_angle * x1p + sin_angle * y1p;
-        let yp = -sin_angle * x1p + cos_angle * y1p;
-    
-        //println!("After rotation:");
-        //println!("  xp: {:.2}, yp: {:.2}", xp, yp);
-    
-        // Step 2: Compute center
+        // Scale radii
         let rx_scaled = rx * transform.scale;
         let ry_scaled = ry * transform.scale;
-        let rx_sq = rx_scaled * rx_scaled;
-        let ry_sq = ry_scaled * ry_scaled;
-        let xp_sq = xp * xp;
-        let yp_sq = yp * yp;
-    
-        // Ensure radii are large enough
-        let radii_scale = xp_sq / rx_sq + yp_sq / ry_sq;
-        let (rx_final, ry_final) = if radii_scale > 1.0 {
-            let sqrt_scale = radii_scale.sqrt();
-            //println!("Scaling up radii by factor: {:.2}", sqrt_scale);
-            (rx_scaled * sqrt_scale, ry_scaled * sqrt_scale)
-        } else {
-            (rx_scaled, ry_scaled)
-        };
-    
-        //println!("Final radii:");
-        //println!("  rx: {:.2}, ry: {:.2}", rx_final, ry_final);
-    
-        let rx_sq = rx_final * rx_final;
-        let ry_sq = ry_final * ry_final;
-    
-        let term = (rx_sq * ry_sq - rx_sq * yp_sq - ry_sq * xp_sq) / 
-                   (rx_sq * yp_sq + ry_sq * xp_sq);
-        /*
-        println!("Center calculation:");
-        println!("  Term under sqrt: {:.2}", term);
-     */
-        // Guard against numerical errors that might make term slightly negative
-        let s = if term <= 0.0 { 
-            println!("  Warning: Non-positive term, using s = 0");
-            0.0 
-        } else { 
-            term.sqrt() 
-        };
-        let cp = if large_arc == sweep {-s} else {s};
-    
-        let cxp = cp * rx_final * yp / ry_final;
-        let cyp = -cp * ry_final * xp / rx_final;
-    
-        // Step 3: Transform back
-        let center_x = cos_angle * cxp - sin_angle * cyp + (screen_start.x + screen_end.x) / 2.0;
-        let center_y = sin_angle * cxp + cos_angle * cyp + (screen_start.y + screen_end.y) / 2.0;
-        /*
-        println!("Calculated center: ({:.2}, {:.2})", center_x, center_y);
-        */
-        // Calculate angles
-        let start_angle = ((yp - cyp) / ry_final).atan2((xp - cxp) / rx_final);
-        let end_angle = ((-yp - cyp) / ry_final).atan2((-xp - cxp) / rx_final);
         
-        /* 
-        println!("Angles:");
-        println!("  Start: {:.2}, End: {:.2}", start_angle, end_angle);
-        */
-        // Generate points
+        // Calculate center and angles using the new geometric method
+        let (center, start_angle, sweep_angle) = self.calculate_arc_center(
+            screen_start,
+            screen_end,
+            rx_scaled,
+            ry_scaled,
+            x_axis_rotation,
+            large_arc,
+            sweep
+        );
+
+        // Generate points along the arc
         let resolution = 64;
         let mut points = Vec::with_capacity(resolution + 1);
         
-        // Calculate total angle sweep
-        let mut delta_angle = end_angle - start_angle;
-        
-        // Ensure we're sweeping in the correct direction
-        if sweep {
-            if delta_angle < 0.0 {
-                delta_angle += 2.0 * PI;
-            }
-        } else {
-            if delta_angle > 0.0 {
-                delta_angle -= 2.0 * PI;
-            }
-        }
-    
         for i in 0..=resolution {
             let t = i as f32 / resolution as f32;
-            let angle = start_angle + t * delta_angle;
-    
-            let x = center_x + rx_final * (cos_angle * angle.cos() - sin_angle * angle.sin());
-            let y = center_y + ry_final * (sin_angle * angle.cos() + cos_angle * angle.sin());
-    
+            let angle = start_angle + t * sweep_angle;
+            
+            // Calculate point with proper radii and rotation
+            let x = center.x + rx_scaled * (angle.cos() * x_axis_rotation.to_radians().cos() - 
+                                          angle.sin() * x_axis_rotation.to_radians().sin());
+            let y = center.y + ry_scaled * (angle.cos() * x_axis_rotation.to_radians().sin() + 
+                                          angle.sin() * x_axis_rotation.to_radians().cos());
+            
             points.push(pt2(x, y));
         }
-     /* 
-        println!("Generated {} points", points.len());
-        if let Some(first) = points.first() {
-            println!("First point: ({:.2}, {:.2})", first.x, first.y);
-        }
-        if let Some(last) = points.last() {
-            println!("Last point: ({:.2}, {:.2})", last.x, last.y);
-        }
-        */
-    
-        // Build and draw the path
+
+        // Draw the arc
         if let Some(first) = points.first() {
             let mut builder = nannou::geom::Path::builder()
                 .move_to(nannou::geom::Point2::new(first.x, first.y));
@@ -277,7 +203,7 @@ impl PathRenderer {
             for point in points.iter().skip(1) {
                 builder = builder.line_to(nannou::geom::Point2::new(point.x, point.y));
             }
-    
+
             let path = builder.build();
             draw.path()
                 .stroke()
@@ -285,6 +211,113 @@ impl PathRenderer {
                 .color(params.color)
                 .events(path.iter());
         }
+    }
+
+    fn calculate_arc_center(
+        &self,
+        start: Point2,
+        end: Point2,
+        rx: f32,
+        ry: f32,
+        x_axis_rotation: f32,
+        large_arc: bool,
+        sweep: bool
+    ) -> (Point2, f32, f32) {  // Returns (center, start_angle, sweep_angle)
+
+        let debug_flag = false;
+
+        if debug_flag {println!("\nCenter calculation:");}
+
+        // Step 1: Transform to origin and unrotated coordinates
+        let dx = (start.x - end.x) / 2.0;
+        let dy = (start.y - end.y) / 2.0;
+        if debug_flag {println!("  dx, dy: {:.2}, {:.2}", dx, dy);}
+        
+        let angle_rad = x_axis_rotation.to_radians();
+        let cos_phi = angle_rad.cos();
+        let sin_phi = angle_rad.sin();
+        
+        // Rotate to align with axes
+        let x1p = cos_phi * dx + sin_phi * dy;
+        let y1p = -sin_phi * dx + cos_phi * dy;
+        if debug_flag {println!("  x1p, y1p: {:.2}, {:.2}", x1p, y1p);}
+
+        
+        // Step 2: Ensure radii are large enough
+        let rx_sq = rx * rx;
+        let ry_sq = ry * ry;
+        let x1p_sq = x1p * x1p;
+        let y1p_sq = y1p * y1p;
+        
+        let radii_check = x1p_sq / rx_sq + y1p_sq / ry_sq;
+        let (rx_final, ry_final) = if radii_check > 1.0 {
+            let sqrt_scale = radii_check.sqrt();
+            (rx * sqrt_scale, ry * sqrt_scale)
+        } else {
+            (rx, ry)
+        };
+        
+        // Step 3: Calculate center parameters
+        let rx_sq = rx_final * rx_final;
+        let ry_sq = ry_final * ry_final;
+        
+        let term = (rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq) / 
+                   (rx_sq * y1p_sq + ry_sq * x1p_sq);
+                   
+        let s = if term <= 0.0 { 0.0 } else { term.sqrt() };
+        if debug_flag {
+            println!("  term: {:.2}", term);
+            println!("  s: {:.2}", s);
+        }
+        
+        // Choose center based on sweep and large-arc flags
+        let cxp = s * rx_final * y1p / ry_final;
+        let cyp = -s * ry_final * x1p / rx_final;
+        if debug_flag{println!("  cxp, cyp before flip: {:.2}, {:.2}", cxp, cyp);}
+        
+        // Handle sweep flag to make it clockwise by flipping the center.
+        let (cxp, cyp) = if sweep {
+            (-cxp, -cyp)
+        } else {
+            (cxp, cyp)
+        };
+        if debug_flag{println!("  cxp, cyp after sweep: {:.2}, {:.2}", cxp, cyp);}
+
+        // Step 4: Transform center back to original coordinate space
+        let cx = cos_phi * cxp - sin_phi * cyp + (start.x + end.x) / 2.0;
+        let cy = sin_phi * cxp + cos_phi * cyp + (start.y + end.y) / 2.0;
+        if debug_flag {println!("  final center: ({:.2}, {:.2})", cx, cy);}
+
+        
+        // Step 5: Calculate angles
+        let start_vec_x = (x1p - cxp) / rx_final;
+        let start_vec_y = (y1p - cyp) / ry_final;
+        let end_vec_x = (-x1p - cxp) / rx_final;
+        let end_vec_y = (-y1p - cyp) / ry_final;
+        
+        let start_angle = (start_vec_y).atan2(start_vec_x);
+        let mut sweep_angle = (end_vec_y).atan2(end_vec_x) - start_angle;
+        if debug_flag {
+            println!("  start_angle: {:.2}° ({:.2} rad)", start_angle.to_degrees(), start_angle);
+            println!("  sweep_angle: {:.2}° ({:.2} rad)", sweep_angle.to_degrees(), sweep_angle);
+        }
+        
+        // Ensure sweep angle matches flags
+        if !sweep && sweep_angle > 0.0 {
+            sweep_angle -= 2.0 * PI;
+        } else if sweep && sweep_angle < 0.0 {
+            sweep_angle += 2.0 * PI;
+        }
+        
+        // Force the short path for !large_arc
+        if !large_arc && sweep_angle.abs() > PI {
+            sweep_angle = if sweep_angle > 0.0 {
+                sweep_angle - 2.0 * PI
+            } else {
+                sweep_angle + 2.0 * PI
+            };
+        }
+        (pt2(cx, cy), start_angle, sweep_angle)
     }
 }
 
@@ -309,15 +342,15 @@ mod tests {
             rotation: 0.0,
         };
         
-        // Point at SVG (0,0) should move to (-50,-50) in Nannou space
+        // Point at SVG (0,0) should move to (-50,50) in Nannou space
         let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
         assert_eq!(point.x, -50.0);
-        assert_eq!(point.y, -50.0);
+        assert_eq!(point.y, 50.0);
         
-        // Point at SVG (100,100) should move to (50,50) in Nannou space
+        // Point at SVG (100,100) should move to (50,-50) in Nannou space
         let point = renderer.transform_point(100.0, 100.0, 50.0, 50.0, &transform);
         assert_eq!(point.x, 50.0);
-        assert_eq!(point.y, 50.0);
+        assert_eq!(point.y, -50.0);
         
         // Test case 2: With translation
         let transform = Transform2D {
@@ -328,7 +361,7 @@ mod tests {
         
         let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
         assert_eq!(point.x, 50.0); // -50 + 100
-        assert_eq!(point.y, 50.0); // -50 + 100
+        assert_eq!(point.y, 150.0); // 50 + 100
         
         // Test case 3: With scaling
         let transform = Transform2D {
@@ -339,6 +372,6 @@ mod tests {
         
         let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
         assert_eq!(point.x, -100.0); // (-50) * 2
-        assert_eq!(point.y, -100.0); // (-50) * 2
+        assert_eq!(point.y, 100.0); // (50) * 2
     }
 }

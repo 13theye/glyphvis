@@ -66,7 +66,7 @@ fn update(_app: &App, _model: &mut Model, _update: Update) {
 
 fn view(app: &App, model: &Model, frame: Frame) {
 
-    let debug_flag = true;
+    let debug_flag = false;
     let debug_color = |x:u32, y:u32| -> f32 {((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()};
 
     let draw = app.draw();
@@ -95,10 +95,10 @@ fn view(app: &App, model: &Model, frame: Frame) {
     for y in 1..=model.grid.height {
         for x in 1..=model.grid.width {
             let b: f32;
-            if debug_flag {b = debug_color(x, y);} else {b = 0.1};
+            if debug_flag {b = debug_color(x, y);} else {b = 0.05};
             let grid_params = RenderParams {
-                color: rgb(0.1, 0.1, b),  // Dark gray for inactive grid
-                stroke_weight: 5.0,
+                color: rgb(0.05, 0.05, b/3.0),  // Dark gray for inactive grid
+                stroke_weight: 15.0,
             };
             // offset accounts for grid starting at 1, not 0
             let (pos_x, pos_y) = Grid::calculate_grid_position(
@@ -171,10 +171,10 @@ fn view(app: &App, model: &Model, frame: Frame) {
                     let segment_id = format!("{},{} : {}", x, y, element.id);
                     if active_segments.contains(&segment_id) {
                         let g: f32;
-                        if debug_flag {g = debug_color(x, y);} else {g = 0.1};
+                        if debug_flag {g = debug_color(x, y);} else {g = 0.05};
                         let glyph_params = RenderParams {
                             color: rgb(0.9, g, 0.0),
-                            stroke_weight: 10.0,
+                            stroke_weight: 15.0,
                         };
                         model.path_renderer.draw_element(
                             &draw,

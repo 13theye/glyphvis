@@ -225,12 +225,12 @@ impl PathRenderer {
     ) -> (Point2, f32, f32) {  // Returns (center, start_angle, sweep_angle)
 
         let debug_flag = false;
-
         if debug_flag {println!("\nCenter calculation:");}
 
         // Step 1: Transform to origin and unrotated coordinates
         let dx = (start.x - end.x) / 2.0;
         let dy = (start.y - end.y) / 2.0;
+
         if debug_flag {println!("  dx, dy: {:.2}, {:.2}", dx, dy);}
         
         let angle_rad = x_axis_rotation.to_radians();
@@ -240,6 +240,7 @@ impl PathRenderer {
         // Rotate to align with axes
         let x1p = cos_phi * dx + sin_phi * dy;
         let y1p = -sin_phi * dx + cos_phi * dy;
+
         if debug_flag {println!("  x1p, y1p: {:.2}, {:.2}", x1p, y1p);}
 
         
@@ -265,6 +266,7 @@ impl PathRenderer {
                    (rx_sq * y1p_sq + ry_sq * x1p_sq);
                    
         let s = if term <= 0.0 { 0.0 } else { term.sqrt() };
+
         if debug_flag {
             println!("  term: {:.2}", term);
             println!("  s: {:.2}", s);
@@ -273,6 +275,7 @@ impl PathRenderer {
         // Choose center based on sweep and large-arc flags
         let cxp = s * rx_final * y1p / ry_final;
         let cyp = -s * ry_final * x1p / rx_final;
+
         if debug_flag{println!("  cxp, cyp before flip: {:.2}, {:.2}", cxp, cyp);}
         
         // Handle sweep flag to make it clockwise by flipping the center.
@@ -281,11 +284,13 @@ impl PathRenderer {
         } else {
             (cxp, cyp)
         };
+
         if debug_flag{println!("  cxp, cyp after sweep: {:.2}, {:.2}", cxp, cyp);}
 
         // Step 4: Transform center back to original coordinate space
         let cx = cos_phi * cxp - sin_phi * cyp + (start.x + end.x) / 2.0;
         let cy = sin_phi * cxp + cos_phi * cyp + (start.y + end.y) / 2.0;
+
         if debug_flag {println!("  final center: ({:.2}, {:.2})", cx, cy);}
 
         
@@ -297,6 +302,7 @@ impl PathRenderer {
         
         let start_angle = (start_vec_y).atan2(start_vec_x);
         let mut sweep_angle = (end_vec_y).atan2(end_vec_x) - start_angle;
+
         if debug_flag {
             println!("  start_angle: {:.2}° ({:.2} rad)", start_angle.to_degrees(), start_angle);
             println!("  sweep_angle: {:.2}° ({:.2} rad)", sweep_angle.to_degrees(), sweep_angle);

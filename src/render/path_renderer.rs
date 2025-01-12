@@ -28,7 +28,7 @@ impl PathRenderer {
     ) -> Point2 {
         // 1. Translate from SVG coordinates (top-left origin) to local coordinates
         let local_x = svg_x - center_x;
-        let local_y = svg_y - center_y;
+        let local_y = center_y - svg_y; // invert y to match nannou
         
         // 2. Apply scale
         let scaled_x = local_x * transform.scale;

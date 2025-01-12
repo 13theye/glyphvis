@@ -175,4 +175,25 @@ impl Grid {
             &self.elements
         )
     }
+
+    pub fn calculate_grid_position(
+        x: u32, 
+        y: u32, 
+        grid_height: u32,
+        offset_x: f32,
+        offset_y: f32, 
+        tile_size: f32
+    ) -> (f32, f32) {
+        // Convert to 0-based indexing
+        let x_idx = x - 1;
+        let y_idx = y - 1;
+        
+        // Invert y coordinate to match SVG coordinate system (top-left origin)
+        let inverted_y = (grid_height - 1) - y_idx;
+        
+        let pos_x = offset_x + (x_idx as f32 * tile_size) + (tile_size / 2.0);
+        let pos_y = offset_y + (inverted_y as f32 * tile_size) + (tile_size / 2.0);
+        
+        (pos_x, pos_y)
+    }
 }

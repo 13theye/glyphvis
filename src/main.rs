@@ -91,12 +91,18 @@ fn view(app: &App, model: &Model, frame: Frame) {
     for y in 1..=model.grid.height {
         for x in 1..=model.grid.width {
             let grid_params = RenderParams {
-                color: rgb(0.1, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()), 0.1),  // Dark gray for inactive grid
+                color: rgb(0.1, 0.1, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap())),  // Dark gray for inactive grid
                 stroke_weight: 5.0,
             };
             // offset accounts for grid starting at 1, not 0
-            let pos_x = (offset_x + ((x - 1) as f32 * model.tile_size) + (model.tile_size / 2.0));
-            let pos_y = (offset_y + ((y - 1) as f32 * model.tile_size) + (model.tile_size / 2.0));
+            let (pos_x, pos_y) = Grid::calculate_grid_position(
+                x, 
+                y, 
+                model.grid.height,
+                offset_x,
+                offset_y,
+                model.tile_size
+            );
             
             /*
             // Draw tile boundary for debugging
@@ -131,14 +137,35 @@ fn view(app: &App, model: &Model, frame: Frame) {
                     }
                 }
             }
+        }
+    }  
+
+    // Second pass: Draw all glyph elements on top
+    for y in 1..=model.grid.height {
+        for x in 1..=model.grid.width {
+            let (pos_x, pos_y) = Grid::calculate_grid_position(
+                x, 
+                y, 
+                model.grid.height,
+                offset_x,
+                offset_y,
+                model.tile_size
+            );
             
-            // Draw active glyph segments on top
-            for element in &elements {  // Reference the elements again
+            let transform = Transform2D {
+                translation: Vec2::new(pos_x, pos_y), 
+                scale: model.tile_size / model.grid.viewbox.width,
+                rotation: 0.0,
+            };
+
+            // Draw only active glyph segments
+            let elements = model.grid.get_elements_at(x, y);
+            for element in &elements {
                 if model.grid.should_draw_element(element) {
                     let segment_id = format!("{},{} : {}", x, y, element.id);
                     if active_segments.contains(&segment_id) {
                         let glyph_params = RenderParams {
-                            color: rgb(0.9, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()), 0.0),  // Bright white for active segments
+                            color: rgb(0.9, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()), 0.0),
                             stroke_weight: 10.0,
                         };
                         model.path_renderer.draw_element(
@@ -150,8 +177,8 @@ fn view(app: &App, model: &Model, frame: Frame) {
                     }
                 }
             }
-            
         }
-    }  
+    }
+
     draw.to_frame(app, &frame).unwrap();
 }

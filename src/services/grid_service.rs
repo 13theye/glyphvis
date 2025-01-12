@@ -361,7 +361,6 @@ pub fn should_draw_element(
     true
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

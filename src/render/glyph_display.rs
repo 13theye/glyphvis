@@ -19,8 +19,8 @@ impl GlyphDisplay {
             glyph_names,
             current_glyph_index: 0,
             glyph_params: RenderParams {
-                color: rgb(0.9, 0.9, 0.9),  // Bright color for active glyph segments
-                stroke_weight: 5.0,
+                color: rgb(0.9, 0.0, 0.0),  // Bright color for active glyph segments
+                stroke_weight: 10.0,
             },
         }
     }

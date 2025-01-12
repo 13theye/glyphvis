@@ -23,7 +23,7 @@ fn main() {
 
 fn model(app: &App) -> Model {
     // Create window
-    app.new_window().size(800, 800).view(view).build().unwrap();
+    app.new_window().size(1000, 1000).view(view).build().unwrap();
     
     // Load project
     let project = Project::load("../glyphmaker/projects/small-cir-d2.json")
@@ -78,17 +78,17 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let active_segments = model.glyph_display.get_active_segments(&model.project);
     
     // First draw the background grid
-    let grid_params = RenderParams {
-        color: rgb(0.1, 0.1, 0.1),  // Dark gray for inactive grid
-        stroke_weight: 5.0,
-    };
     
     // Draw grid elements
     for y in 1..=model.grid.height {
         for x in 1..=model.grid.width {
+            let grid_params = RenderParams {
+                color: rgb(0.1, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()), 0.1),  // Dark gray for inactive grid
+                stroke_weight: 5.0,
+            };
             // offset accounts for grid starting at 1, not 0
-            let pos_x = offset_x + ((x - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
-            let pos_y = offset_y + ((y - 1) as f32 * model.tile_size) + (model.tile_size / 2.0);
+            let pos_x = (offset_x + ((x - 1) as f32 * model.tile_size) + (model.tile_size / 2.0));
+            let pos_y = (offset_y + ((y - 1) as f32 * model.tile_size) + (model.tile_size / 2.0));
             
             /*
             // Draw tile boundary for debugging
@@ -101,7 +101,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
             */
             
             let transform = Transform2D {
-                translation: Vec2::new(pos_x, pos_y), // Flip y-axis
+                translation: Vec2::new(pos_x, pos_y), 
                 scale: model.tile_size / model.grid.viewbox.width,
                 rotation: 0.0,
             };
@@ -130,8 +130,8 @@ fn view(app: &App, model: &Model, frame: Frame) {
                     let segment_id = format!("{},{} : {}", x, y, element.id);
                     if active_segments.contains(&segment_id) {
                         let glyph_params = RenderParams {
-                            color: rgb(0.9, 0.9, 0.9),  // Bright white for active segments
-                            stroke_weight: 5.0,
+                            color: rgb(0.9, (((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()), 0.0),  // Bright white for active segments
+                            stroke_weight: 10.0,
                         };
                         model.path_renderer.draw_element(
                             &draw,

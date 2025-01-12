@@ -17,6 +17,36 @@ impl PathRenderer {
         Self { viewbox }
     }
 
+     // New method to transform a single point from SVG to Nannou coordinates
+    fn transform_point(
+        &self,
+        svg_x: f32,
+        svg_y: f32,
+        center_x: f32,
+        center_y: f32,
+        transform: &Transform2D
+    ) -> Point2 {
+        // 1. Translate from SVG coordinates (top-left origin) to local coordinates
+        let local_x = svg_x - center_x;
+        let local_y = svg_y - center_y;
+        
+        // 2. Apply scale
+        let scaled_x = local_x * transform.scale;
+        let scaled_y = local_y * transform.scale;
+        
+        // 3. Apply rotation if needed (currently not used but included for completeness)
+        let cos_rot = transform.rotation.cos();
+        let sin_rot = transform.rotation.sin();
+        let rotated_x = scaled_x * cos_rot - scaled_y * sin_rot;
+        let rotated_y = scaled_x * sin_rot + scaled_y * cos_rot;
+        
+        // 4. Apply final translation to Nannou coordinates
+        pt2(
+            transform.translation.x + rotated_x,
+            transform.translation.y + rotated_y
+        )
+    }
+
     pub fn draw_element(
         &self,
         draw: &Draw,
@@ -62,14 +92,10 @@ impl PathRenderer {
         transform: &Transform2D,
         params: &RenderParams,
     ) {
-        let start = pt2(
-            transform.translation.x + (x1 - center_x) * transform.scale,
-            transform.translation.y + (y1 - center_y) * transform.scale
-        );
-        let end = pt2(
-            transform.translation.x + (x2 - center_x) * transform.scale,
-            transform.translation.y + (y2 - center_y) * transform.scale
-        );
+        let start = self.transform_point(x1, y1, center_x, center_y, transform);
+
+        let end = self.transform_point(x2, y2, center_x, center_y, transform);
+
 
         draw.line()
             .start(start)
@@ -88,10 +114,8 @@ impl PathRenderer {
         transform: &Transform2D,
         params: &RenderParams,
     ) {
-        let center = pt2(
-            transform.translation.x + (cx - center_x) * transform.scale,
-            transform.translation.y + (cy - center_y) * transform.scale
-        );
+        let center = self.transform_point(cx, cy, center_x, center_y, transform);
+
 
         draw.ellipse()
             .x_y(center.x, center.y)
@@ -125,14 +149,8 @@ impl PathRenderer {
         */
     
         // Convert coordinates to screen space
-        let screen_start = pt2(
-            transform.translation.x + (start_x - center_x) * transform.scale,
-            transform.translation.y + (start_y - center_y) * transform.scale
-        );
-        let screen_end = pt2(
-            transform.translation.x + (end_x - center_x) * transform.scale,
-            transform.translation.y + (end_y - center_y) * transform.scale
-        );
+        let screen_start = self.transform_point(start_x, start_y, center_x, center_y, transform);
+        let screen_end = self.transform_point(end_x, end_y, center_x, center_y, transform);
         
         /*
         println!("Screen coordinates:");
@@ -267,5 +285,60 @@ impl PathRenderer {
                 .color(params.color)
                 .events(path.iter());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_coordinate_transform() {
+        let viewbox = ViewBox {
+            min_x: 0.0,
+            min_y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let renderer = PathRenderer::new(viewbox);
+        
+        // Test case 1: No translation or rotation, only centering
+        let transform = Transform2D {
+            translation: Vec2::new(0.0, 0.0),
+            scale: 1.0,
+            rotation: 0.0,
+        };
+        
+        // Point at SVG (0,0) should move to (-50,-50) in Nannou space
+        let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
+        assert_eq!(point.x, -50.0);
+        assert_eq!(point.y, -50.0);
+        
+        // Point at SVG (100,100) should move to (50,50) in Nannou space
+        let point = renderer.transform_point(100.0, 100.0, 50.0, 50.0, &transform);
+        assert_eq!(point.x, 50.0);
+        assert_eq!(point.y, 50.0);
+        
+        // Test case 2: With translation
+        let transform = Transform2D {
+            translation: Vec2::new(100.0, 100.0),
+            scale: 1.0,
+            rotation: 0.0,
+        };
+        
+        let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
+        assert_eq!(point.x, 50.0); // -50 + 100
+        assert_eq!(point.y, 50.0); // -50 + 100
+        
+        // Test case 3: With scaling
+        let transform = Transform2D {
+            translation: Vec2::new(0.0, 0.0),
+            scale: 2.0,
+            rotation: 0.0,
+        };
+        
+        let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
+        assert_eq!(point.x, -100.0); // (-50) * 2
+        assert_eq!(point.y, -100.0); // (-50) * 2
     }
 }

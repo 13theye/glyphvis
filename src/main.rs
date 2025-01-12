@@ -77,8 +77,16 @@ fn view(app: &App, model: &Model, frame: Frame) {
     // Get active segments for current glyph
     let active_segments = model.glyph_display.get_active_segments(&model.project);
     
-    // First draw the background grid
+    draw.line()
+        .start(pt2(0.0, 0.0))
+        .end(pt2(10.0, 0.0))
+        .color(RED);
+    draw.line()
+        .start(pt2(0.0, 0.0))
+        .end(pt2(0.0, 10.0))
+        .color(BLUE);
     
+    // First draw the background grid
     // Draw grid elements
     for y in 1..=model.grid.height {
         for x in 1..=model.grid.width {
@@ -144,6 +152,6 @@ fn view(app: &App, model: &Model, frame: Frame) {
             }
             
         }
-    }
+    }  
     draw.to_frame(app, &frame).unwrap();
 }

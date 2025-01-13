@@ -4,14 +4,14 @@ use nannou::prelude::*;
 use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
 use glyphvis::render::path_renderer::PathRenderer;
-use glyphvis::render::{Transform2D, RenderParams, GlyphDisplay};
+use glyphvis::render::{Transform2D, RenderParams, GlyphRenderer};
 
 struct Model {
     grid: Grid,
     tile_size: f32,
     path_renderer: PathRenderer,
     project: Project,
-    glyph_display: GlyphDisplay,
+    glyph_renderer: GlyphRenderer,
 }
 
 fn main() {
@@ -41,21 +41,21 @@ fn model(app: &App) -> Model {
     ) * 0.95; // 95% of available space
     
     let path_renderer = PathRenderer::new(grid.viewbox.clone());
-    let glyph_display = GlyphDisplay::new(&project);
+    let glyph_renderer = GlyphRenderer::new(&project);
 
     Model {
         grid,
         tile_size: max_tile_size,
         path_renderer,
         project,
-        glyph_display,
+        glyph_renderer,
     }
 }
 
 fn event(_app: &App, model: &mut Model, event: Event) {
     if let Event::WindowEvent { simple: Some(KeyPressed(key)), .. } = event {
         match key {
-            Key::Space => model.glyph_display.next_glyph(),
+            Key::Space => model.glyph_renderer.next_glyph(),
             _ => (),
         }
     }
@@ -79,7 +79,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let offset_y = -grid_height / 2.0;
     
     // Get active segments for current glyph
-    let active_segments = model.glyph_display.get_active_segments(&model.project);
+    let active_segments = model.glyph_renderer.get_active_segments(&model.project);
     
     draw.line()
         .start(pt2(0.0, 0.0))

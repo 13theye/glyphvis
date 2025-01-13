@@ -3,8 +3,8 @@
 
 use crate::models::data_model::Project;
 use std::collections::HashMap;
-use crate::services::grid_service;
-use crate::services::grid_service::{ PathElement, GridElement, EdgeType };
+use crate::services::path_service;
+use crate::services::path_service::{ PathElement, GridElement, EdgeType };
 
 
 #[derive(Debug, Clone)]
@@ -95,7 +95,7 @@ impl Grid {
                 if let Some(id_start) = line.find("id=\"") {
                     if let Some(id_end) = line[id_start + 4..].find('\"') {
                         let id = line[id_start + 4..id_start + 4 + id_end].to_string();
-                        if let Some(element) = grid_service::parse_svg_element(line) {
+                        if let Some(element) = path_service::parse_svg_element(line) {
                             return Some((id, element));
                         }
                     }
@@ -115,7 +115,7 @@ impl Grid {
             for x in 1..=project.grid_x {
                 for (base_id, base_path) in &base_elements {
                     let grid_id = format!("{},{} : {}", x, y, base_id);
-                    let edge_type = grid_service::detect_edge_type(base_path, &viewbox);
+                    let edge_type = path_service::detect_edge_type(base_path, &viewbox);
                     let element = GridElement {
                         id: base_id.clone(),
                         position: (x, y),
@@ -146,7 +146,7 @@ impl Grid {
             for x in 1..=project.grid_x {
                 for element in grid.get_elements_at(x, y) {
                     if element.edge_type != EdgeType::None {
-                        let should_draw = grid_service::should_draw_element(
+                        let should_draw = path_service::should_draw_element(
                             element,
                             grid.width,
                             grid.height,
@@ -164,11 +164,11 @@ impl Grid {
     }
 
     pub fn get_elements_at(&self, x: u32, y: u32) -> Vec<&GridElement> {
-        grid_service::get_elements_at(&self.elements, x, y)
+        path_service::get_elements_at(&self.elements, x, y)
     }
 
     pub fn should_draw_element(&self, element: &GridElement) -> bool {
-        grid_service::should_draw_element(
+        path_service::should_draw_element(
             element,
             self.width,
             self.height,

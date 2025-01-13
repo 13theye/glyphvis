@@ -1,4 +1,4 @@
-/// src/services/grid_service.rs
+/// src/services/path_service.rs
 /// parses SVG raw data into PathElements
 /// performs edge detection and neighbor hinding calculations
 

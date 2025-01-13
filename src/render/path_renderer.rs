@@ -2,7 +2,7 @@
 /// Static PathElement translation to Nannou Draw for rendering
 
 use nannou::prelude::*;
-use crate::services::grid_service::PathElement;
+use crate::services::path_service::PathElement;
 use crate::models::grid_model::ViewBox;
 use super::{Transform2D, RenderParams};
 

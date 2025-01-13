@@ -1,16 +1,16 @@
-// src/render/glyph_display.rs
+// src/render/glyph_renderer.rs
 use nannou::prelude::*;
 use crate::models::data_model::{Project, Glyph};
 use std::collections::HashSet;
 use super::RenderParams;
 
-pub struct GlyphDisplay {
+pub struct GlyphRenderer {
     glyph_names: Vec<String>,
     current_glyph_index: usize,
     glyph_params: RenderParams,  // Only need params for active segments
 }
 
-impl GlyphDisplay {
+impl GlyphRenderer {
     pub fn new(project: &Project) -> Self {
         let glyph_names: Vec<String> = project.glyphs.keys().cloned().collect();
         println!("Loaded {} glyphs", glyph_names.len());

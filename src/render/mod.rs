@@ -3,13 +3,11 @@
 // The cache system for caching Nannou draw commands
 
 //pub mod cache;
+pub mod renderer;
 pub mod path_renderer;
-pub mod glyph_renderer;
-pub mod grid_renderer;
 
+pub use renderer::Renderer;
 pub use path_renderer::PathRenderer;
-pub use glyph_renderer::GlyphRenderer;
-pub use grid_renderer::GridRenderer;
 
 use nannou::prelude::*;
 

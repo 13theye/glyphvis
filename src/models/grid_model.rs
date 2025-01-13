@@ -10,7 +10,7 @@ use crate::services::path_service;
 use crate::services::path_service::{ PathElement, GridElement, EdgeType };
 
 use crate::render::RenderParams;
-use crate::render::grid_renderer::RenderableSegment;
+use crate::render::renderer::RenderableSegment;
 
 use crate::effects::segment_effects::SegmentEffect;
 

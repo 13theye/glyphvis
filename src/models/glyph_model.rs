@@ -1,20 +1,20 @@
-// src/render/glyph_renderer.rs
+// src/render/glyph_model.rs
 use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
 use crate::models::grid_model::Grid;
-use crate::render::grid_renderer::RenderableSegment;
+use crate::render::renderer::RenderableSegment;
 
-use super::RenderParams;
+use crate::render::RenderParams;
 use crate::effects::segment_effects::SegmentEffect;
 
-pub struct GlyphRenderer {
+pub struct GlyphModel {
     glyph_names: Vec<String>,
     current_glyph_index: usize,
 }
 
-impl GlyphRenderer {
+impl GlyphModel {
     pub fn new(project: &Project) -> Self {
         let glyph_names: Vec<String> = project.glyphs.keys().cloned().collect();
         println!("Loaded {} glyphs", glyph_names.len());

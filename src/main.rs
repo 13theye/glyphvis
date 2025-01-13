@@ -1,17 +1,20 @@
-use glyphvis::effects::segment_effects::ColorCycleEffect;
 // src/main.rs
 use nannou::prelude::*;
 
 use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
-use glyphvis::render::{Transform2D, RenderParams, GlyphRenderer, GridRenderer};
+use glyphvis::models::glyph_model::GlyphModel;
+
+use glyphvis::render::{ Transform2D, RenderParams, Renderer };
 use::glyphvis::effects::segment_effects::PulseEffect;
+use glyphvis::effects::segment_effects::ColorCycleEffect;
+
 
 struct Model {
     project: Project,
     grid: Grid,
-    grid_renderer: GridRenderer,
-    glyph_renderer: GlyphRenderer,
+    glyph_model: GlyphModel,
+    renderer: Renderer,
 }
 
 fn main() {
@@ -32,22 +35,22 @@ fn model(app: &App) -> Model {
     // Create grid from project
     let grid = Grid::new(&project);
     println!("Created grid with {} elements", grid.elements.len());
-    
-    let grid_renderer = GridRenderer::new(grid.viewbox.clone());
-    let glyph_renderer = GlyphRenderer::new(&project);
+
+    let glyph_model = GlyphModel::new(&project);
+    let renderer = Renderer::new(grid.viewbox.clone());
 
     Model {
         project,
         grid,
-        grid_renderer,
-        glyph_renderer,
+        glyph_model,
+        renderer,
     }
 }
 
 fn event(_app: &App, model: &mut Model, event: Event) {
     if let Event::WindowEvent { simple: Some(KeyPressed(key)), .. } = event {
         match key {
-            Key::Space => model.glyph_renderer.next_glyph(),
+            Key::Space => model.glyph_model.next_glyph(),
             _ => (),
         }
     }
@@ -85,9 +88,6 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let offset_x = -grid_width / 2.0;
     let offset_y = -grid_height / 2.0;
     
-    // Get active segments for current glyph
-    let active_segments = model.glyph_renderer.get_active_segments(&model.project);
-    
     // Create default grid RenderParams
     let grid_params = RenderParams {
         color: rgb(1.0, 1.0, 1.0),
@@ -123,13 +123,13 @@ fn view(app: &App, model: &Model, frame: Frame) {
     // Get and draw background grid segments
     let background_segments = model.grid.get_background_segments(
         grid_params,
-        &active_segments,
+        &model.glyph_model.get_active_segments(&model.project),
         Some(&pulse_effect),
         app.time,
         debug_flag
     );
     
-    model.grid_renderer.draw(
+    model.renderer.draw(
         &draw,
         &model.grid,
         &grid_transform,
@@ -137,7 +137,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
     );
 
     // Get and draw glyph segments
-    let glyph_segments = model.glyph_renderer.get_renderable_segments(
+    let glyph_segments = model.glyph_model.get_renderable_segments(
         &model.project,
         &model.grid,
         glyph_params,
@@ -146,7 +146,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
         debug_flag
     );
 
-    model.grid_renderer.draw(
+    model.renderer.draw(
         &draw,
         &model.grid,
         &grid_transform,

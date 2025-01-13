@@ -4,7 +4,7 @@ use crate::models::grid_model::{ Grid, ViewBox };
 use crate::render::{Transform2D, RenderParams, PathRenderer};
 use crate::services::path_service::GridElement;
 
-pub struct GridRenderer {
+pub struct Renderer {
     path_renderer: PathRenderer,
 }
 pub struct RenderableSegment<'a>{
@@ -12,9 +12,9 @@ pub struct RenderableSegment<'a>{
     pub params: RenderParams,
 }
 
-impl GridRenderer {
+impl Renderer {
     pub fn new(viewbox: ViewBox) -> Self {
-        GridRenderer {
+        Self {
             path_renderer: PathRenderer::new(viewbox),
         }
     }
@@ -24,10 +24,10 @@ impl GridRenderer {
         &self,
         draw: &Draw,
         grid: &Grid,
-        grid_transform: &Transform2D,
+        transform: &Transform2D,
         segments: Vec<RenderableSegment>,
     ) {
-        let tile_size = grid_transform.scale * grid.viewbox.width;
+        let tile_size = transform.scale * grid.viewbox.width;
 
         // Draw all segments
         for segment in segments {
@@ -37,17 +37,17 @@ impl GridRenderer {
             let x_idx = x - 1;
             let y_idx = grid.height - y; // Invert y to match SVG coordinates
             
-            let pos_x = grid_transform.translation.x + 
+            let pos_x = transform.translation.x + 
                        (x_idx as f32 * tile_size) + 
                        (tile_size / 2.0);
-            let pos_y = grid_transform.translation.y + 
+            let pos_y = transform.translation.y + 
                        (y_idx as f32 * tile_size) + 
                        (tile_size / 2.0);
 
             let tile_transform = Transform2D {
                 translation: Vec2::new(pos_x, pos_y),
-                scale: grid_transform.scale,
-                rotation: grid_transform.rotation,
+                scale: transform.scale,
+                rotation: transform.rotation,
             };
 
             /*

@@ -1,3 +1,6 @@
+// src/render/renderer.rs
+// the renderer applies 2D transformations to the PathElements and calls PathRenderer to draw them
+
 use nannou::prelude::*;
 
 use crate::models::grid_model::{ Grid, ViewBox };

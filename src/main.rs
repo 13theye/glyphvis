@@ -90,15 +90,14 @@ fn view(app: &App, model: &Model, frame: Frame) {
     
     // Create default grid RenderParams
     let grid_params = RenderParams {
-        color: rgb(1.0, 1.0, 1.0),
-        stroke_weight: 15.0,
+        color: rgb(0.1, 0.1, 0.1),
+        stroke_weight: 10.0,
     };
     
-
     // Create default glyph RenderParams
     let glyph_params = RenderParams {
-        color: rgb(0.9, 0.0, 0.0),
-        stroke_weight: 15.0,
+        color: rgb(0.0, 0.0, 0.0),
+        stroke_weight: 10.0,
     };
 
     // Create grid transform
@@ -111,13 +110,13 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let pulse_effect = PulseEffect {
         frequency: 1.0,
         min_brightness: 0.0,
-        max_brightness: 0.1,
+        max_brightness: 0.5,
     };
 
     let colorcycle_effect = ColorCycleEffect {
         frequency: 1.0,
-        saturation: 0.5,
-        brightness: 0.5,
+        saturation: 1.0,
+        brightness: 1.0,
     };
 
     // Get and draw background grid segments

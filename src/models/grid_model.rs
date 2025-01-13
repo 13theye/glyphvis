@@ -1,5 +1,7 @@
 /// src/models/grid_model.rs
 /// data model and constructors for the assembled grid of SVG elements
+/// also applies effects at the Grid level
+
 use nannou::prelude::*;
 
 use std::collections::{ HashMap, HashSet };

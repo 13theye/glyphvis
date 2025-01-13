@@ -1,10 +1,13 @@
 /// src/render/path_render.rs
-/// Static PathElement translation to Nannou Draw for rendering
+/// PathElement translation to Nannou Draw for rendering
 
 use nannou::prelude::*;
 use crate::services::path_service::PathElement;
 use crate::models::grid_model::ViewBox;
 use super::{Transform2D, RenderParams};
+
+use nannou::lyon::tessellation::LineCap;
+
 
 use std::f32::consts::PI;
 
@@ -101,7 +104,8 @@ impl PathRenderer {
             .start(start)
             .end(end)
             .color(params.color)
-            .stroke_weight(params.stroke_weight);
+            .stroke_weight(params.stroke_weight)
+            .caps(LineCap::Round);
     }
 
     fn draw_circle(
@@ -122,7 +126,8 @@ impl PathRenderer {
             .radius(r * transform.scale)
             .stroke(params.color)
             .stroke_weight(params.stroke_weight)
-            .color(params.color);
+            .color(params.color)
+            .caps(LineCap::Round);
     }
 
     fn draw_arc(
@@ -209,6 +214,7 @@ impl PathRenderer {
                 .stroke()
                 .weight(params.stroke_weight)
                 .color(params.color)
+                .caps(LineCap::Round)
                 .events(path.iter());
         }
     }

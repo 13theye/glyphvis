@@ -1,4 +1,7 @@
 // src/render/glyph_model.rs
+// data model and constructors for Glyphs, which are on the same level as Grids.
+// also applies effects at the Glyph level
+
 use nannou::prelude::*;
 use std::collections::HashSet;
 

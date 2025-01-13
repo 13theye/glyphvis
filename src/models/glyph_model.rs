@@ -7,7 +7,7 @@ use crate::models::grid_model::Grid;
 use crate::render::renderer::RenderableSegment;
 
 use crate::render::RenderParams;
-use crate::effects::segment_effects::SegmentEffect;
+use crate::effects::grid_effects::GridEffect;
 
 pub struct GlyphModel {
     glyph_names: Vec<String>,
@@ -48,7 +48,7 @@ impl GlyphModel {
         project: &Project,
         grid: &'a Grid,
         params: RenderParams,
-        effect: Option<&dyn SegmentEffect>,
+        effect: Option<&dyn GridEffect>,
         time: f32,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {

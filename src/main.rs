@@ -6,8 +6,8 @@ use glyphvis::models::grid_model::Grid;
 use glyphvis::models::glyph_model::GlyphModel;
 
 use glyphvis::render::{ Transform2D, RenderParams, Renderer };
-use::glyphvis::effects::segment_effects::PulseEffect;
-use glyphvis::effects::segment_effects::ColorCycleEffect;
+use::glyphvis::effects::grid_effects::PulseEffect;
+use glyphvis::effects::grid_effects::ColorCycleEffect;
 
 
 struct Model {

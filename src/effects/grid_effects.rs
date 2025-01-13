@@ -4,7 +4,7 @@ use nannou::prelude::*;
 
 use crate::render::RenderParams;
 
-pub trait SegmentEffect {
+pub trait GridEffect {
     fn apply(&self, base_params: &RenderParams, time: f32) -> RenderParams;
 }
 
@@ -14,7 +14,7 @@ pub struct PulseEffect {
     pub max_brightness: f32,
 }
 
-impl SegmentEffect for PulseEffect {
+impl GridEffect for PulseEffect {
     fn apply(&self, base_params: &RenderParams, time: f32) -> RenderParams {
         let brightness = (time * self.frequency).sin() * 0.5 + 0.5;
         let brightness = self.min_brightness + brightness * (self.max_brightness - self.min_brightness);
@@ -37,7 +37,7 @@ pub struct ColorCycleEffect {
     pub brightness: f32,
 }
 
-impl SegmentEffect for ColorCycleEffect {
+impl GridEffect for ColorCycleEffect {
     fn apply(&self, base_params: &RenderParams, time: f32) -> RenderParams {
         let hue = (time * self.frequency) % 1.0;
         RenderParams {

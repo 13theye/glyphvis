@@ -12,8 +12,7 @@ use crate::services::path_service::{ PathElement, GridElement, EdgeType };
 use crate::render::RenderParams;
 use crate::render::renderer::RenderableSegment;
 
-use crate::effects::segment_effects::SegmentEffect;
-
+use crate::effects::grid_effects::GridEffect;
 
 #[derive(Debug, Clone)]
 pub struct ViewBox {
@@ -209,7 +208,7 @@ impl Grid {
         &'a self,
         params: RenderParams,
         exclude_segments: &HashSet<String>,
-        effect: Option<&dyn SegmentEffect>,
+        effect: Option<&dyn GridEffect>,
         time: f32,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {

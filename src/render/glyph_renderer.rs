@@ -1,7 +1,10 @@
 // src/render/glyph_renderer.rs
 use nannou::prelude::*;
-use crate::models::data_model::{Project, Glyph};
 use std::collections::HashSet;
+
+use crate::models::data_model::{Project, Glyph};
+use crate::models::grid_model::Grid;
+use crate::render::grid_renderer::RenderableSegment;
 use super::RenderParams;
 
 pub struct GlyphRenderer {
@@ -44,5 +47,48 @@ impl GlyphRenderer {
 
     pub fn get_render_params(&self) -> &RenderParams {
         &self.glyph_params
+    }
+
+    /// Gets all segments that should be rendered for the current glyph
+    pub fn get_renderable_segments<'a>(
+        &self,
+        project: &Project,
+        grid: &'a Grid,
+        debug_flag: bool,
+    ) -> Vec<RenderableSegment<'a>> {
+        let mut segments = Vec::new();
+        let active_segment_ids = self.get_active_segments(project);
+        
+        let debug_color = |x: u32, y: u32| -> f32 {
+            ((x + y) as f32) / (grid.height + grid.width) as f32
+        };
+
+        for y in 1..=grid.height {
+            for x in 1..=grid.width {
+                let elements = grid.get_elements_at(x, y);
+                
+                for element in elements {
+                    let segment_id = format!("{},{} : {}", x, y, element.id);
+                    if active_segment_ids.contains(&segment_id) {
+                        let params = if debug_flag {
+                            let g = debug_color(x, y);
+                            RenderParams {
+                                color: rgb(0.9, g, 0.0),
+                                stroke_weight: self.glyph_params.stroke_weight,
+                            }
+                        } else {
+                            self.glyph_params.clone()
+                        };
+
+                        segments.push(RenderableSegment {
+                            element,
+                            params,
+                        });
+                    }
+                }
+            }
+        }
+        
+        segments
     }
 }

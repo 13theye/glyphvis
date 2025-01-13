@@ -3,14 +3,12 @@ use nannou::prelude::*;
 
 use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
-use glyphvis::render::path_renderer::PathRenderer;
-use glyphvis::render::{Transform2D, RenderParams, GlyphRenderer};
+use glyphvis::render::{Transform2D, RenderParams, GlyphRenderer, GridRenderer};
 
 struct Model {
-    grid: Grid,
-    tile_size: f32,
-    path_renderer: PathRenderer,
     project: Project,
+    grid: Grid,
+    grid_renderer: GridRenderer,
     glyph_renderer: GlyphRenderer,
 }
 
@@ -33,21 +31,13 @@ fn model(app: &App) -> Model {
     let grid = Grid::new(&project);
     println!("Created grid with {} elements", grid.elements.len());
     
-    // Calculate tile size based on window dimensions
-    let window = app.window_rect();
-    let max_tile_size = f32::min(
-        window.w() / grid.width as f32,
-        window.h() / grid.height as f32
-    ) * 0.95; // 95% of available space
-    
-    let path_renderer = PathRenderer::new(grid.viewbox.clone());
+    let grid_renderer = GridRenderer::new(grid.viewbox.clone());
     let glyph_renderer = GlyphRenderer::new(&project);
 
     Model {
-        grid,
-        tile_size: max_tile_size,
-        path_renderer,
         project,
+        grid,
+        grid_renderer,
         glyph_renderer,
     }
 }
@@ -67,20 +57,11 @@ fn update(_app: &App, _model: &mut Model, _update: Update) {
 fn view(app: &App, model: &Model, frame: Frame) {
 
     let debug_flag = false;
-    let debug_color = |x:u32, y:u32| -> f32 {((x+y).to_f32().unwrap())/(model.grid.height+model.grid.width).to_f32().unwrap()};
 
     let draw = app.draw();
     draw.background().color(BLACK);
-    
-    // Calculate grid layout
-    let grid_width = model.tile_size * model.grid.width as f32;
-    let grid_height = model.tile_size * model.grid.height as f32;
-    let offset_x = -grid_width / 2.0;
-    let offset_y = -grid_height / 2.0;
-    
-    // Get active segments for current glyph
-    let active_segments = model.glyph_renderer.get_active_segments(&model.project);
-    
+
+    // Draw the debug origin
     draw.line()
         .start(pt2(0.0, 0.0))
         .end(pt2(10.0, 0.0))
@@ -90,103 +71,68 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .end(pt2(0.0, 10.0))
         .color(BLUE);
     
-    // First draw the background grid
-    // Draw grid elements
-    for y in 1..=model.grid.height {
-        for x in 1..=model.grid.width {
-            let b: f32;
-            if debug_flag {b = debug_color(x, y);} else {b = 0.05};
-            let grid_params = RenderParams {
-                color: rgb(0.05, 0.05, b/3.0),  // Dark gray for inactive grid
-                stroke_weight: 15.0,
-            };
-            // offset accounts for grid starting at 1, not 0
-            let (pos_x, pos_y) = Grid::calculate_grid_position(
-                x, 
-                y, 
-                model.grid.height,
-                offset_x,
-                offset_y,
-                model.tile_size
-            );
-            
-            /*
-            // Draw tile boundary for debug
-            draw.rect()
-                .x_y(pos_x, pos_y)
-                .w_h(model.tile_size, model.tile_size)
-                .stroke(RED)
-                .stroke_weight(4.0)
-                .no_fill();
-            */
-            
-            let transform = Transform2D {
-                translation: Vec2::new(pos_x, pos_y), 
-                scale: model.tile_size / model.grid.viewbox.width,
-                rotation: 0.0,
-            };
-            
-            // Draw all elements at this grid position
-            let elements = model.grid.get_elements_at(x, y);
-            
-            for element in &elements {  // Reference the elements
-                // Only draw grid elements that aren't part of the active glyph
-                if model.grid.should_draw_element(element) {
-                    let segment_id = format!("{},{} : {}", x, y, element.id);
-                    if !active_segments.contains(&segment_id) {
-                        model.path_renderer.draw_element(
-                            &draw,
-                            &element.path,
-                            &transform,
-                            &grid_params
-                        );
-                    }
-                }
-            }
-        }
-    }  
+    // Calculate grid layout
+    let window = app.window_rect();
+    let max_tile_size = f32::min(
+        window.w() / model.grid.width as f32,
+        window.h() / model.grid.height as f32
+    ) * 0.95;                                       // SCALE FACTOR: TO REFACTOR
 
-    // Second pass: Draw all glyph elements on top
-    for y in 1..=model.grid.height {
-        for x in 1..=model.grid.width {
-            let (pos_x, pos_y) = Grid::calculate_grid_position(
-                x, 
-                y, 
-                model.grid.height,
-                offset_x,
-                offset_y,
-                model.tile_size
-            );
-            
-            let transform = Transform2D {
-                translation: Vec2::new(pos_x, pos_y), 
-                scale: model.tile_size / model.grid.viewbox.width,
-                rotation: 0.0,
-            };
+    let grid_width = max_tile_size * model.grid.width as f32;
+    let grid_height = max_tile_size * model.grid.height as f32;
+    let offset_x = -grid_width / 2.0;
+    let offset_y = -grid_height / 2.0;
+    
+    // Get active segments for current glyph
+    let active_segments = model.glyph_renderer.get_active_segments(&model.project);
+    
+    // Create default grid RenderParams
+    let grid_params = RenderParams {
+        color: rgb(0.05, 0.05, 0.05),
+        stroke_weight: 15.0,
+    };
+    
+    // Create default glyph RenderParams
+    let glyph_params = RenderParams {
+        color: rgb(0.9, 0.0, 0.0),
+        stroke_weight: 15.0,
+    };
 
-            // Draw only active glyph segments
-            let elements = model.grid.get_elements_at(x, y);
-            for element in &elements {
-                if model.grid.should_draw_element(element) {
-                    let segment_id = format!("{},{} : {}", x, y, element.id);
-                    if active_segments.contains(&segment_id) {
-                        let g: f32;
-                        if debug_flag {g = debug_color(x, y);} else {g = 0.05};
-                        let glyph_params = RenderParams {
-                            color: rgb(0.9, g, 0.0),
-                            stroke_weight: 15.0,
-                        };
-                        model.path_renderer.draw_element(
-                            &draw,
-                            &element.path,
-                            &transform,
-                            &glyph_params
-                        );
-                    }
-                }
-            }
-        }
-    }
+    // Create grid transform
+    let grid_transform = Transform2D {
+        translation: Vec2::new(offset_x, offset_y),
+        scale: max_tile_size / model.grid.viewbox.width,
+        rotation: 0.0,
+    };
+
+    // Get and draw background grid segments
+    let background_segments = model.grid.get_background_segments(
+        grid_params,
+        &active_segments,
+        debug_flag
+    );
+
+    model.grid_renderer.draw(
+        &draw,
+        &model.grid,
+        &grid_transform,
+        background_segments,
+    );
+
+    // Get and draw glyph segments
+    let glyph_segments = model.glyph_renderer.get_renderable_segments(
+        &model.project,
+        &model.grid,
+        debug_flag
+    );
+    
+    model.grid_renderer.draw(
+        &draw,
+        &model.grid,
+        &grid_transform,
+        glyph_segments,
+    );
+
 
     draw.to_frame(app, &frame).unwrap();
 }

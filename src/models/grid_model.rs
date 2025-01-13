@@ -1,10 +1,16 @@
 /// src/models/grid_model.rs
 /// data model and constructors for the assembled grid of SVG elements
+use nannou::prelude::*;
+
+use std::collections::{ HashMap, HashSet };
 
 use crate::models::data_model::Project;
-use std::collections::HashMap;
+
 use crate::services::path_service;
 use crate::services::path_service::{ PathElement, GridElement, EdgeType };
+
+use crate::render::RenderParams;
+use crate::render::grid_renderer::RenderableSegment;
 
 
 #[derive(Debug, Clone)]
@@ -142,6 +148,7 @@ impl Grid {
             viewbox,
         };
 
+        // Flag elements for drawing for debug only
         for y in 1..=project.grid_y {
             for x in 1..=project.grid_x {
                 for element in grid.get_elements_at(x, y) {
@@ -158,7 +165,6 @@ impl Grid {
                 }
             }
         }
-
         println!("\n=== Grid Creation Complete ===\n");
         grid
     }
@@ -195,5 +201,47 @@ impl Grid {
         let pos_y = offset_y + (inverted_y as f32 * tile_size) + (tile_size / 2.0);
         
         (pos_x, pos_y)
+    }
+
+    pub fn get_background_segments<'a>(
+        &'a self,
+        params: RenderParams,
+        exclude_segments: &HashSet<String>,
+        debug_flag: bool,
+    ) -> Vec<RenderableSegment<'a>> {
+        let mut segments = Vec::new();
+        
+        let debug_color = |x: u32, y: u32| -> f32 {
+            ((x + y) as f32) / (self.height + self.width) as f32
+        };
+
+        for y in 1..=self.height {
+            for x in 1..=self.width {
+                let elements = self.get_elements_at(x, y);
+                
+                for element in elements {
+                    if self.should_draw_element(element) {
+                        let segment_id = format!("{},{} : {}", x, y, element.id);
+                        if !exclude_segments.contains(&segment_id) {
+                            let element_params = if debug_flag {
+                                let b = debug_color(x, y);
+                                RenderParams {
+                                    color: rgb(0.05, 0.05, b/3.0),
+                                    stroke_weight: params.stroke_weight,
+                                }
+                            } else {
+                                params.clone()
+                            };
+
+                            segments.push(RenderableSegment {
+                                element,
+                                params: element_params,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        segments
     }
 }

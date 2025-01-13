@@ -5,9 +5,11 @@
 //pub mod cache;
 pub mod path_renderer;
 pub mod glyph_renderer;
+pub mod grid_renderer;
 
 pub use path_renderer::PathRenderer;
 pub use glyph_renderer::GlyphRenderer;
+pub use grid_renderer::GridRenderer;
 
 use nannou::prelude::*;
 
@@ -28,7 +30,7 @@ impl Default for Transform2D {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RenderParams {
     pub color: Rgb<f32>,
     pub stroke_weight: f32,

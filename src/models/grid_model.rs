@@ -12,6 +12,8 @@ use crate::services::path_service::{ PathElement, GridElement, EdgeType };
 use crate::render::RenderParams;
 use crate::render::grid_renderer::RenderableSegment;
 
+use crate::effects::segment_effects::SegmentEffect;
+
 
 #[derive(Debug, Clone)]
 pub struct ViewBox {
@@ -207,6 +209,8 @@ impl Grid {
         &'a self,
         params: RenderParams,
         exclude_segments: &HashSet<String>,
+        effect: Option<&dyn SegmentEffect>,
+        time: f32,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
         let mut segments = Vec::new();
@@ -223,7 +227,7 @@ impl Grid {
                     if self.should_draw_element(element) {
                         let segment_id = format!("{},{} : {}", x, y, element.id);
                         if !exclude_segments.contains(&segment_id) {
-                            let element_params = if debug_flag {
+                            let mut element_params = if debug_flag {
                                 let b = debug_color(x, y);
                                 RenderParams {
                                     color: rgb(0.05, 0.05, b/3.0),
@@ -232,6 +236,11 @@ impl Grid {
                             } else {
                                 params.clone()
                             };
+
+                            // Apply effect if one is provided
+                            if let Some(effect) = effect {
+                                element_params = effect.apply(&element_params, time);
+                            }
 
                             segments.push(RenderableSegment {
                                 element,

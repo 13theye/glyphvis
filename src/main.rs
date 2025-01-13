@@ -1,9 +1,11 @@
+use glyphvis::effects::segment_effects::ColorCycleEffect;
 // src/main.rs
 use nannou::prelude::*;
 
 use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
 use glyphvis::render::{Transform2D, RenderParams, GlyphRenderer, GridRenderer};
+use::glyphvis::effects::segment_effects::PulseEffect;
 
 struct Model {
     project: Project,
@@ -88,10 +90,11 @@ fn view(app: &App, model: &Model, frame: Frame) {
     
     // Create default grid RenderParams
     let grid_params = RenderParams {
-        color: rgb(0.05, 0.05, 0.05),
+        color: rgb(1.0, 1.0, 1.0),
         stroke_weight: 15.0,
     };
     
+
     // Create default glyph RenderParams
     let glyph_params = RenderParams {
         color: rgb(0.9, 0.0, 0.0),
@@ -105,13 +108,27 @@ fn view(app: &App, model: &Model, frame: Frame) {
         rotation: 0.0,
     };
 
+    let pulse_effect = PulseEffect {
+        frequency: 1.0,
+        min_brightness: 0.0,
+        max_brightness: 0.1,
+    };
+
+    let colorcycle_effect = ColorCycleEffect {
+        frequency: 1.0,
+        saturation: 0.5,
+        brightness: 0.5,
+    };
+
     // Get and draw background grid segments
     let background_segments = model.grid.get_background_segments(
         grid_params,
         &active_segments,
+        Some(&pulse_effect),
+        app.time,
         debug_flag
     );
-
+    
     model.grid_renderer.draw(
         &draw,
         &model.grid,
@@ -123,9 +140,12 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let glyph_segments = model.glyph_renderer.get_renderable_segments(
         &model.project,
         &model.grid,
+        glyph_params,
+        Some(&colorcycle_effect),
+        app.time,
         debug_flag
     );
-    
+
     model.grid_renderer.draw(
         &draw,
         &model.grid,

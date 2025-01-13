@@ -5,12 +5,13 @@ use std::collections::HashSet;
 use crate::models::data_model::{Project, Glyph};
 use crate::models::grid_model::Grid;
 use crate::render::grid_renderer::RenderableSegment;
+
 use super::RenderParams;
+use crate::effects::segment_effects::SegmentEffect;
 
 pub struct GlyphRenderer {
     glyph_names: Vec<String>,
     current_glyph_index: usize,
-    glyph_params: RenderParams,  // Only need params for active segments
 }
 
 impl GlyphRenderer {
@@ -21,10 +22,6 @@ impl GlyphRenderer {
         Self {
             glyph_names,
             current_glyph_index: 0,
-            glyph_params: RenderParams {
-                color: rgb(0.9, 0.0, 0.0),  // Bright color for active glyph segments
-                stroke_weight: 10.0,
-            },
         }
     }
 
@@ -45,15 +42,14 @@ impl GlyphRenderer {
             .unwrap_or_default()
     }
 
-    pub fn get_render_params(&self) -> &RenderParams {
-        &self.glyph_params
-    }
-
     /// Gets all segments that should be rendered for the current glyph
     pub fn get_renderable_segments<'a>(
         &self,
         project: &Project,
         grid: &'a Grid,
+        params: RenderParams,
+        effect: Option<&dyn SegmentEffect>,
+        time: f32,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
         let mut segments = Vec::new();
@@ -70,25 +66,29 @@ impl GlyphRenderer {
                 for element in elements {
                     let segment_id = format!("{},{} : {}", x, y, element.id);
                     if active_segment_ids.contains(&segment_id) {
-                        let params = if debug_flag {
+                        let mut element_params = if debug_flag {
                             let g = debug_color(x, y);
                             RenderParams {
                                 color: rgb(0.9, g, 0.0),
-                                stroke_weight: self.glyph_params.stroke_weight,
+                                stroke_weight: params.stroke_weight,
                             }
                         } else {
-                            self.glyph_params.clone()
+                            params.clone()
                         };
+
+                        // Apply effect if one is provided
+                        if let Some(effect) = effect {
+                            element_params = effect.apply(&element_params, time);
+                        }
 
                         segments.push(RenderableSegment {
                             element,
-                            params,
+                            params: element_params,
                         });
                     }
                 }
             }
         }
-        
         segments
     }
 }

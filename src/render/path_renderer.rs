@@ -20,7 +20,7 @@ impl PathRenderer {
         Self { viewbox }
     }
 
-     // New method to transform a single point from SVG to Nannou coordinates
+     // Method to transform from origin at top left to origin at center and apply transform
     fn transform_point(
         &self,
         svg_x: f32,

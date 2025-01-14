@@ -1,13 +1,22 @@
 /// src/models/grid_model.rs
 /// data model and constructors for the assembled grid of SVG elements
+/// also applies effects at the Grid level
+
+use nannou::prelude::*;
+
+use std::collections::{ HashMap, HashSet };
 
 use crate::models::data_model::Project;
-use std::collections::HashMap;
-use crate::services::grid_service;
-use crate::services::grid_service::{ PathElement, GridElement, EdgeType };
 
+use crate::services::path_service;
+use crate::services::path_service::{ PathElement, GridElement, EdgeType };
 
-#[derive(Debug)]
+use crate::render::RenderParams;
+use crate::render::renderer::RenderableSegment;
+
+use crate::effects::grid_effects::GridEffect;
+
+#[derive(Debug, Clone)]
 pub struct ViewBox {
     pub min_x: f32,
     pub min_y: f32,
@@ -95,7 +104,7 @@ impl Grid {
                 if let Some(id_start) = line.find("id=\"") {
                     if let Some(id_end) = line[id_start + 4..].find('\"') {
                         let id = line[id_start + 4..id_start + 4 + id_end].to_string();
-                        if let Some(element) = grid_service::parse_svg_element(line) {
+                        if let Some(element) = path_service::parse_svg_element(line) {
                             return Some((id, element));
                         }
                     }
@@ -115,7 +124,7 @@ impl Grid {
             for x in 1..=project.grid_x {
                 for (base_id, base_path) in &base_elements {
                     let grid_id = format!("{},{} : {}", x, y, base_id);
-                    let edge_type = grid_service::detect_edge_type(base_path, &viewbox);
+                    let edge_type = path_service::detect_edge_type(base_path, &viewbox);
                     let element = GridElement {
                         id: base_id.clone(),
                         position: (x, y),
@@ -142,11 +151,12 @@ impl Grid {
             viewbox,
         };
 
+        // Flag elements for drawing for debug only
         for y in 1..=project.grid_y {
             for x in 1..=project.grid_x {
                 for element in grid.get_elements_at(x, y) {
                     if element.edge_type != EdgeType::None {
-                        let should_draw = grid_service::should_draw_element(
+                        let should_draw = path_service::should_draw_element(
                             element,
                             grid.width,
                             grid.height,
@@ -158,21 +168,90 @@ impl Grid {
                 }
             }
         }
-
         println!("\n=== Grid Creation Complete ===\n");
         grid
     }
 
     pub fn get_elements_at(&self, x: u32, y: u32) -> Vec<&GridElement> {
-        grid_service::get_elements_at(&self.elements, x, y)
+        path_service::get_elements_at(&self.elements, x, y)
     }
 
     pub fn should_draw_element(&self, element: &GridElement) -> bool {
-        grid_service::should_draw_element(
+        path_service::should_draw_element(
             element,
             self.width,
             self.height,
             &self.elements
         )
+    }
+
+    pub fn calculate_grid_position(
+        x: u32, 
+        y: u32, 
+        grid_height: u32,
+        offset_x: f32,
+        offset_y: f32, 
+        tile_size: f32
+    ) -> (f32, f32) {
+        // Convert to 0-based indexing
+        let x_idx = x - 1;
+        let y_idx = y - 1;
+        
+        // Invert y coordinate to match SVG coordinate system (top-left origin)
+        let inverted_y = (grid_height - 1) - y_idx;
+        
+        let pos_x = offset_x + (x_idx as f32 * tile_size) + (tile_size / 2.0);
+        let pos_y = offset_y + (inverted_y as f32 * tile_size) + (tile_size / 2.0);
+        
+        (pos_x, pos_y)
+    }
+
+    pub fn get_background_segments<'a>(
+        &'a self,
+        params: RenderParams,
+        exclude_segments: &HashSet<String>,
+        effect: Option<&dyn GridEffect>,
+        time: f32,
+        debug_flag: bool,
+    ) -> Vec<RenderableSegment<'a>> {
+        let mut segments = Vec::new();
+        
+        let debug_color = |x: u32, y: u32| -> f32 {
+            ((x + y) as f32) / (self.height + self.width) as f32
+        };
+
+        for y in 1..=self.height {
+            for x in 1..=self.width {
+                let elements = self.get_elements_at(x, y);
+                
+                for element in elements {
+                    if self.should_draw_element(element) {
+                        let segment_id = format!("{},{} : {}", x, y, element.id);
+                        if !exclude_segments.contains(&segment_id) {
+                            let mut element_params = if debug_flag {
+                                let b = debug_color(x, y);
+                                RenderParams {
+                                    color: rgb(0.05, 0.05, b/3.0),
+                                    stroke_weight: params.stroke_weight,
+                                }
+                            } else {
+                                params.clone()
+                            };
+
+                            // Apply effect if one is provided
+                            if let Some(effect) = effect {
+                                element_params = effect.apply(&element_params, time);
+                            }
+
+                            segments.push(RenderableSegment {
+                                element,
+                                params: element_params,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        segments
     }
 }

@@ -1,5 +1,5 @@
-/// src/services/grid_service.rs
-/// turns SVG elements into PathElements
+/// src/services/path_service.rs
+/// parses SVG raw data into PathElements
 /// performs edge detection and neighbor hinding calculations
 
 use std::str::FromStr;
@@ -360,7 +360,6 @@ pub fn should_draw_element(
     //println!("No matching neighbor found or neighbor doesn't have priority, should draw");
     true
 }
-
 
 #[cfg(test)]
 mod tests {

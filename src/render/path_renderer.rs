@@ -1,4 +1,4 @@
-/// src/render/path_render.rs
+/// src/render/path_renderer.rs
 /// PathElement translation to Nannou Draw for rendering
 
 use nannou::prelude::*;
@@ -7,7 +7,6 @@ use crate::models::grid_model::ViewBox;
 use super::{Transform2D, RenderParams};
 
 use nannou::lyon::tessellation::LineCap;
-
 
 use std::f32::consts::PI;
 
@@ -21,7 +20,7 @@ impl PathRenderer {
     }
 
      // Method to transform from origin at top left to origin at center and apply transform
-    fn transform_point(
+     fn transform_point(
         &self,
         svg_x: f32,
         svg_y: f32,
@@ -37,11 +36,11 @@ impl PathRenderer {
         let scaled_x = local_x * transform.scale;
         let scaled_y = local_y * transform.scale;
         
-        // 3. Apply rotation if needed
+        // 3. Apply rotation
         let cos_rot = transform.rotation.cos();
         let sin_rot = transform.rotation.sin();
-        let rotated_x = scaled_x * cos_rot - scaled_y * sin_rot;
-        let rotated_y = scaled_x * sin_rot + scaled_y * cos_rot;
+        let rotated_x = (scaled_x * cos_rot) - (scaled_y * sin_rot);
+        let rotated_y = (scaled_x * sin_rot) + (scaled_y * cos_rot);
         
         // 4. Apply final translation to Nannou coordinates
         pt2(
@@ -96,13 +95,10 @@ impl PathRenderer {
         params: &RenderParams,
     ) {
         let start = self.transform_point(x1, y1, center_x, center_y, transform);
-
         let end = self.transform_point(x2, y2, center_x, center_y, transform);
 
-
         draw.line()
-            .start(start)
-            .end(end)
+            .points(start, end)
             .color(params.color)
             .stroke_weight(params.stroke_weight)
             .caps(LineCap::Round);
@@ -119,7 +115,6 @@ impl PathRenderer {
         params: &RenderParams,
     ) {
         let center = self.transform_point(cx, cy, center_x, center_y, transform);
-
 
         draw.ellipse()
             .x_y(center.x, center.y)
@@ -144,9 +139,8 @@ impl PathRenderer {
         transform: &Transform2D,
         params: &RenderParams,
     ) {
-
         let debug_flag = false;
-
+    
         if debug_flag {
             println!("\n=== Arc Debug ===");
             println!("Input parameters:");
@@ -157,11 +151,11 @@ impl PathRenderer {
             println!("  large_arc: {}", large_arc);
             println!("  sweep: {}", sweep);
         }
-
+    
         // Convert coordinates to screen space
         let screen_start = self.transform_point(start_x, start_y, center_x, center_y, transform);
         let screen_end = self.transform_point(end_x, end_y, center_x, center_y, transform);
-
+    
         if debug_flag {
             println!("\nTransformed points:");
             println!("  screen_start: ({:.2}, {:.2})", screen_start.x, screen_start.y);
@@ -172,7 +166,7 @@ impl PathRenderer {
         let rx_scaled = rx * transform.scale;
         let ry_scaled = ry * transform.scale;
         
-        // Calculate center and angles using the new geometric method
+        // Calculate center and angles using the geometric method
         let (center, start_angle, sweep_angle) = self.calculate_arc_center(
             screen_start,
             screen_end,
@@ -182,7 +176,7 @@ impl PathRenderer {
             large_arc,
             sweep
         );
-
+    
         // Generate points along the arc
         let resolution = 64;
         let mut points = Vec::with_capacity(resolution + 1);
@@ -199,23 +193,16 @@ impl PathRenderer {
             
             points.push(pt2(x, y));
         }
-
-        // Draw the arc
-        if let Some(first) = points.first() {
-            let mut builder = nannou::geom::Path::builder()
-                .move_to(nannou::geom::Point2::new(first.x, first.y));
-            
-            for point in points.iter().skip(1) {
-                builder = builder.line_to(nannou::geom::Point2::new(point.x, point.y));
+    
+        // Draw the arc segments as individual lines with proper stroke weight
+        for window in points.windows(2) {
+            if let [p1, p2] = window {
+                draw.line()
+                    .start(*p1)
+                    .end(*p2)
+                    .stroke_weight(params.stroke_weight)
+                    .color(params.color);
             }
-
-            let path = builder.build();
-            draw.path()
-                .stroke()
-                .weight(params.stroke_weight)
-                .color(params.color)
-                .caps(LineCap::Round)
-                .events(path.iter());
         }
     }
 
@@ -229,7 +216,6 @@ impl PathRenderer {
         large_arc: bool,
         sweep: bool
     ) -> (Point2, f32, f32) {  // Returns (center, start_angle, sweep_angle)
-
         let debug_flag = false;
         if debug_flag {println!("\nCenter calculation:");}
 
@@ -298,7 +284,6 @@ impl PathRenderer {
         let cy = sin_phi * cxp + cos_phi * cyp + (start.y + end.y) / 2.0;
 
         if debug_flag {println!("  final center: ({:.2}, {:.2})", cx, cy);}
-
         
         // Step 5: Calculate angles
         let start_vec_x = (x1p - cxp) / rx_final;
@@ -385,5 +370,35 @@ mod tests {
         let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
         assert_eq!(point.x, -100.0); // (-50) * 2
         assert_eq!(point.y, 100.0); // (50) * 2
+        
+        // Test case 4: With rotation
+        let transform = Transform2D {
+            translation: Vec2::new(0.0, 0.0),
+            scale: 1.0,
+            rotation: PI / 2.0, // 90 degrees
+        };
+        
+        let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
+        let difx = (point.x - -50.0).abs();
+        let dify = (point.y - -50.0).abs();
+        assert!(difx < 0.001);
+        assert!(dify < 0.001);
+        
+        // Test case 5: Combined transformation
+        let transform = Transform2D {
+            translation: Vec2::new(100.0, 100.0),
+            scale: 2.0,
+            rotation: PI / 4.0, // 45 degrees
+        };
+        
+        let point = renderer.transform_point(0.0, 0.0, 50.0, 50.0, &transform);
+        // For a 45-degree rotation of point (-50, 50) scaled by 2:
+   
+        let expected_x = (-100.0 * (PI/4.0).cos() - 100.0 * (PI/4.0).sin()) + 100.0;
+        let expected_y = (-100.0 * (PI/4.0).sin() + 100.0 * (PI/4.0).cos()) + 100.0;
+        println!("Expected: ({:.2}, {:.2})", expected_x, expected_y);
+        println!("Actual: ({:.2}, {:.2})", point.x, point.y);
+        assert!((point.x - expected_x).abs() < 0.001);
+        assert!((point.y - expected_y).abs() < 0.001);
     }
 }

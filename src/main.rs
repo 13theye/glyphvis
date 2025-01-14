@@ -19,14 +19,18 @@ struct Model {
 
 fn main() {
     nannou::app(model)
-        .event(event)        // Add event handling
         .update(update)
         .run();
 }
 
 fn model(app: &App) -> Model {
     // Create window
-    app.new_window().size(1000, 1000).view(view).build().unwrap();
+    let _window = app.new_window()
+        .size(1000, 1000)
+        .view(view)
+        .key_pressed(key_pressed)
+        .build()
+        .unwrap();
     
     // Load project
     let project = Project::load("../glyphmaker/projects/small-cir-d.json")
@@ -47,12 +51,10 @@ fn model(app: &App) -> Model {
     }
 }
 
-fn event(_app: &App, model: &mut Model, event: Event) {
-    if let Event::WindowEvent { simple: Some(KeyPressed(key)), .. } = event {
-        match key {
-            Key::Space => model.glyph_model.next_glyph(),
-            _ => (),
-        }
+fn key_pressed(_app: &App, model: &mut Model, key: Key) {
+    match key {
+        Key::Space => model.glyph_model.next_glyph(),
+        _ => (),
     }
 }
 
@@ -60,7 +62,6 @@ fn update(_app: &App, _model: &mut Model, _update: Update) {
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
-
     let debug_flag = false;
 
     let draw = app.draw();
@@ -68,12 +69,10 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     // Draw the debug origin
     draw.line()
-        .start(pt2(0.0, 0.0))
-        .end(pt2(10.0, 0.0))
+        .points(pt2(0.0, 0.0), pt2(10.0, 0.0))
         .color(RED);
     draw.line()
-        .start(pt2(0.0, 0.0))
-        .end(pt2(0.0, 10.0))
+        .points(pt2(0.0, 0.0), pt2(0.0, 10.0))
         .color(BLUE);
     
     // Calculate grid layout
@@ -152,6 +151,6 @@ fn view(app: &App, model: &Model, frame: Frame) {
         glyph_segments,
     );
 
-
+    // Draw to frame
     draw.to_frame(app, &frame).unwrap();
 }

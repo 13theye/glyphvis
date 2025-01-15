@@ -17,7 +17,7 @@ pub fn draw_segments(
     draw: &Draw,
     grid: &Grid,
     transform: &Transform2D,
-    segments: Vec<RenderableSegment>,
+    segments: &Vec<RenderableSegment>,
 ) {
     let tile_size = transform.scale * grid.viewbox.width;
 

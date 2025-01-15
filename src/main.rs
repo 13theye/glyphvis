@@ -178,7 +178,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         &draw,
         &model.grid,
         &grid_transform,
-        background_segments,
+        &background_segments,
     );
 
     // Get and draw glyph segments
@@ -195,7 +195,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         &draw,
         &model.grid,
         &grid_transform,
-        glyph_segments,
+        &glyph_segments,
     );
 
     // Render the draw commands to the texture

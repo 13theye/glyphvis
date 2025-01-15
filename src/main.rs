@@ -22,6 +22,7 @@ struct Model {
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     frame_recorder: FrameRecorder,
+    exit_requested: bool,
 }
 
 fn main() {
@@ -107,6 +108,7 @@ fn model(app: &App) -> Model {
         draw_renderer,
         texture_reshaper,
         frame_recorder,
+        exit_requested: false,
     }
 }
 
@@ -114,12 +116,77 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
         Key::Space => model.glyph_model.next_glyph(),
         Key::R => model.frame_recorder.toggle_recording(),
+        Key::Q => {
+            let (processed, total) = model.frame_recorder.get_queue_status();
+            println!("Processed {} frames out of {}", processed, total);
+            if model.frame_recorder.is_recording() {
+                model.frame_recorder.toggle_recording();
+            }
+            model.exit_requested = true;
+        },
         _ => (),
     }
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
     let debug_flag = false;
+
+    if model.exit_requested {
+        if model.frame_recorder.has_pending_frames() {
+            // Clear the window and show progress
+            let draw = &model.draw;
+            draw.background().color(BLACK);
+            
+            let (processed, total) = model.frame_recorder.get_queue_status();
+            
+            // Draw progress text
+            let text = format!("{} / {} frames saved", processed, total);
+            draw.text(&text)
+                .color(WHITE)
+                .font_size(32)
+                .x_y(0.0, 50.0);
+                
+            // Draw progress bar
+            let progress = processed as f32 / total as f32;
+            let bar_width = 400.0;
+            let bar_height = 30.0;
+            
+            // Background bar
+            draw.rect()
+                .color(GRAY)
+                .w_h(bar_width, bar_height)
+                .x_y(0.0, -50.0);
+                
+            // Progress bar
+            draw.rect()
+                .color(GREEN)
+                .w_h(bar_width * progress, bar_height)
+                .x_y(-bar_width/2.0 + (bar_width * progress)/2.0, -50.0);
+
+            // Use the draw renderer to update the texture
+            let window = app.main_window();
+            let device = window.device();
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Progress renderer"),
+            });
+            
+            model.draw_renderer.render_to_texture(
+                device,
+                &mut encoder,
+                draw,
+                &model.texture
+            );
+            
+            window.queue().submit(Some(encoder.finish()));
+
+            // IMPORTANT: Add a small sleep to prevent maxing out CPU
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        } else {
+            // Only quit once all frames are processed
+            app.quit();
+        }
+        return;  // Important: return here to not continue with normal rendering
+    }
 
     let draw = &model.draw;
 
@@ -233,14 +300,22 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 }
 
 // Draw the state of Model into the given Frame
-fn view(_app: &App, model: &Model, frame: Frame) {
-    
-    // Sample the texture and write it to the Frame
-    let mut encoder = frame.command_encoder();
+fn view(app: &App, model: &Model, frame: Frame) {
+    if model.exit_requested && model.frame_recorder.has_pending_frames() {
+        // When showing progress, we need to ensure the texture gets drawn to the frame
+        let draw = app.draw();
+        let texture_view = model.texture.view().build();
+        draw.texture(&texture_view)
+            .wh(frame.rect().wh());
+        draw.to_frame(app, &frame).unwrap();
+    } else {
+        // Normal rendering path
+        let mut encoder = frame.command_encoder();
+        model
+            .texture_reshaper
+            .encode_render_pass(frame.texture_view(), &mut *encoder);
+    }
 
-    model
-        .texture_reshaper
-        .encode_render_pass(frame.texture_view(), &mut *encoder);
 
     /* higher level way of doing the same thing
     let draw = app.draw();

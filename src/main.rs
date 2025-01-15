@@ -5,6 +5,9 @@ use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
 use glyphvis::models::glyph_model::GlyphModel;
 
+use glyphvis::services::FrameRecorder;
+use glyphvis::services::frame_recorder::OutputFormat;
+
 use glyphvis::draw::{ Transform2D, DrawParams };
 use glyphvis::draw::grid_draw;
 use glyphvis::effects::grid_effects::PulseEffect;
@@ -17,7 +20,8 @@ struct Model {
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
-    texture_reshaper: wgpu::TextureReshaper
+    texture_reshaper: wgpu::TextureReshaper,
+    frame_recorder: FrameRecorder,
 }
 
 fn main() {
@@ -87,6 +91,13 @@ fn model(app: &App) -> Model {
         dst_format,
     );
 
+    // Create the frame recorder
+    let frame_recorder = FrameRecorder::new(
+        "frames/",
+        3600,
+        OutputFormat::JPEG(85),
+    );
+
     Model {
         project,
         grid,
@@ -95,12 +106,14 @@ fn model(app: &App) -> Model {
         draw,
         draw_renderer,
         texture_reshaper,
+        frame_recorder,
     }
 }
 
 fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
         Key::Space => model.glyph_model.next_glyph(),
+        Key::R => model.frame_recorder.toggle_recording(),
         _ => (),
     }
 }
@@ -208,6 +221,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     model
         .draw_renderer
         .render_to_texture(device, &mut encoder, draw, &model.texture);
+
+    // Capture the texture for FrameRecorder
+    if model.frame_recorder.is_recording() {
+        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
+    }
 
     // Submit the commands for drawing to the GPU
     window.queue().submit(Some(encoder.finish()));

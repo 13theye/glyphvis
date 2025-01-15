@@ -5,7 +5,8 @@ use glyphvis::models::data_model::Project;
 use glyphvis::models::grid_model::Grid;
 use glyphvis::models::glyph_model::GlyphModel;
 
-use glyphvis::render::{ Transform2D, RenderParams, Renderer };
+use glyphvis::draw::{ Transform2D, DrawParams };
+use glyphvis::draw::grid_draw;
 use glyphvis::effects::grid_effects::PulseEffect;
 use glyphvis::effects::grid_effects::ColorCycleEffect;
 
@@ -13,7 +14,6 @@ struct Model {
     project: Project,
     grid: Grid,
     glyph_model: GlyphModel,
-    renderer: Renderer,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
@@ -40,7 +40,6 @@ fn model(app: &App) -> Model {
     println!("Created grid with {} elements", grid.elements.len());
 
     let glyph_model = GlyphModel::new(&project);
-    let renderer = Renderer::new(grid.viewbox.clone());
 
     // Create window
     let window_id = app.new_window()
@@ -92,7 +91,6 @@ fn model(app: &App) -> Model {
         project,
         grid,
         glyph_model,
-        renderer,
         texture,
         draw,
         draw_renderer,
@@ -126,14 +124,14 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let offset_x = -grid_width / 2.0;
     let offset_y = -grid_height / 2.0;
     
-    // Create default grid RenderParams
-    let grid_params = RenderParams {
+    // Create default grid DrawParams
+    let grid_params = DrawParams {
         color: rgb(0.1, 0.1, 0.1),
         stroke_weight: 10.0,
     };
     
-    // Create default glyph RenderParams
-    let glyph_params = RenderParams {
+    // Create default glyph DrawParams
+    let glyph_params = DrawParams {
         color: rgb(0.0, 0.0, 0.0),
         stroke_weight: 10.0,
     };
@@ -176,7 +174,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         debug_flag
     );
     
-    model.renderer.draw(
+    grid_draw::draw_segments(
         &draw,
         &model.grid,
         &grid_transform,
@@ -193,7 +191,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         debug_flag
     );
 
-    model.renderer.draw(
+    grid_draw::draw_segments(
         &draw,
         &model.grid,
         &grid_transform,

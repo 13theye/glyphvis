@@ -7,9 +7,9 @@ use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
 use crate::models::grid_model::Grid;
-use crate::render::renderer::RenderableSegment;
+use crate::draw::grid_draw::RenderableSegment;
 
-use crate::render::RenderParams;
+use crate::draw::DrawParams;
 use crate::effects::grid_effects::GridEffect;
 
 pub struct GlyphModel {
@@ -50,7 +50,7 @@ impl GlyphModel {
         &self,
         project: &Project,
         grid: &'a Grid,
-        params: RenderParams,
+        params: DrawParams,
         effect: Option<&dyn GridEffect>,
         time: f32,
         debug_flag: bool,
@@ -71,7 +71,7 @@ impl GlyphModel {
                     if active_segment_ids.contains(&segment_id) {
                         let mut element_params = if debug_flag {
                             let g = debug_color(x, y);
-                            RenderParams {
+                            DrawParams {
                                 color: rgb(0.9, g, 0.0),
                                 stroke_weight: params.stroke_weight,
                             }

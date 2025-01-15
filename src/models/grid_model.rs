@@ -11,8 +11,8 @@ use crate::models::data_model::Project;
 use crate::services::path_service;
 use crate::services::path_service::{ PathElement, GridElement, EdgeType };
 
-use crate::render::RenderParams;
-use crate::render::renderer::RenderableSegment;
+use crate::draw::DrawParams;
+use crate::draw::grid_draw::RenderableSegment;
 
 use crate::effects::grid_effects::GridEffect;
 
@@ -208,7 +208,7 @@ impl Grid {
 
     pub fn get_background_segments<'a>(
         &'a self,
-        params: RenderParams,
+        params: DrawParams,
         exclude_segments: &HashSet<String>,
         effect: Option<&dyn GridEffect>,
         time: f32,
@@ -230,7 +230,7 @@ impl Grid {
                         if !exclude_segments.contains(&segment_id) {
                             let mut element_params = if debug_flag {
                                 let b = debug_color(x, y);
-                                RenderParams {
+                                DrawParams {
                                     color: rgb(0.05, 0.05, b/3.0),
                                     stroke_weight: params.stroke_weight,
                                 }

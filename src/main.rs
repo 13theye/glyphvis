@@ -200,7 +200,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         glyph_segments,
     );
 
-    // Render the drawing to the texture
+    // Render the draw commands to the texture
     let window = app.main_window();
     let device = window.device();
     let ce_desc = wgpu::CommandEncoderDescriptor {
@@ -213,19 +213,20 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Submit the commands for drawing to the GPU
     window.queue().submit(Some(encoder.finish()));
+
 }
 
 // Draw the state of Model into the given Frame
 fn view(_app: &App, model: &Model, frame: Frame) {
     
-    // Sample the texture and write it to the frame
+    // Sample the texture and write it to the Frame
     let mut encoder = frame.command_encoder();
 
     model
         .texture_reshaper
         .encode_render_pass(frame.texture_view(), &mut *encoder);
 
-    /* 
+    /* higher level way of doing the same thing
     let draw = app.draw();
     
     // Get the texture view

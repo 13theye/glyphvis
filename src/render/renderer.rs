@@ -1,5 +1,5 @@
 // src/render/renderer.rs
-// the renderer applies 2D transformations to the PathElements and calls PathRenderer to draw them
+// the renderer applies 2D transformations to a group of PathElements and calls PathRenderer to draw them
 
 use nannou::prelude::*;
 
@@ -20,17 +20,6 @@ impl Renderer {
         Self {
             path_renderer: PathRenderer::new(viewbox),
         }
-    }
-
-    pub fn create_texture(device: &wgpu::Device, size: [u32; 2]) -> wgpu::Texture {
-        nannou::wgpu::TextureBuilder::new()
-            .sample_count(4)
-            .size(size)
-            .format(wgpu::TextureFormat::Rgba16Float)
-            .usage(wgpu::TextureUsages::RENDER_ATTACHMENT 
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC)
-            .build(device)
     }
 
     /// Draws a collection of segments with the specified grid transform

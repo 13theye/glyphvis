@@ -22,6 +22,17 @@ impl Renderer {
         }
     }
 
+    pub fn create_texture(device: &wgpu::Device, size: [u32; 2]) -> wgpu::Texture {
+        nannou::wgpu::TextureBuilder::new()
+            .sample_count(4)
+            .size(size)
+            .format(wgpu::TextureFormat::Rgba16Float)
+            .usage(wgpu::TextureUsages::RENDER_ATTACHMENT 
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC)
+            .build(device)
+    }
+
     /// Draws a collection of segments with the specified grid transform
     pub fn draw(
         &self,

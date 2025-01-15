@@ -1,13 +1,10 @@
-// src/renderer/mod.rs
-// The path rendering module
+// src/draw/mod.rs
+// The path drawing module
 // The cache system for caching Nannou draw commands
 
 //pub mod cache;
-pub mod renderer;
-pub mod path_renderer;
-
-pub use renderer::Renderer;
-pub use path_renderer::PathRenderer;
+pub mod grid_draw;
+pub mod path_draw;
 
 use nannou::prelude::*;
 
@@ -29,12 +26,12 @@ impl Default for Transform2D {
 }
 
 #[derive(Debug, Clone)]
-pub struct RenderParams {
+pub struct DrawParams {
     pub color: Rgb<f32>,
     pub stroke_weight: f32,
 }
 
-impl Default for RenderParams {
+impl Default for DrawParams {
     fn default() -> Self {
         Self {
             color: rgb(0.1, 0.1, 0.1),

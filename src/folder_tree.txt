@@ -4,7 +4,8 @@ glyphvis
 │   └── lib.rs
 │   ├── models
 │   │   ├── data_model.rs
-│   │   └── grid_model.rs
+│   │   ├── glyph_model.rs
+│   │   ├── grid_model.rs
 │   │   └── mod.rs
 │   ├── services
 │   │   ├── grid_service.rs
@@ -14,9 +15,10 @@ glyphvis
 │   │   ├── grid_anim.rs
 │   │   └── segment_anim.rs
 │   │   └── mod.rs
-│   ├── renderer
+│   ├── draw
 │       ├── cache.rs
-│       ├── path_renderer.rs
+│       ├── grid_draw.rs
+│       ├── path_draw.rs
 │       └── mod.rs
 ├──Cargo.lock
 └──Cargo.toml

@@ -1,21 +1,18 @@
 // src/main.rs
 use nannou::prelude::*;
 
-use glyphvis::models::data_model::Project;
-use glyphvis::models::grid_model::Grid;
-use glyphvis::models::glyph_model::GlyphModel;
+use glyphvis::models::{ Project, GridModel, GlyphModel };
 
 use glyphvis::services::FrameRecorder;
 use glyphvis::services::frame_recorder::OutputFormat;
 
 use glyphvis::draw::{ Transform2D, DrawParams };
 use glyphvis::draw::grid_draw;
-use glyphvis::effects::grid_effects::PulseEffect;
-use glyphvis::effects::grid_effects::ColorCycleEffect;
+use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
 
 struct Model {
     project: Project,
-    grid: Grid,
+    grid: GridModel,
     glyph_model: GlyphModel,
     texture: wgpu::Texture,
     draw: nannou::Draw,
@@ -46,7 +43,7 @@ fn model(app: &App) -> Model {
     .expect("Failed to load project file");
     
     // Create grid from project
-    let grid = Grid::new(&project);
+    let grid = GridModel::new(&project);
     println!("Created grid with {} elements", grid.elements.len());
 
     let glyph_model = GlyphModel::new(&project);

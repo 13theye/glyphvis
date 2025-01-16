@@ -6,7 +6,7 @@ use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
-use crate::models::grid_model::Grid;
+use crate::models::grid_model::GridModel;
 use crate::draw::grid_draw::RenderableSegment;
 
 use crate::draw::DrawParams;
@@ -49,7 +49,7 @@ impl GlyphModel {
     pub fn get_renderable_segments<'a>(
         &self,
         project: &Project,
-        grid: &'a Grid,
+        grid: &'a GridModel,
         params: DrawParams,
         effect: Option<&dyn GridEffect>,
         time: f32,

@@ -30,14 +30,14 @@ impl ViewBox {
 }
 
 #[derive(Debug)]
-pub struct Grid {
+pub struct GridModel {
     pub elements: HashMap<String, GridElement>,
     pub width: u32,
     pub height: u32,
     pub viewbox: ViewBox,
 }
 
-impl Grid {
+impl GridModel {
     pub fn new(project: &Project) -> Self {
         println!("\n=== Creating Grid ({}x{}) ===", project.grid_x, project.grid_y);
         let mut elements = HashMap::new();
@@ -144,7 +144,7 @@ impl Grid {
 
         // Pre-calculate and print which elements should be drawn
         println!("\n=== Drawing Decisions ===");
-        let grid = Grid {
+        let grid = GridModel {
             elements,
             width: project.grid_x,
             height: project.grid_y,

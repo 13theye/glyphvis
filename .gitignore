@@ -1,5 +1,9 @@
-target/
+.vscode/
 frames/
 ref/
+target/
 test_frames*
+
+
 .DS_Store
+

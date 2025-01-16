@@ -11,7 +11,7 @@ use nannou::wgpu;
 use nannou::image::RgbaImage;
 use std::sync::atomic::{ AtomicUsize, Ordering };
 
-const BATCH_SIZE: usize = 30; // Process 30 frames at a time
+const BATCH_SIZE: usize = 60; // Process n frames at a time
 const FPS: u64 = 30;
 const FRAME_TIME: u64 = 1_000_000_000 / FPS; // Duration in nanoseconds between frames
 
@@ -167,15 +167,26 @@ impl FrameRecorder {
 
         let sender = self.frame_sender.clone();
         let frames_in_queue = self.frames_in_queue.clone();
+        let frames_in_queue_outer = self.frames_in_queue.clone();
+
         
-        let snapshot = self.texture_capturer.capture(device, encoder, texture);
+        // Create snapshot in its own scope to ensure proper cleanup
+        let snapshot = {
+            let snapshot = self.texture_capturer.capture(device, encoder, texture);
+            snapshot
+        };
+        
         let width = texture.width();
         let height = texture.height();
 
         if let Err(e) = snapshot.read(move |result| {
             match result {
                 Ok(buffer) => {
-                    let data = buffer.to_owned().into_raw();
+                    // Scope the buffer data conversion
+                    let data = {
+                        let raw_data = buffer.to_owned().into_raw();
+                        raw_data
+                    }; // buffer is dropped here
                     frames_in_queue.fetch_add(1, Ordering::SeqCst);
                     if let Err(e) = sender.send((frame_num, data, width, height)) {
                         frames_in_queue.fetch_sub(1, Ordering::SeqCst);
@@ -183,10 +194,12 @@ impl FrameRecorder {
                     }
                 },
                 Err(e) => {
+                    frames_in_queue.fetch_sub(1, Ordering::SeqCst);
                     eprintln!("Failed to read texture: {:?}", e);
                 }
             }
         }) {
+            frames_in_queue_outer.fetch_sub(1, Ordering::SeqCst);
             eprintln!("Failed to read snapshot: {:?}", e);
         }
     }

@@ -116,7 +116,7 @@ fn model(app: &App) -> Model {
 
 fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
-        Key::Space => model.glyph_model.next_glyph(),
+        //Key::Space => model.glyph_model.next_glyph(),
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
             let (processed, total) = model.frame_recorder.get_queue_status();
@@ -132,6 +132,9 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
 
 fn update(app: &App, model: &mut Model, _update: Update) {
     let debug_flag = false;
+
+    // auto cycle glyphs
+    model.glyph_model.next_glyph();
 
     // frames processing progress bar:
     if model.exit_requested {

@@ -20,7 +20,8 @@ pub struct GlyphModel {
 
 impl GlyphModel {
     pub fn new(project: &Project) -> Self {
-        let glyph_names: Vec<String> = project.glyphs.keys().cloned().collect();
+        let mut glyph_names: Vec<String> = project.glyphs.keys().cloned().collect();
+        glyph_names.sort();
         println!("Loaded {} glyphs", glyph_names.len());
 
         Self {
@@ -31,8 +32,8 @@ impl GlyphModel {
 
     pub fn next_glyph(&mut self) {
         self.current_glyph_index = (self.current_glyph_index + 1) % self.glyph_names.len();
-        let current_name = &self.glyph_names[self.current_glyph_index];
-        println!("Showing glyph: {}", current_name);
+        //let current_name = &self.glyph_names[self.current_glyph_index];
+        //println!("Showing glyph: {}", current_name);
     }
 
     pub fn get_current_glyph<'a>(&self, project: &'a Project) -> Option<&'a Glyph> {

@@ -31,10 +31,10 @@ fn main() {
 fn model(app: &App) -> Model {
 
     // size of captures
-    let texture_size: [u32; 2] = [4500 , 1500];
+    let texture_size: [u32; 2] = [3840, 1280];
 
     // size of view window
-    let window_size: [u32; 2] = [1000  , 1000];
+    let window_size: [u32; 2] = [1000, 333];
 
     let texture_samples = 4;
 
@@ -70,7 +70,8 @@ fn model(app: &App) -> Model {
         .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING )
         // Use nannou's default multisampling sample count.
         .sample_count(texture_samples)
-        // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing.
+        // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing. Rgba16Float
+        // Use 8-bit for standard quality and better perforamnce. Rgba8Unorm Rgb10a2Unorm
         .format(wgpu::TextureFormat::Rgba16Float)
         // Build
         .build(device);
@@ -97,7 +98,7 @@ fn model(app: &App) -> Model {
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
         "frames/",
-        9999,
+        20000,
         OutputFormat::JPEG(85),
     );
 
@@ -116,7 +117,7 @@ fn model(app: &App) -> Model {
 
 fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
-        //Key::Space => model.glyph_model.next_glyph(),
+        Key::Space => model.glyph_model.next_glyph(),
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
             let (processed, total) = model.frame_recorder.get_queue_status();
@@ -134,7 +135,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let debug_flag = false;
 
     // auto cycle glyphs
-    model.glyph_model.next_glyph();
+    //model.glyph_model.next_glyph();
 
     // frames processing progress bar:
     if model.exit_requested {
@@ -201,8 +202,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let max_tile_size = f32::min(
         //window_rect.w() / model.grid.width as f32,
         //window_rect.h() / model.grid.height as f32
-        750.0 / model.grid.width as f32,
-        750.0 / model.grid.height as f32
+        model.texture.size()[1] as f32 / 2.0 / model.grid.width as f32,
+        model.texture.size()[1] as f32 / 2.0 / model.grid.height as f32
     ) * 0.95;                                       // SCALE FACTOR: TO REFACTOR
 
     let grid_width = max_tile_size * model.grid.width as f32;

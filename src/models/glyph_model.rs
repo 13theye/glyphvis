@@ -1,4 +1,5 @@
-// src/render/glyph_model.rs
+// src/models/glyph_model.rs
+// a structure that holds ready-to-render glyphs
 // data model and constructors for Glyphs, which are on the same level as Grids.
 // also applies effects at the Glyph level
 

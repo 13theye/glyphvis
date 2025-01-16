@@ -1,4 +1,5 @@
-// segmenet_effects.rs
+// src/effects/grid_effects.rs
+// these effects are applied to sets of segments, like Glyphs and Grids.
 
 use nannou::prelude::*;
 

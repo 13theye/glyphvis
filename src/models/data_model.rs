@@ -1,5 +1,5 @@
-/// src/models/data_model.rs
-/// the project data model and its components
+// src/models/data_model.rs
+// the JSON-based project data model
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

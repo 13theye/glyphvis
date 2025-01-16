@@ -1,5 +1,5 @@
-/// src/draw/path_draw.rs
-/// PathElement translation to Nannou Draw for drawing
+// src/draw/path_draw.rs
+// PathElement translation to Nannou Draw for drawing
 
 use nannou::prelude::*;
 use crate::services::path_service::PathElement;

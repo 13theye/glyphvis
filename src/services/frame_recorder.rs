@@ -1,3 +1,7 @@
+// src/services/frame_recorder.rs
+// FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk
+// Its own thread is used to process frames in batches to avoid blocking the main thread
+
 use std::fs::{ create_dir_all, File };
 use std::io::BufWriter;
 use std::sync::{ Arc, Mutex };

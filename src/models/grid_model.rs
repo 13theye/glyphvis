@@ -1,4 +1,5 @@
 /// src/models/grid_model.rs
+/// a structure that holds the ready-to-render grid
 /// data model and constructors for the assembled grid of SVG elements
 /// also applies effects at the Grid level
 
@@ -10,10 +11,7 @@ use crate::models::data_model::Project;
 
 use crate::services::path_service;
 use crate::services::path_service::{ PathElement, GridElement, EdgeType };
-
-use crate::draw::DrawParams;
-use crate::draw::grid_draw::RenderableSegment;
-
+use crate::draw::{ DrawParams, RenderableSegment };
 use crate::effects::grid_effects::GridEffect;
 
 #[derive(Debug, Clone)]

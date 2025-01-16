@@ -23,7 +23,6 @@ struct Model {
     texture_reshaper: wgpu::TextureReshaper,
     frame_recorder: FrameRecorder,
     exit_requested: bool,
-    new_render_flag: bool,
 }
 
 fn main() {
@@ -33,13 +32,14 @@ fn main() {
 }
 
 fn model(app: &App) -> Model {
+
+    // size of captures
+    let texture_size: [u32; 2] = [2000 , 2000];
+
+    // size of view window
     let window_size: [u32; 2] = [1000  , 1000];
-    let texture_size: [u32; 2] = [4000 , 4000];
+
     let texture_samples = 4   ;
-
-    // set to 'true' to try new render pipeline
-    let new_render_flag = true;
-
 
     // Load project
     let project = Project::load("/Users/jeanhank/Code/glyphmaker/projects/ulsan.json")
@@ -114,7 +114,6 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         frame_recorder,
         exit_requested: false,
-        new_render_flag
     }
 }
 
@@ -137,6 +136,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
 fn update(app: &App, model: &mut Model, _update: Update) {
     let debug_flag = false;
 
+    // frames processing progress bar:
     if model.exit_requested {
         if model.frame_recorder.has_pending_frames() {
             // Clear the window and show progress
@@ -146,7 +146,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             let (processed, total) = model.frame_recorder.get_queue_status();
             
             // Draw progress text
-            let text = format!("{} / {} frames saved", processed, total);
+            let text = format!("{} / {}\nframes saved", processed, total);
             draw.text(&text)
                 .color(WHITE)
                 .font_size(32)
@@ -169,41 +169,17 @@ fn update(app: &App, model: &mut Model, _update: Update) {
                 .w_h(bar_width * progress, bar_height)
                 .x_y(-bar_width/2.0 + (bar_width * progress)/2.0, -50.0);
 
-            if !model.new_render_flag {
 
-                // Use the draw renderer to update the texture
-                let window = app.main_window();
-                let device = window.device();
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Progress renderer"),
-                });
-                
-                model.draw_renderer.render_to_texture(
-                    device,
-                    &mut encoder,
-                    draw,
-                    &model.texture
-                );
-                
-                window.queue().submit(Some(encoder.finish()));
-            } else {
-                    // After exit progress loop routine for new render pipeline:
-                    let window = app.main_window();
-                    let device = window.device();
-        
-                    let ce_desc = wgpu::CommandEncoderDescriptor {
-                        label: Some("Texture renderer"),};
-                    let mut encoder = device.create_command_encoder(&ce_desc);
-        
-                    let texture_view = model.texture.view().build();
-        
-                    let mut draw_renderer = nannou::draw::RendererBuilder::new()
-                        .build_from_texture_descriptor(device, model.texture.descriptor());
-        
-                    draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
-                    window.queue().submit(Some(encoder.finish()));        
+            // Render progress graphic:
+            let window = app.main_window();
+            let device = window.device();
+            let ce_desc = wgpu::CommandEncoderDescriptor {
+                label: Some("Texture renderer"),};
+            let mut encoder = device.create_command_encoder(&ce_desc);
+            let texture_view = model.texture.view().build();
 
-            }
+            model.draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
+            window.queue().submit(Some(encoder.finish()));        
 
             // IMPORTANT: Add a small sleep to prevent maxing out CPU
             std::thread::sleep(std::time::Duration::from_millis(200));
@@ -213,6 +189,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         }
         return;  // Important: return here to not continue with normal rendering
     }
+
+    // normal rendering routine begin:
 
     let draw = &model.draw;
 
@@ -304,84 +282,35 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         &glyph_segments,
     );
 
-    if !model.new_render_flag {
-        // Render the draw commands to the texture
-        let window = app.main_window();
-        let device = window.device();
-        let ce_desc = wgpu::CommandEncoderDescriptor {
-            label: Some("Texture renderer"),
-        };
-        let mut encoder = device.create_command_encoder(&ce_desc);
 
+    // render path draw to texture only & capture
+    let window = app.main_window();
+    let device = window.device();
+    let ce_desc = wgpu::CommandEncoderDescriptor {
+        label: Some("Texture renderer"),};
+    let mut encoder = device.create_command_encoder(&ce_desc);
+    let texture_view = model.texture.view().build();
 
-        model
-            .draw_renderer
-            .render_to_texture(device, &mut encoder, draw, &model.texture);
+    model.draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
 
-        // Capture the texture for FrameRecorder
-        if model.frame_recorder.is_recording() {
-            model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
-        }
-
-        // Submit the commands for drawing to the GPU
-        window.queue().submit(Some(encoder.finish()));
-
-    } else {
-        // experimental rendering path draw to texture only & capture
-        let window = app.main_window();
-        let device = window.device();
-
-        let ce_desc = wgpu::CommandEncoderDescriptor {
-            label: Some("Texture renderer"),};
-        let mut encoder = device.create_command_encoder(&ce_desc);
-
-        let texture_view = model.texture.view().build();
-
-        let mut draw_renderer = nannou::draw::RendererBuilder::new()
-            .build_from_texture_descriptor(device, model.texture.descriptor());
-
-        draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
-
-        // Capture the texture for FrameRecorder
-        if model.frame_recorder.is_recording() {
-            model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
-        }
-
-        window.queue().submit(Some(encoder.finish()));
+    // Capture the texture for FrameRecorder
+    if model.frame_recorder.is_recording() {
+        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
     }
+
+    window.queue().submit(Some(encoder.finish()));
 
 }
 
 // Draw the state of Model into the given Frame
-fn view(app: &App, model: &Model, frame: Frame) {
+fn view(_app: &App, model: &Model, frame: Frame) {
 
-    if !model.new_render_flag {
+    //resize texture to screen
+    let mut encoder = frame.command_encoder();
 
-        if model.exit_requested && model.frame_recorder.has_pending_frames() {
-            // After exit progress loop routine:
-            let draw = app.draw();
-            let texture_view = model.texture.view().build();
-            draw.texture(&texture_view)
-                .wh(frame.rect().wh());
-            draw.to_frame(app, &frame).unwrap();
-
-        } else {
-
-            // Normal rendering path
-            let mut encoder = frame.command_encoder();
-            
-            model
-                .texture_reshaper
-                .encode_render_pass(frame.texture_view(), &mut *encoder);
-        }
-
-    } else {
-        // experimental rendering path: resize texture to screen
-        let mut encoder = frame.command_encoder();
-
-        model
-            .texture_reshaper
-            .encode_render_pass(frame.texture_view(), &mut *encoder);
-        }
+    model
+        .texture_reshaper
+        .encode_render_pass(frame.texture_view(), &mut *encoder);
+    
 
 }

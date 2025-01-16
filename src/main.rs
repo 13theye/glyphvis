@@ -31,12 +31,12 @@ fn main() {
 fn model(app: &App) -> Model {
 
     // size of captures
-    let texture_size: [u32; 2] = [2000 , 2000];
+    let texture_size: [u32; 2] = [4500 , 1500];
 
     // size of view window
     let window_size: [u32; 2] = [1000  , 1000];
 
-    let texture_samples = 4   ;
+    let texture_samples = 4;
 
     // Load project
     let project = Project::load("/Users/jeanhank/Code/glyphmaker/projects/ulsan.json")
@@ -197,10 +197,12 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.background().color(BLACK);
     
     // Calculate grid layout
-    let window_rect = app.window_rect();
+    //let window_rect = app.window_rect();
     let max_tile_size = f32::min(
-        window_rect.w() / model.grid.width as f32,
-        window_rect.h() / model.grid.height as f32
+        //window_rect.w() / model.grid.width as f32,
+        //window_rect.h() / model.grid.height as f32
+        750.0 / model.grid.width as f32,
+        750.0 / model.grid.height as f32
     ) * 0.95;                                       // SCALE FACTOR: TO REFACTOR
 
     let grid_width = max_tile_size * model.grid.width as f32;

@@ -1,3 +1,5 @@
-/target
-/glyphvis_frames
+target/
+frames/
+ref/
+test_frames*
 .DS_Store

@@ -1,6 +1,6 @@
-/// src/services/path_service.rs
-/// parses SVG raw data into PathElements
-/// performs edge detection and neighbor hinding calculations
+// src/services/path_service.rs
+// parses SVG raw data into PathElements
+// performs edge detection and neighbor hinding calculations
 
 use std::str::FromStr;
 use std::collections::HashMap;

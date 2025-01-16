@@ -1,4 +1,5 @@
 /// src/models/grid_model.rs
+/// a structure that holds the ready-to-render grid
 /// data model and constructors for the assembled grid of SVG elements
 /// also applies effects at the Grid level
 
@@ -10,10 +11,7 @@ use crate::models::data_model::Project;
 
 use crate::services::path_service;
 use crate::services::path_service::{ PathElement, GridElement, EdgeType };
-
-use crate::draw::DrawParams;
-use crate::draw::grid_draw::RenderableSegment;
-
+use crate::draw::{ DrawParams, RenderableSegment };
 use crate::effects::grid_effects::GridEffect;
 
 #[derive(Debug, Clone)]
@@ -30,14 +28,14 @@ impl ViewBox {
 }
 
 #[derive(Debug)]
-pub struct Grid {
+pub struct GridModel {
     pub elements: HashMap<String, GridElement>,
     pub width: u32,
     pub height: u32,
     pub viewbox: ViewBox,
 }
 
-impl Grid {
+impl GridModel {
     pub fn new(project: &Project) -> Self {
         println!("\n=== Creating Grid ({}x{}) ===", project.grid_x, project.grid_y);
         let mut elements = HashMap::new();
@@ -144,7 +142,7 @@ impl Grid {
 
         // Pre-calculate and print which elements should be drawn
         println!("\n=== Drawing Decisions ===");
-        let grid = Grid {
+        let grid = GridModel {
             elements,
             width: project.grid_x,
             height: project.grid_y,

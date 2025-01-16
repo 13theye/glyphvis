@@ -1,7 +1,11 @@
+// src/services/frame_recorder.rs
+// FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk
+// Its own thread is used to process frames in batches to avoid blocking the main thread
+
 use std::fs::{ create_dir_all, File };
 use std::io::BufWriter;
 use std::sync::{ Arc, Mutex };
-use std::sync::mpsc::{ channel, Sender, Receiver };
+use std::sync::mpsc::{ channel, Sender };
 use std::collections::VecDeque;
 use nannou::wgpu;
 use nannou::image::RgbaImage;
@@ -205,7 +209,7 @@ fn process_frame_batch(
     output_dir: &str,
     format: OutputFormat,
     frames_processed: &AtomicUsize,
-    frames_in_queue: &AtomicUsize,
+    _frames_in_queue: &AtomicUsize,
 ) {
     while let Some((frame_number, frame_data, width, height)) = frame_buffer.pop_front() {
         if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
@@ -387,7 +391,7 @@ mod tests {
         );
 
         // Track counters before and after sending frames
-        let (initial_processed, initial_total) = recorder.get_queue_status();
+        let (_initial_processed, initial_total) = recorder.get_queue_status();
         
         let frame_data = create_test_frame(100, 100);
         for i in 0..3 {

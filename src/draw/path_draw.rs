@@ -1,5 +1,5 @@
-/// src/draw/path_draw.rs
-/// PathElement translation to Nannou Draw for drawing
+// src/draw/path_draw.rs
+// PathElement translation to Nannou Draw for drawing
 
 use nannou::prelude::*;
 use crate::services::path_service::PathElement;
@@ -170,7 +170,7 @@ fn draw_arc(
     );
 
     // Generate points along the arc
-    let resolution = 64;
+    let resolution = 128;
     let mut points = Vec::with_capacity(resolution + 1);
     
     for i in 0..=resolution {

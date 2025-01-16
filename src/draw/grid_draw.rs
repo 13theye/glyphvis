@@ -3,7 +3,7 @@
 
 use nannou::prelude::*;
 
-use crate::models::grid_model::Grid;
+use crate::models::grid_model::GridModel;
 use crate::draw::{ Transform2D, DrawParams, path_draw };
 use crate::services::path_service::GridElement;
 
@@ -15,7 +15,7 @@ pub struct RenderableSegment<'a>{
 /// Draws a collection of segments with the specified grid-level transform
 pub fn draw_segments(
     draw: &Draw,
-    grid: &Grid,
+    grid: &GridModel,
     transform: &Transform2D,
     segments: &Vec<RenderableSegment>,
 ) {
@@ -65,7 +65,7 @@ pub fn draw_segments(
 /// Calculate the screen position for a grid coordinate
 pub fn grid_to_screen(
     grid_pos: (u32, u32),
-    grid: &Grid,
+    grid: &GridModel,
     transform: &Transform2D,
 ) -> Vec2 {
     let tile_size = transform.scale * grid.viewbox.width;

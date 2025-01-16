@@ -1,21 +1,18 @@
 // src/main.rs
 use nannou::prelude::*;
 
-use glyphvis::models::data_model::Project;
-use glyphvis::models::grid_model::Grid;
-use glyphvis::models::glyph_model::GlyphModel;
+use glyphvis::models::{ Project, GridModel, GlyphModel };
 
 use glyphvis::services::FrameRecorder;
 use glyphvis::services::frame_recorder::OutputFormat;
 
 use glyphvis::draw::{ Transform2D, DrawParams };
 use glyphvis::draw::grid_draw;
-use glyphvis::effects::grid_effects::PulseEffect;
-use glyphvis::effects::grid_effects::ColorCycleEffect;
+use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
 
 struct Model {
     project: Project,
-    grid: Grid,
+    grid: GridModel,
     glyph_model: GlyphModel,
     texture: wgpu::Texture,
     draw: nannou::Draw,
@@ -32,16 +29,21 @@ fn main() {
 }
 
 fn model(app: &App) -> Model {
-    let window_size: [u32; 2] = [1000, 1000];
-    let texture_size: [u32; 2] = [1000, 1000];
 
+    // size of captures
+    let texture_size: [u32; 2] = [2000 , 2000];
+
+    // size of view window
+    let window_size: [u32; 2] = [1000  , 1000];
+
+    let texture_samples = 4   ;
 
     // Load project
-    let project = Project::load("../glyphmaker/projects/small-cir-d.json")
+    let project = Project::load("/Users/jeanhank/Code/glyphmaker/projects/ulsan.json")
     .expect("Failed to load project file");
     
     // Create grid from project
-    let grid = Grid::new(&project);
+    let grid = GridModel::new(&project);
     println!("Created grid with {} elements", grid.elements.len());
 
     let glyph_model = GlyphModel::new(&project);
@@ -65,9 +67,9 @@ fn model(app: &App) -> Model {
         .size(texture_size)
         // Our texture will be used as the RENDER_ATTACHMENT for our `Draw` render pass.
         // It will also be SAMPLED by the `TextureCapturer` and `TextureResizer`.
-        .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING)
+        .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING )
         // Use nannou's default multisampling sample count.
-        .sample_count(sample_count)
+        .sample_count(texture_samples)
         // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing.
         .format(wgpu::TextureFormat::Rgba16Float)
         // Build
@@ -95,7 +97,7 @@ fn model(app: &App) -> Model {
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
         "frames/",
-        3600,
+        9999,
         OutputFormat::JPEG(85),
     );
 
@@ -131,6 +133,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
 fn update(app: &App, model: &mut Model, _update: Update) {
     let debug_flag = false;
 
+    // frames processing progress bar:
     if model.exit_requested {
         if model.frame_recorder.has_pending_frames() {
             // Clear the window and show progress
@@ -140,7 +143,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             let (processed, total) = model.frame_recorder.get_queue_status();
             
             // Draw progress text
-            let text = format!("{} / {} frames saved", processed, total);
+            let text = format!("{} / {}\nframes saved", processed, total);
             draw.text(&text)
                 .color(WHITE)
                 .font_size(32)
@@ -163,30 +166,28 @@ fn update(app: &App, model: &mut Model, _update: Update) {
                 .w_h(bar_width * progress, bar_height)
                 .x_y(-bar_width/2.0 + (bar_width * progress)/2.0, -50.0);
 
-            // Use the draw renderer to update the texture
+
+            // Render progress graphic:
             let window = app.main_window();
             let device = window.device();
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Progress renderer"),
-            });
-            
-            model.draw_renderer.render_to_texture(
-                device,
-                &mut encoder,
-                draw,
-                &model.texture
-            );
-            
-            window.queue().submit(Some(encoder.finish()));
+            let ce_desc = wgpu::CommandEncoderDescriptor {
+                label: Some("Texture renderer"),};
+            let mut encoder = device.create_command_encoder(&ce_desc);
+            let texture_view = model.texture.view().build();
+
+            model.draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
+            window.queue().submit(Some(encoder.finish()));        
 
             // IMPORTANT: Add a small sleep to prevent maxing out CPU
-            std::thread::sleep(std::time::Duration::from_millis(1000));
+            std::thread::sleep(std::time::Duration::from_millis(200));
         } else {
             // Only quit once all frames are processed
             app.quit();
         }
         return;  // Important: return here to not continue with normal rendering
     }
+
+    // normal rendering routine begin:
 
     let draw = &model.draw;
 
@@ -206,7 +207,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     
     // Create default grid DrawParams
     let grid_params = DrawParams {
-        color: rgb(0.1, 0.1, 0.1),
+        color: rgb(0.2, 0.2, 0.2),
         stroke_weight: 10.0,
     };
     
@@ -225,8 +226,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     let pulse_effect = PulseEffect {
         frequency: 1.0,
-        min_brightness: 0.0,
-        max_brightness: 0.5,
+        min_brightness: 0.2,
+        max_brightness: 0.6,
     };
 
     let colorcycle_effect = ColorCycleEffect {
@@ -278,56 +279,35 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         &glyph_segments,
     );
 
-    // Render the draw commands to the texture
+
+    // render path draw to texture only & capture
     let window = app.main_window();
     let device = window.device();
     let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Texture renderer"),
-    };
+        label: Some("Texture renderer"),};
     let mut encoder = device.create_command_encoder(&ce_desc);
-    model
-        .draw_renderer
-        .render_to_texture(device, &mut encoder, draw, &model.texture);
+    let texture_view = model.texture.view().build();
+
+    model.draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
 
     // Capture the texture for FrameRecorder
     if model.frame_recorder.is_recording() {
         model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
     }
 
-    // Submit the commands for drawing to the GPU
     window.queue().submit(Some(encoder.finish()));
 
 }
 
 // Draw the state of Model into the given Frame
-fn view(app: &App, model: &Model, frame: Frame) {
-    if model.exit_requested && model.frame_recorder.has_pending_frames() {
-        // When showing progress, we need to ensure the texture gets drawn to the frame
-        let draw = app.draw();
-        let texture_view = model.texture.view().build();
-        draw.texture(&texture_view)
-            .wh(frame.rect().wh());
-        draw.to_frame(app, &frame).unwrap();
-    } else {
-        // Normal rendering path
-        let mut encoder = frame.command_encoder();
-        model
-            .texture_reshaper
-            .encode_render_pass(frame.texture_view(), &mut *encoder);
-    }
+fn view(_app: &App, model: &Model, frame: Frame) {
 
+    //resize texture to screen
+    let mut encoder = frame.command_encoder();
 
-    /* higher level way of doing the same thing
-    let draw = app.draw();
+    model
+        .texture_reshaper
+        .encode_render_pass(frame.texture_view(), &mut *encoder);
     
-    // Get the texture view
-    let texture_view = model.texture.view().build();
-    
-    // Draw the texture to fill the window
-    draw.texture(&texture_view)
-        .wh(frame.rect().wh());
-    
-    draw.to_frame(app, &frame).unwrap();
-    */
 
 }

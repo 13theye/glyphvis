@@ -10,6 +10,25 @@ use glyphvis::draw::{ Transform2D, DrawParams };
 use glyphvis::draw::grid_draw;
 use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
 
+// APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
+
+// size of the render and capture
+const TEXTURE_SIZE: [u32; 2] = [3840, 1280];
+// number of samples for the texture
+const TEXTURE_SAMPLES: u32 = 4;
+// path to the output frames
+const OUTPUT_DIR: &str = "./frames/";
+// capture frame limit
+const FRAME_LIMIT: u32 = 20000;
+// output format
+const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
+
+// size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
+const WINDOW_SIZE: [u32; 2] = [1000, 333];
+// path to the project file
+const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
+
+
 struct Model {
     project: Project,
     grid: GridModel,
@@ -31,15 +50,15 @@ fn main() {
 fn model(app: &App) -> Model {
 
     // size of captures
-    let texture_size: [u32; 2] = [3840, 1280];
+    let texture_size= TEXTURE_SIZE;
 
     // size of view window
-    let window_size: [u32; 2] = [1000, 333];
+    let window_size= WINDOW_SIZE;
 
-    let texture_samples = 4;
+    let texture_samples = TEXTURE_SAMPLES;
 
     // Load project
-    let project = Project::load("/Users/jeanhank/Code/glyphmaker/projects/ulsan.json")
+    let project = Project::load(PROJECT_PATH)
     .expect("Failed to load project file");
     
     // Create grid from project
@@ -97,9 +116,9 @@ fn model(app: &App) -> Model {
 
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
-        "frames/",
-        20000,
-        OutputFormat::JPEG(85),
+        OUTPUT_DIR,
+        FRAME_LIMIT,
+        OUTPUT_FORMAT,
     );
 
     Model {
@@ -314,6 +333,5 @@ fn view(_app: &App, model: &Model, frame: Frame) {
     model
         .texture_reshaper
         .encode_render_pass(frame.texture_view(), &mut *encoder);
-    
 
 }

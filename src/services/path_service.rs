@@ -554,7 +554,6 @@ mod tests {
 
         let direction = get_neighbor_direction(1, 1, 2, 1);
         assert!(check_path_alignment(&circle1, edge_type1, &circle2, edge_type2, direction));
-    }
 
     #[test]
     fn test_misaligned_paths() {
@@ -783,5 +782,6 @@ mod drawing_tests {
         let center_element = elements.get("1,1 : center").unwrap();
         assert!(should_draw_element(center_element, grid_width, grid_height, &elements),
                 "Should always draw non-edge elements");
+    }
     }
 }

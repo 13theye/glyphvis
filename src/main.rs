@@ -10,6 +10,25 @@ use glyphvis::draw::{ Transform2D, DrawParams };
 use glyphvis::draw::grid_draw;
 use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
 
+// APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
+
+// size of the render and capture
+const TEXTURE_SIZE: [u32; 2] = [3840, 1280];
+// number of samples for the texture
+const TEXTURE_SAMPLES: u32 = 4;
+// path to the output frames
+const OUTPUT_DIR: &str = "./frames/";
+// capture frame limit
+const FRAME_LIMIT: u32 = 20000;
+// output format
+const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
+
+// size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
+const WINDOW_SIZE: [u32; 2] = [1000, 333];
+// path to the project file
+const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
+
+
 struct Model {
     project: Project,
     grid: GridModel,
@@ -31,15 +50,15 @@ fn main() {
 fn model(app: &App) -> Model {
 
     // size of captures
-    let texture_size: [u32; 2] = [2000 , 2000];
+    let texture_size= TEXTURE_SIZE;
 
     // size of view window
-    let window_size: [u32; 2] = [1000  , 1000];
+    let window_size= WINDOW_SIZE;
 
-    let texture_samples = 4   ;
+    let texture_samples = TEXTURE_SAMPLES;
 
     // Load project
-    let project = Project::load("/Users/jeanhank/Code/glyphmaker/projects/ulsan.json")
+    let project = Project::load(PROJECT_PATH)
     .expect("Failed to load project file");
     
     // Create grid from project
@@ -70,7 +89,8 @@ fn model(app: &App) -> Model {
         .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING )
         // Use nannou's default multisampling sample count.
         .sample_count(texture_samples)
-        // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing.
+        // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing. Rgba16Float
+        // Use 8-bit for standard quality and better perforamnce. Rgba8Unorm Rgb10a2Unorm
         .format(wgpu::TextureFormat::Rgba16Float)
         // Build
         .build(device);
@@ -96,9 +116,9 @@ fn model(app: &App) -> Model {
 
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
-        "frames/",
-        9999,
-        OutputFormat::JPEG(85),
+        OUTPUT_DIR,
+        FRAME_LIMIT,
+        OUTPUT_FORMAT,
     );
 
     Model {
@@ -132,6 +152,9 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
 
 fn update(app: &App, model: &mut Model, _update: Update) {
     let debug_flag = false;
+
+    // auto cycle glyphs
+    //model.glyph_model.next_glyph();
 
     // frames processing progress bar:
     if model.exit_requested {
@@ -194,10 +217,12 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.background().color(BLACK);
     
     // Calculate grid layout
-    let window_rect = app.window_rect();
+    //let window_rect = app.window_rect();
     let max_tile_size = f32::min(
-        window_rect.w() / model.grid.width as f32,
-        window_rect.h() / model.grid.height as f32
+        //window_rect.w() / model.grid.width as f32,
+        //window_rect.h() / model.grid.height as f32
+        model.texture.size()[1] as f32 / 2.0 / model.grid.width as f32,
+        model.texture.size()[1] as f32 / 2.0 / model.grid.height as f32
     ) * 0.95;                                       // SCALE FACTOR: TO REFACTOR
 
     let grid_width = max_tile_size * model.grid.width as f32;
@@ -308,6 +333,5 @@ fn view(_app: &App, model: &Model, frame: Frame) {
     model
         .texture_reshaper
         .encode_render_pass(frame.texture_view(), &mut *encoder);
-    
 
 }

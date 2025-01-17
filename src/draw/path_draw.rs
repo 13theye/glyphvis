@@ -2,9 +2,9 @@
 // PathElement translation to Nannou Draw for drawing
 
 use nannou::prelude::*;
-use crate::services::path_service::PathElement;
-use crate::models::grid_model::ViewBox;
-use super::{Transform2D, DrawParams};
+use crate::models::{ ViewBox, PathElement };
+use crate::views::Transform2D;
+use super::DrawParams;
 
 use nannou::lyon::tessellation::LineCap;
 
@@ -198,6 +198,8 @@ fn draw_arc(
     }
 }
 
+
+// moving to cached_grid.rs
 fn calculate_arc_center(
     start: Point2,
     end: Point2,

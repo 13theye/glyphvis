@@ -3,9 +3,10 @@
 
 use nannou::prelude::*;
 
-use crate::models::grid_model::GridModel;
-use crate::draw::{ Transform2D, DrawParams, path_draw };
-use crate::services::path_service::GridElement;
+use crate::models::GridModel;
+use crate::views::Transform2D;
+use crate::draw::{ DrawParams, path_draw };
+use crate::models::GridElement;
 
 pub struct RenderableSegment<'a>{
     pub element: &'a GridElement,

@@ -3,10 +3,12 @@ use nannou::prelude::*;
 
 use glyphvis::models::{ Project, GridModel, GlyphModel };
 
+use glyphvis::views::Transform2D;
+
 use glyphvis::services::FrameRecorder;
 use glyphvis::services::frame_recorder::OutputFormat;
 
-use glyphvis::draw::{ Transform2D, DrawParams };
+use glyphvis::draw::DrawParams;
 use glyphvis::draw::grid_draw;
 use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
 

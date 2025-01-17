@@ -7,7 +7,7 @@ use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
-use crate::models::grid_model::GridModel;
+use crate::models::GridModel;
 use crate::draw::grid_draw::RenderableSegment;
 
 use crate::draw::DrawParams;

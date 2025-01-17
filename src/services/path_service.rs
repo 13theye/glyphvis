@@ -4,8 +4,10 @@
 
 use std::str::FromStr;
 use std::collections::HashMap;
-use crate::models::grid_model::ViewBox;
+use crate::models::{ EdgeType, PathElement, ViewBox };
 
+// moving to geometry.rs
+/*
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EdgeType {
     North,
@@ -19,6 +21,7 @@ pub enum EdgeType {
     None
 }
 
+// moving to geometry.rs
 #[derive(Debug, Clone)]
 pub enum PathElement {
     Line {
@@ -44,6 +47,7 @@ pub enum PathElement {
         r: f32,
     }
 }
+ */
 
 #[derive(Debug, Clone)]
 pub struct GridElement {
@@ -53,6 +57,8 @@ pub struct GridElement {
     pub edge_type: EdgeType,
 }
 
+/* 
+// MOVING TO services/svg/mod.rs
 // supported SVG elements: path & circle
 pub fn parse_svg_element(element: &str) -> Option<PathElement> {
     println!("Parsing SVG element: '{}'", element);
@@ -77,6 +83,7 @@ pub fn parse_svg_element(element: &str) -> Option<PathElement> {
     } else {None}
 }
 
+// MOVING TO services/svg/mod.rs
 fn parse_line(d: &str) -> Option<PathElement> {
     let re = regex::Regex::new(r"M\s*([\d.-]+)[\s,]+([\d.-]+)\s*L\s*([\d.-]+)[\s,]+([\d.-]+)").ok()?;
     let caps = re.captures(d)?;
@@ -89,6 +96,7 @@ fn parse_line(d: &str) -> Option<PathElement> {
     })
 }
 
+// MOVING TO services/svg/mod.rs
 fn parse_arc(d: &str) -> Option<PathElement> {
     //println!("Trying to parse arc: '{}'", d);
     let re = regex::Regex::new(
@@ -110,6 +118,7 @@ fn parse_arc(d: &str) -> Option<PathElement> {
     })
 }
 
+// MOVING TO services/svg/mod.rs
 fn parse_circle(element: &str) -> Option<PathElement> {
     println!("Trying to parse circle: '{}'", element);
     let re = regex::Regex::new(r#"cx="([\d.-]+)".*cy="([\d.-]+)".*r="([\d.-]+)""#).ok()?;
@@ -122,6 +131,7 @@ fn parse_circle(element: &str) -> Option<PathElement> {
     })
 }
 
+// MOVING TO services/svg/mod.rs
 pub fn detect_edge_type(element: &PathElement, viewbox: &ViewBox) -> EdgeType {
     match element {
         PathElement::Line { x1, y1, x2, y2, .. } => {
@@ -158,6 +168,8 @@ pub fn detect_edge_type(element: &PathElement, viewbox: &ViewBox) -> EdgeType {
     }
 }
 
+
+// MOVING TO services/svg/mod.rs
 /// Gets the relative direction of a neighbor based on grid coordinates
 pub fn get_neighbor_direction(x: u32, y: u32, neighbor_x: u32, neighbor_y: u32) -> Option<&'static str> {
     let dx = neighbor_x as i32 - x as i32;
@@ -176,6 +188,7 @@ pub fn get_neighbor_direction(x: u32, y: u32, neighbor_x: u32, neighbor_y: u32) 
     }
 }
 
+// MOVING TO services/svg/mod.rs
 /// Gets coordinates of priority neighbor for a given grid position and edge type
 pub fn get_neighbor_coords(col: u32, row: u32, edge_type: EdgeType, grid_width: u32, grid_height: u32) -> Option<(u32, u32)> {
     match edge_type {
@@ -207,6 +220,7 @@ pub fn get_neighbor_coords(col: u32, row: u32, edge_type: EdgeType, grid_width: 
     }
 }
 
+// MOVING TO services/svg/mod.rs
 /// Checks if two paths align based on their edge types and coordinates
 pub fn check_path_alignment(
     path1: &PathElement,
@@ -300,6 +314,7 @@ pub fn adjust_viewbox_for_edges(viewbox: &mut ViewBox, edge_stroke_width: f32) {
     viewbox.height += edge_stroke_width;
 }
 
+// MOVING TO services/svg/mod.rs
 pub fn get_elements_at(elements: &HashMap<String, GridElement>, x: u32, y: u32) -> Vec<&GridElement> {
     elements
         .iter()
@@ -308,6 +323,7 @@ pub fn get_elements_at(elements: &HashMap<String, GridElement>, x: u32, y: u32) 
         .collect()
 }
 
+// MOVING TO services/svg/mod.rs
 // Unlike Glyphmaker, where we draw all elements and then handle selection logic, 
 // in Glyphvis we decide on whether to draw an element at the beginning.
 pub fn should_draw_element(
@@ -360,7 +376,7 @@ pub fn should_draw_element(
     //println!("No matching neighbor found or neighbor doesn't have priority, should draw");
     true
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use super::*;

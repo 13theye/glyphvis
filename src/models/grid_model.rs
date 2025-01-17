@@ -8,12 +8,15 @@ use nannou::prelude::*;
 use std::collections::{ HashMap, HashSet };
 
 use crate::models::data_model::Project;
+use crate::models::{ PathElement, EdgeType, ViewBox };
 
 use crate::services::path_service;
-use crate::services::path_service::{ PathElement, GridElement, EdgeType };
+use crate::services::path_service::GridElement;
 use crate::draw::{ DrawParams, RenderableSegment };
 use crate::effects::grid_effects::GridEffect;
 
+// moving to geometry.rs
+/* 
 #[derive(Debug, Clone)]
 pub struct ViewBox {
     pub min_x: f32,
@@ -21,11 +24,12 @@ pub struct ViewBox {
     pub width: f32,
     pub height: f32,
 }
-
+// moving to geometry.rs
 impl ViewBox {
     pub fn max_x(&self) -> f32 { self.min_x + self.width }
     pub fn max_y(&self) -> f32 { self.min_y + self.height }
 }
+*/
 
 #[derive(Debug)]
 pub struct GridModel {
@@ -116,6 +120,7 @@ impl GridModel {
             println!("{}: {:?}", id, path);
         }
 
+        // transferring this functionality to CachedGrid
         // Generate grid elements with 1-based coordinates
         println!("\n=== Generating Grid Elements ===");
         for y in 1..=project.grid_y {

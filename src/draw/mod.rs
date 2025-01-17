@@ -3,13 +3,15 @@
 // The cache system for caching Nannou draw commands
 
 //pub mod cache;
-pub mod grid_draw;
-pub use grid_draw::RenderableSegment;
+//pub mod grid_draw;
+//pub use grid_draw::RenderableSegment;
 
 pub mod path_draw;
 
 use nannou::prelude::*;
 
+// moved to models/geometry.rs
+/*
 #[derive(Debug, Clone)]
 pub struct Transform2D {
     pub translation: Vec2,
@@ -26,6 +28,7 @@ impl Default for Transform2D {
         }
     }
 }
+     */
 
 #[derive(Debug, Clone)]
 pub struct DrawParams {

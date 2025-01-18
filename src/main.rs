@@ -237,7 +237,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     //model.grid.draw_full_grid(&draw);
     // Draw grid with effects
-    model.grid.draw(&draw);
+    model.grid.draw_background_grid(&draw, &base_params);
 
     // Add debug visualization of coordinate system
     draw.line()

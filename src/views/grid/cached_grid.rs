@@ -23,19 +23,16 @@ pub enum DrawCommand {
     Line {
         start: Point2,
         end: Point2,
-        stroke_weight: f32,
-        color: Rgb<f32>,
+        style: DrawStyle,
     },
     Arc {
         points: Vec<Point2>,
-        stroke_weight: f32,
-        color: Rgb<f32>,
+        style: DrawStyle,
     },
     Circle {
         center: Point2,
         radius: f32,
-        stroke_weight: f32,
-        color: Rgb<f32>,
+        style: DrawStyle,
     },
 }
 
@@ -58,35 +55,35 @@ impl DrawCommand {
         }
     }
 
-    fn draw (&self, draw: &Draw) {
+    fn draw (&self, draw: &Draw, style: &DrawStyle) {
         match self {
-            DrawCommand::Line { start, end, stroke_weight, color } => {
+            DrawCommand::Line { start, end, style } => {
                 draw.line()
                     .start(*start)
                     .end(*end)
-                    .stroke_weight(*stroke_weight)
-                    .color(*color)
+                    .stroke_weight(style.stroke_weight)
+                    .color(style.color)
                     .caps_round();
             },
-            DrawCommand::Arc { points, stroke_weight, color } => {
+            DrawCommand::Arc { points, style } => {
                 for window in points.windows(2) {
                     if let [p1, p2] = window {
                         draw.line()
                             .start(*p1)
                             .end(*p2)
-                            .stroke_weight(*stroke_weight)
-                            .color(*color)
+                            .stroke_weight(style.stroke_weight)
+                            .color(style.color)
                             .caps_round();
                     }
                 }
             },
-            DrawCommand::Circle { center, radius, stroke_weight, color } => {
+            DrawCommand::Circle { center, radius, style } => {
                 draw.ellipse()
                     .x_y(center.x, center.y)
                     .radius(*radius)
-                    .stroke(*color)
-                    .stroke_weight(*stroke_weight)
-                    .color(*color)
+                    .stroke(style.color)
+                    .stroke_weight(style.stroke_weight)
+                    .color(style.color)
                     .caps_round();
             },
         }
@@ -109,7 +106,7 @@ impl Default for DrawStyle {
 }
 
 
-// A CachedSegmeent contains pre-processed draw commands for a segment
+// A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     pub id: String,
@@ -134,7 +131,7 @@ impl CachedSegment {
         let tile_transform = Self::calculate_tile_transform(viewbox, position, grid_dims);
     
         // Generate commands with combined transform
-        let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform);
+        let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform, DrawStyle::default());
 
         Self {
             id: element_id,
@@ -147,14 +144,13 @@ impl CachedSegment {
         }
     }
 
-    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D) -> Vec<DrawCommand> {
+    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D, style: DrawStyle) -> Vec<DrawCommand> {
         match path {
             PathElement::Line { x1, y1, x2, y2 } => {
                 vec![DrawCommand::Line {
                     start: Self::initial_transform(*x1, *y1, viewbox, transform),
                     end: Self::initial_transform(*x2, *y2, viewbox, transform),
-                    stroke_weight: 10.0,
-                    color: rgb(1.0, 1.0, 1.0),
+                    style,
                 }]
             },
             PathElement::Arc {
@@ -178,8 +174,7 @@ impl CachedSegment {
 
                 vec![DrawCommand::Arc {
                     points,
-                    stroke_weight: 10.0,
-                    color: rgb(1.0, 1.0, 1.0),
+                    style,
                 }]
             },
             PathElement::Circle {
@@ -188,8 +183,7 @@ impl CachedSegment {
                 vec![DrawCommand::Circle {
                     center: Self::initial_transform(*cx, *cy, viewbox, transform),
                     radius: *r * transform.scale,
-                    stroke_weight: 1.0,
-                    color: rgb(1.0, 1.0, 1.0),
+                    style,
                 }]
             },
         }
@@ -371,10 +365,19 @@ impl CachedGrid {
     }
 
     // Rendering methods
-    pub fn draw_full_grid(&self, draw: &Draw) {
+    pub fn draw_segments(&self, draw: &Draw, style: &DrawStyle, segments: &Vec<CachedSegment>) {
+    
+        for segment in segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, style);
+            }
+        }
+    }
+    
+    pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
         for segment in self.segments.values() {
             for command in &segment.draw_commands {
-                command.draw(draw);
+                command.draw(draw, style);
             }
         }
     }
@@ -412,22 +415,6 @@ impl CachedGrid {
         self.active_glyph.as_deref()
     }
 
-    // TODO: THIS ISN'T QUITE RIGHT
-    pub fn draw(&self, draw: &Draw) {
-        
-        if !self.validate_segment_points() {
-            println!("WARNING: Invalid segment points detected, skipping draw");
-            return;
-        }
-
-        for segment in self.segments.values() {
-            if self.active_glyph.is_none() || self.active_segments.contains(&segment.id) {
-                for command in &segment.draw_commands {
-                    command.draw(draw);
-                }
-            }
-        }
-    }
 
     fn validate_segment_points(&self) -> bool {
         for segment in self.segments.values() {
@@ -494,8 +481,7 @@ mod tests {
             let mut line = DrawCommand::Line {
                 start: pt2(0.0, 0.0),
                 end: pt2(5.0, 5.0),
-                stroke_weight: 1.0,
-                color: rgb(0.0, 0.0, 0.0),
+                style: DrawStyle::default(),
             };
             line.apply_transform(&transform);
             match line {
@@ -510,8 +496,7 @@ mod tests {
             let mut circle = DrawCommand::Circle {
                 center: pt2(0.0, 0.0),
                 radius: 5.0,
-                stroke_weight: 1.0,
-                color: rgb(0.0, 0.0, 0.0),
+                style: DrawStyle::default(),
             };
             circle.apply_transform(&transform);
             match circle {

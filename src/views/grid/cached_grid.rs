@@ -6,6 +6,7 @@
 // Types in this module:
 // DrawCommand, CachedSegment, and CachedGrid
 
+use nannou::color::ConvertInto;
 use nannou::prelude::*;
 use std::collections::{ HashMap, HashSet };
 
@@ -23,16 +24,13 @@ pub enum DrawCommand {
     Line {
         start: Point2,
         end: Point2,
-        style: DrawStyle,
     },
     Arc {
         points: Vec<Point2>,
-        style: DrawStyle,
     },
     Circle {
         center: Point2,
         radius: f32,
-        style: DrawStyle,
     },
 }
 
@@ -57,7 +55,7 @@ impl DrawCommand {
 
     fn draw (&self, draw: &Draw, style: &DrawStyle) {
         match self {
-            DrawCommand::Line { start, end, style } => {
+            DrawCommand::Line { start, end, .. } => {
                 draw.line()
                     .start(*start)
                     .end(*end)
@@ -65,7 +63,7 @@ impl DrawCommand {
                     .color(style.color)
                     .caps_round();
             },
-            DrawCommand::Arc { points, style } => {
+            DrawCommand::Arc { points, .. } => {
                 for window in points.windows(2) {
                     if let [p1, p2] = window {
                         draw.line()
@@ -77,7 +75,7 @@ impl DrawCommand {
                     }
                 }
             },
-            DrawCommand::Circle { center, radius, style } => {
+            DrawCommand::Circle { center, radius, .. } => {
                 draw.ellipse()
                     .x_y(center.x, center.y)
                     .radius(*radius)
@@ -131,7 +129,7 @@ impl CachedSegment {
         let tile_transform = Self::calculate_tile_transform(viewbox, position, grid_dims);
     
         // Generate commands with combined transform
-        let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform, DrawStyle::default());
+        let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform);
 
         Self {
             id: element_id,
@@ -144,13 +142,12 @@ impl CachedSegment {
         }
     }
 
-    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D, style: DrawStyle) -> Vec<DrawCommand> {
+    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D) -> Vec<DrawCommand> {
         match path {
             PathElement::Line { x1, y1, x2, y2 } => {
                 vec![DrawCommand::Line {
                     start: Self::initial_transform(*x1, *y1, viewbox, transform),
                     end: Self::initial_transform(*x2, *y2, viewbox, transform),
-                    style,
                 }]
             },
             PathElement::Arc {
@@ -174,7 +171,6 @@ impl CachedSegment {
 
                 vec![DrawCommand::Arc {
                     points,
-                    style,
                 }]
             },
             PathElement::Circle {
@@ -183,7 +179,6 @@ impl CachedSegment {
                 vec![DrawCommand::Circle {
                     center: Self::initial_transform(*cx, *cy, viewbox, transform),
                     radius: *r * transform.scale,
-                    style,
                 }]
             },
         }
@@ -235,8 +230,8 @@ pub struct CachedGrid {
     pub segments: HashMap<String, CachedSegment>,
     pub viewbox: ViewBox,
     pub transform: Transform2D,
-    pub active_glyph: Option<String>,
-    pub active_segments: HashSet<String>,
+    pub active_glyph: Option<String>, // active glyph name
+    pub active_segments: HashSet<String>, // active segments by id
 }
 
 impl CachedGrid {
@@ -365,21 +360,32 @@ impl CachedGrid {
     }
 
     // Rendering methods
-    pub fn draw_segments(&self, draw: &Draw, style: &DrawStyle, segments: &Vec<CachedSegment>) {
-    
+    pub fn draw_segments(&self, draw: &Draw, style: &DrawStyle, segments: Vec<&CachedSegment>) {
         for segment in segments {
             for command in &segment.draw_commands {
                 command.draw(draw, style);
             }
         }
     }
-    
+
+    pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
+        self.segments
+            .values()
+            .filter(| segment | self.active_segments.contains(&segment.id))
+            .flat_map(| segment | &segment.draw_commands)
+            .for_each(| command | command.draw(draw, style));
+    }
+
+    pub fn draw_full_grid(&self, draw: &Draw, style: &DrawStyle) {
+        self.draw_segments(draw, style,self.segments.values().collect());
+    }
+
     pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
-        for segment in self.segments.values() {
-            for command in &segment.draw_commands {
-                command.draw(draw, style);
-            }
-        }
+        self.segments
+            .values()
+            .filter(| segment | !self.active_segments.contains(&segment.id))
+            .flat_map(| segment | &segment.draw_commands)
+            .for_each(| command | command.draw(draw, style));
     }
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
@@ -481,7 +487,6 @@ mod tests {
             let mut line = DrawCommand::Line {
                 start: pt2(0.0, 0.0),
                 end: pt2(5.0, 5.0),
-                style: DrawStyle::default(),
             };
             line.apply_transform(&transform);
             match line {
@@ -496,7 +501,6 @@ mod tests {
             let mut circle = DrawCommand::Circle {
                 center: pt2(0.0, 0.0),
                 radius: 5.0,
-                style: DrawStyle::default(),
             };
             circle.apply_transform(&transform);
             match circle {

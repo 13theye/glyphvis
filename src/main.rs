@@ -217,6 +217,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 10.0,
     };
 
+    let glyph_params = DrawStyle {
+        color: rgb(1.0, 0.2, 0.0),
+        stroke_weight: 10.0,
+    };
+
     //let effect_params = model.current_effect.apply(&base_params, app.time);
 
     /* 
@@ -235,9 +240,9 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
     */
 
-    //model.grid.draw_full_grid(&draw);
     // Draw grid with effects
     model.grid.draw_background_grid(&draw, &base_params);
+    model.grid.draw_active_segments(&draw, &glyph_params);
 
     // Add debug visualization of coordinate system
     draw.line()

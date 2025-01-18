@@ -28,8 +28,9 @@ impl Default for Transform2D {
         }
     }
 }
-     */
+     
 
+// moved to views/cached_grid.rs as DrawStyle
 #[derive(Debug, Clone)]
 pub struct DrawParams {
     pub color: Rgb<f32>,
@@ -44,3 +45,5 @@ impl Default for DrawParams {
         }
     }
 }
+
+*/

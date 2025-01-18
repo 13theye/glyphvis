@@ -93,6 +93,21 @@ impl DrawCommand {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DrawStyle {
+    pub color: Rgb<f32>,
+    pub stroke_weight: f32,
+}
+
+impl Default for DrawStyle {
+    fn default() -> Self {
+        Self {
+            color: rgb(0.1, 0.1, 0.1),
+            stroke_weight: 10.0,
+        }
+    }
+}
+
 
 // A CachedSegmeent contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
@@ -103,13 +118,23 @@ pub struct CachedSegment {
     pub original_path: PathElement,
     pub edge_type: EdgeType,
     pub transform: Transform2D,
+    pub style: DrawStyle,
 }
 
 impl CachedSegment {
-    pub fn new(element_id: String, position: (u32, u32), path: &PathElement, 
-    edge_type: EdgeType, viewbox: &ViewBox) -> Self {
-        // concert PathElement to Drawcommands
-        let draw_commands = CachedSegment::generate_draw_commands(path, viewbox);
+    pub fn new(element_id: String, 
+        position: (u32, u32), 
+        path: &PathElement, 
+        edge_type: EdgeType, 
+        viewbox: &ViewBox,
+        grid_dims: (u32, u32),
+    ) -> Self {
+
+        // create the transformation to this tile's position
+        let tile_transform = Self::calculate_tile_transform(viewbox, position, grid_dims);
+    
+        // Generate commands with combined transform
+        let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform);
 
         Self {
             id: element_id,
@@ -118,29 +143,18 @@ impl CachedSegment {
             original_path: path.clone(),
             edge_type,
             transform: Transform2D::default(),
+            style: DrawStyle::default(),
         }
     }
 
-    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox) -> Vec<DrawCommand> {
-        // concert SVG PathElements to DrawCommands
-
-        let center_x = viewbox.width / 2.0;
-        let center_y = viewbox.height / 2.0;
-
-        // transform a point from SVG to Nannou Coordinates
-        let transform_point = |svg_x: f32, svg_y: f32| -> Point2 {
-            let local_x = svg_x - center_x;
-            let local_y = center_y - svg_y;
-            pt2(local_x, local_y)
-        };
-
+    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D) -> Vec<DrawCommand> {
         match path {
             PathElement::Line { x1, y1, x2, y2 } => {
                 vec![DrawCommand::Line {
-                    start: transform_point(*x1, *y1),
-                    end: transform_point(*x2, *y2),
-                    stroke_weight: 1.0,
-                    color: rgb(0.0, 0.0, 0.0),
+                    start: Self::initial_transform(*x1, *y1, viewbox, transform),
+                    end: Self::initial_transform(*x2, *y2, viewbox, transform),
+                    stroke_weight: 10.0,
+                    color: rgb(1.0, 1.0, 1.0),
                 }]
             },
             PathElement::Arc {
@@ -148,35 +162,68 @@ impl CachedSegment {
                 x_axis_rotation,large_arc, sweep, 
                 end_x, end_y,
             } => {
-                let start = transform_point(*start_x, *start_y);
-                let end = transform_point(*end_x, *end_y);
+                let start = Self::initial_transform(*start_x, *start_y, viewbox, transform);
+                let end = Self::initial_transform(*end_x, *end_y, viewbox, transform);
 
                 // no need to translate b/c rx, ry are relative measures
                 let (center, start_angle, sweep_angle) = calculate_arc_center(
                     start, end, *rx, *ry, *x_axis_rotation, *large_arc, *sweep
                 );
 
-                // Calculate all points
+                // Calculate all points, scale radii
                 let points = generate_arc_points(
-                    center, *rx, *ry, start_angle, sweep_angle, *x_axis_rotation, ARC_RESOLUTION
+                    center, *rx * transform.scale, *ry * transform.scale, 
+                    start_angle, sweep_angle, *x_axis_rotation, ARC_RESOLUTION
                 );
 
                 vec![DrawCommand::Arc {
                     points,
-                    stroke_weight: 1.0,
-                    color: rgb(0.0, 0.0, 0.0),
+                    stroke_weight: 10.0,
+                    color: rgb(1.0, 1.0, 1.0),
                 }]
             },
             PathElement::Circle {
                 cx, cy, r
             } => {
                 vec![DrawCommand::Circle {
-                    center: transform_point(*cx, *cy),
-                    radius: *r,
+                    center: Self::initial_transform(*cx, *cy, viewbox, transform),
+                    radius: *r * transform.scale,
                     stroke_weight: 1.0,
-                    color: rgb(0.0, 0.0, 0.0),
+                    color: rgb(1.0, 1.0, 1.0),
                 }]
             },
+        }
+    }
+
+    // Transform a point from SVG to Nannou Coordinates, then applies tile transform
+    fn initial_transform(
+        svg_x: f32, svg_y: f32, viewbox: &ViewBox, transform: &Transform2D
+    ) -> Point2 {
+        let center_x = viewbox.width / 2.0;
+        let center_y = viewbox.height / 2.0;
+        let local_x = svg_x - center_x;
+        let local_y = center_y - svg_y;
+        // return:
+        transform.apply_to_point(pt2(local_x, local_y))
+    }
+
+    // Translates a point to the correct Tile position
+    fn calculate_tile_transform(viewbox: &ViewBox, position: (u32, u32), grid_dims:(u32, u32)) -> Transform2D {
+        let (x,y) = position;
+        let (grid_x, grid_y) = grid_dims;
+        let tile_width = viewbox.width;
+        let tile_height = viewbox.height;
+
+        let grid_width = grid_x as f32 * tile_width;
+        let grid_height = grid_y as f32 * tile_height;
+
+        let tile_center_x = (x as f32 - 1.0) * tile_width - grid_width / 2.0 + tile_width / 2.0;
+        let tile_center_y = -((y as f32 - 1.0) * tile_height) + grid_height / 2.0 - tile_height / 2.0;
+
+        Transform2D {
+            translation: pt2(tile_center_x, tile_center_y),
+            scale: 1.0,
+            rotation: 0.0,
         }
     }
 
@@ -190,7 +237,7 @@ impl CachedSegment {
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
 pub struct CachedGrid {
-    pub dimensions: (u32, u32),
+    pub dimensions: (u32, u32), // number of tiles in x and y
     pub segments: HashMap<String, CachedSegment>,
     pub viewbox: ViewBox,
     pub transform: Transform2D,
@@ -206,6 +253,7 @@ impl CachedGrid {
 
         // Parse the SVG & create basic grid elements
         let elements = parse_svg(&project.svg_base_tile);
+        let grid_dims = (project.grid_x, project.grid_y);
         let mut segments = HashMap::new();
 
         // Create grid elements and detect edges
@@ -214,13 +262,21 @@ impl CachedGrid {
             for x in 1..=project.grid_x {
                 for element in &elements {
                     let edge_type = detect_edge_type(&element.path, &viewbox);
+                    let element_id = format!("{},{} : {}", x, y, element.id);
                     let segment = CachedSegment::new(
-                        format!("{},{} : {}", x, y, element.id),
+                        element_id.clone(),
                         (x, y),
                         &element.path,
                         edge_type,
                         &viewbox,
+                        grid_dims,
                     );
+                
+                    // Only print edge elements for brevity
+                    if edge_type != EdgeType::None {
+                        println!("Created {} at ({},{}) - {:?}", element_id, x, y, edge_type);
+                    }
+
                     segments.insert(segment.id.clone(), segment);
                 }
             }
@@ -358,6 +414,7 @@ impl CachedGrid {
 
     // TODO: THIS ISN'T QUITE RIGHT
     pub fn draw(&self, draw: &Draw) {
+        
         if !self.validate_segment_points() {
             println!("WARNING: Invalid segment points detected, skipping draw");
             return;
@@ -379,6 +436,7 @@ impl CachedGrid {
                     DrawCommand::Line { start, end, .. } => {
                         if !start.x.is_finite() || !start.y.is_finite() ||
                            !end.x.is_finite() || !end.y.is_finite() {
+                            println!("Line error at segment {}", segment.id);
                             println!("Invalid line points: start={:?}, end={:?}", start, end);
                             return false;
                         }
@@ -418,6 +476,8 @@ mod tests {
             height: 100.0,
         }
     }
+
+    const TEST_GRID_DIMS: (u32, u32) = (1, 1);
 
     mod draw_command_tests {
         use super::*;
@@ -483,6 +543,7 @@ mod tests {
                 &path,
                 EdgeType::None,
                 &viewbox,
+                TEST_GRID_DIMS
             );
 
             assert_eq!(segment.id, "test");
@@ -508,11 +569,13 @@ mod tests {
                 &path,
                 EdgeType::None,
                 &viewbox,
+                TEST_GRID_DIMS
             );
 
             // Center point should be transformed to (0,0) in Nannou coordinates
             match &segment.draw_commands[0] {
                 DrawCommand::Circle { center, .. } => {
+                    println!( "Center: {:?}", center);
                     assert_eq!(center.x, 0.0);
                     assert_eq!(center.y, 0.0);
                 },

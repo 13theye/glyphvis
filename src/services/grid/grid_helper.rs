@@ -33,6 +33,12 @@ pub fn parse_viewbox(svg_content: &str) -> Option<ViewBox> {
         })
         .collect();
 
+    if viewbox_data.is_empty() {
+        eprintln!("Error: No SVG element with viewBox attribute found");
+        eprintln!("SVG content:\n{}", svg_content);
+        std::process::exit(1);
+    }
+
     viewbox_data.get(0)
         .and_then(|data| {
             let viewbox_values: Vec<f32> = data
@@ -48,7 +54,10 @@ pub fn parse_viewbox(svg_content: &str) -> Option<ViewBox> {
                     height: viewbox_values[3],
                 })
             } else {
-                None
+                eprintln!("Error: ViewBox must contain exactly 4 values");
+                eprintln!("Found viewBox=\"{}\" with {} values", data, viewbox_values.len());
+                eprintln!("Values parsed: {:?}", viewbox_values);
+                std::process::exit(1);
             }
         })
 }
@@ -76,6 +85,7 @@ pub fn generate_arc_points(
         
         points.push(pt2(x, y));
     }
+    //println!("points: {:?}", points);
     //return:
     points
 }
@@ -326,6 +336,8 @@ mod tests {
         }
     }
 
+    const TEST_GRID_DIMS: (u32, u32) = (4,4);
+
     #[test]
     fn test_get_neighbor_coords() {
         let tests = vec![
@@ -374,6 +386,7 @@ mod tests {
             &PathElement::Line { x1: 0.0, y1: 0.0, x2: 10.0, y2: 0.0 },
             EdgeType::North,
             &create_test_viewbox(),
+            TEST_GRID_DIMS,
         );
 
         let segment2 = CachedSegment::new(
@@ -382,6 +395,7 @@ mod tests {
             &PathElement::Line { x1: 0.0, y1: 0.0, x2: 10.0, y2: 0.0 },
             EdgeType::South,
             &create_test_viewbox(),
+            TEST_GRID_DIMS,
         );
 
         assert!(check_segment_alignment(&segment1, &segment2, Some("North")));
@@ -403,6 +417,8 @@ mod tests {
             },
             EdgeType::North,
             &viewbox,
+            TEST_GRID_DIMS,
+
         );
 
         let line2 = CachedSegment::new(
@@ -416,6 +432,8 @@ mod tests {
             },
             EdgeType::South,
             &viewbox,
+            TEST_GRID_DIMS,
+
         );
 
         // These lines share the North/South edge but don't align exactly
@@ -432,6 +450,8 @@ mod tests {
             },
             EdgeType::North,
             &viewbox,
+            TEST_GRID_DIMS,
+
         );
 
         let circle2 = CachedSegment::new(
@@ -444,6 +464,8 @@ mod tests {
             },
             EdgeType::South,
             &viewbox,
+            TEST_GRID_DIMS,
+
         );
 
         // These circles are both on the North/South edge but at different x positions
@@ -461,6 +483,8 @@ mod tests {
             },
             EdgeType::East,
             &viewbox,
+            TEST_GRID_DIMS,
+
         );
 
         let vert_line2 = CachedSegment::new(
@@ -474,6 +498,8 @@ mod tests {
             },
             EdgeType::West,
             &viewbox,
+            TEST_GRID_DIMS,
+
         );
 
         // These lines share East/West edge but don't align vertically

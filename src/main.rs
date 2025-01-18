@@ -3,10 +3,9 @@ use nannou::prelude::*;
 
 use glyphvis::{
     models::{ Project, ViewBox },
-    views:: { CachedGrid, Transform2D, DrawCommand  },
+    views:: { CachedGrid, Transform2D, DrawCommand, DrawStyle },
     services:: { FrameRecorder, OutputFormat },
     effects::grid_effects::{ GridEffect, PulseEffect },
-    draw:: DrawParams,
 };
 
 //use glyphvis::views::Transform2D;
@@ -34,7 +33,7 @@ const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 // size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
 const WINDOW_SIZE: [u32; 2] = [1000, 333];
 // path to the project file
-const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
+const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/debug.json";
 // grid scale factor
 const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
@@ -197,7 +196,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
-    let debug_flag = false;
+    //let debug_flag = false;
 
     // auto cycle glyphs
     //model.glyph_model.next_glyph();
@@ -212,59 +211,15 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let draw = &model.draw;
     draw.background().color(ORANGE);
 
-    // Debug print grid info on first frame
-    static mut FIRST_FRAME: bool = true;
-    unsafe {
-        if FIRST_FRAME {
-            print_grid_info(&model.grid);
-            FIRST_FRAME = false;
-        }
-    }
-    
-    // Calculate grid layout
-    // let window_rect = app.window_rect();
-    let max_tile_size = calculate_tile_size(&model.texture, &model.grid);
-    let (offset_x, offset_y) = calculate_grid_offset(max_tile_size, &model.grid);
-
-    
-    let grid_transform = Transform2D {
-        translation: Vec2::new(offset_x, offset_y),
-        scale: 1.0,
-        rotation: 0.0,
-    };
-     
-
-    // Validate transform before applying
-    //validate_transform(&grid_transform, &model.grid.viewbox);
-
-    // Apply transform (only if valid)
-    if grid_transform.scale.is_finite() && 
-       grid_transform.translation.x.is_finite() && 
-       grid_transform.translation.y.is_finite() {
-        model.grid.apply_transform(&grid_transform);
-    } else {
-        println!("WARNING: Invalid transform detected!");
-        return;
-    }
-    
-
-    // Add debug visualization of coordinate system
-    draw.line()
-        .points(pt2(-100.0, 0.0), pt2(100.0, 0.0))
-        .color(RED)
-        .stroke_weight(1.0);
-    draw.line()
-        .points(pt2(0.0, -100.0), pt2(0.0, 100.0))
-        .color(BLUE)
-        .stroke_weight(1.0);
-
     // Apply the current effect
-    let base_params = DrawParams {
+    let base_params = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
         stroke_weight: 10.0,
     };
-    let effect_params = model.current_effect.apply(&base_params, app.time);
 
+    //let effect_params = model.current_effect.apply(&base_params, app.time);
+
+    /* 
     // we're going to want to move this to the CachedGrid model
     for segment in model.grid.segments.values_mut() {
         for cmd in &mut segment.draw_commands {
@@ -278,9 +233,21 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             }
         }
     }
+    */
 
+    //model.grid.draw_full_grid(&draw);
     // Draw grid with effects
-    model.grid.draw_full_grid(&draw);
+    model.grid.draw(&draw);
+
+    // Add debug visualization of coordinate system
+    draw.line()
+        .points(pt2(0.0, 0.0), pt2(100.0, 0.0))
+        .color(RED)
+        .stroke_weight(1.0);
+    draw.line()
+        .points(pt2(0.0, 0.0), pt2(0.0, 100.0))
+        .color(BLUE)
+        .stroke_weight(1.0);
 
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
@@ -379,33 +346,40 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 // ******************************* Grid Setup Helpers ********************************
 
-// temporary utility to make grid size a proportion of the window height
-fn calculate_tile_size(texture: &wgpu::Texture, grid:&CachedGrid) -> f32 {
+fn calculate_grid_transform(texture: &wgpu::Texture, grid: &CachedGrid) -> Transform2D {
+    // Calculate scale to fit grid in view
+    // Calculate base scale from view height
+    println!("\n=== Grid Transform Calculation ===");
+
     let (grid_x, grid_y) = grid.dimensions;
-    let size = f32::min(
-        //window_rect.w() / model.grid.width as f32,
-        //window_rect.h() / model.grid.height as f32
-        texture.size()[1] as f32 / 2.0 / grid_x as f32, //index to texture height for square grid
-        texture.size()[1] as f32 / 2.0 / grid_y as f32
-    ) * GRID_SCALE_FACTOR;
-
-    println!("Calculated tile size: {}", size);
-    assert!(size.is_finite() && size > 0.0, "Invalid tile size calculated");
-    size              
-}
-
-fn calculate_grid_offset(tile_size: f32, grid: &CachedGrid) -> (f32, f32) {
-    let (grid_x, grid_y) = grid.dimensions;
-    let grid_width = tile_size * grid_x as f32;
-    let grid_height = tile_size * grid_y as f32;
-    let offset_x = -grid_width / 2.0;
-    let offset_y = -grid_height / 2.0;
-
-    assert!(offset_x.is_finite(), "Invalid X offset calculated");
-    assert!(offset_y.is_finite(), "Invalid Y offset calculated");
+    let texture_height = texture.size()[1] as f32;
     
-    println!("Grid offsets: x={}, y={}", offset_x, offset_y);
-    (offset_x, offset_y)
+    // Calculate scale to fit grid in view
+    let max_grid_dim = grid_x.max(grid_y) as f32;
+    //let base_scale = texture_height / 2.0 / max_grid_dim;
+    //let scale = base_scale * GRID_SCALE_FACTOR;
+    let scale = 1.0;
+    
+    println!("Grid dimensions: {}x{}", grid_x, grid_y);
+    println!("Texture height: {}", texture_height);
+    //println!("Base scale: {}", base_scale);
+    println!("Final scale: {}", scale);
+
+    // Center the grid
+    let grid_size = Vec2::new(
+        scale * grid_x as f32,
+        scale * grid_y as f32
+    );
+    let offset = -grid_size / 2.0;
+    
+    println!("Grid size: {:?}", grid_size);
+    println!("Center offset: {:?}", offset);
+
+    Transform2D {
+        translation: offset,
+        scale,
+        rotation: 0.0,
+    }
 }
 
 
@@ -522,6 +496,7 @@ fn print_grid_info(grid: &CachedGrid) {
     println!("Segment count: {}", grid.segments.len());
     
     // Print first few segments for inspection
+    
     for (i, (id, segment)) in grid.segments.iter().take(2).enumerate() {
         println!("\nSegment {}: {}", i, id);
         println!("Position: {:?}", segment.tile_pos);
@@ -531,29 +506,5 @@ fn print_grid_info(grid: &CachedGrid) {
             println!("  Command {}: {:?}", j, cmd);
         }
     }
-}
-
-fn validate_transform(transform: &Transform2D, viewbox: &ViewBox) {
-    println!("\nTransform Info:");
-    println!("Translation: {:?}", transform.translation);
-    println!("Scale: {}", transform.scale);
-    println!("Rotation: {}", transform.rotation);
-    
-    // Test transform on viewbox corners
-    let corners = vec![
-        pt2(viewbox.min_x, viewbox.min_y),
-        pt2(viewbox.max_x(), viewbox.min_y),
-        pt2(viewbox.max_x(), viewbox.max_y()),
-        pt2(viewbox.min_x, viewbox.max_y()),
-    ];
-    
-    println!("\nTransformed corners:");
-    for (i, corner) in corners.iter().enumerate() {
-        let transformed = transform.apply_to_point(*corner);
-        println!("Corner {}: {:?} -> {:?}", i, corner, transformed);
-        
-        if !transformed.x.is_finite() || !transformed.y.is_finite() {
-            println!("WARNING: Invalid coordinates after transform!");
-        }
-    }
+     
 }

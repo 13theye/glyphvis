@@ -3,10 +3,10 @@
 
 use nannou::prelude::*;
 
-use crate::draw::DrawParams;
+use crate::views::DrawStyle;
 
 pub trait GridEffect {
-    fn apply(&self, base_params: &DrawParams, time: f32) -> DrawParams;
+    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle;
 }
 
 pub struct PulseEffect {
@@ -16,12 +16,12 @@ pub struct PulseEffect {
 }
 
 impl GridEffect for PulseEffect {
-    fn apply(&self, base_params: &DrawParams, time: f32) -> DrawParams {
+    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle {
         let brightness = (time * self.frequency).sin() * 0.5 + 0.5;
         let brightness = self.min_brightness + brightness * (self.max_brightness - self.min_brightness);
 
         let color = base_params.color;
-        DrawParams {
+        DrawStyle {
             color: rgb(
                 color.red * brightness,
                 color.green * brightness,
@@ -39,9 +39,9 @@ pub struct ColorCycleEffect {
 }
 
 impl GridEffect for ColorCycleEffect {
-    fn apply(&self, base_params: &DrawParams, time: f32) -> DrawParams {
+    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle {
         let hue = (time * self.frequency) % 1.0;
-        DrawParams {
+        DrawStyle {
             color: hsv(hue, self.saturation, self.brightness).into(),
             stroke_weight: base_params.stroke_weight,
         }

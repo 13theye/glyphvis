@@ -7,10 +7,10 @@
 // DrawCommand, CachedSegment, and CachedGrid
 
 use nannou::prelude::*;
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 
 use crate::models::{ ViewBox, EdgeType, PathElement, Project };
-use crate::services::svg::{self, detect_edge_type};
+use crate::services::svg::{parse_svg, detect_edge_type};
 use crate::services::grid::*;
 use crate::views::Transform2D;
 
@@ -190,10 +190,12 @@ impl CachedSegment {
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
 pub struct CachedGrid {
-    dimensions: (u32, u32),
-    segments: HashMap<String, CachedSegment>,
-    viewbox: ViewBox,
-    transform: Transform2D,
+    pub dimensions: (u32, u32),
+    pub segments: HashMap<String, CachedSegment>,
+    pub viewbox: ViewBox,
+    pub transform: Transform2D,
+    pub active_glyph: Option<String>,
+    pub active_segments: HashSet<String>,
 }
 
 impl CachedGrid {
@@ -203,7 +205,7 @@ impl CachedGrid {
             .expect("Failed to parse viewbox from SVG");
 
         // Parse the SVG & create basic grid elements
-        let elements = svg::parser::parse_svg(&project.svg_base_tile);
+        let elements = parse_svg(&project.svg_base_tile);
         let mut segments = HashMap::new();
 
         // Create grid elements and detect edges
@@ -232,6 +234,8 @@ impl CachedGrid {
             segments,
             viewbox: viewbox,
             transform: Transform2D::default(),
+            active_glyph: None,
+            active_segments: HashSet::new(),
         }
     }
 
@@ -311,7 +315,7 @@ impl CachedGrid {
     }
 
     // Rendering methods
-    pub fn draw(&self, draw: &Draw) {
+    pub fn draw_full_grid(&self, draw: &Draw) {
         for segment in self.segments.values() {
             for command in &segment.draw_commands {
                 command.draw(draw);
@@ -336,6 +340,67 @@ impl CachedGrid {
             .values()
             .filter(|segment| segment.tile_pos == (x, y))
             .collect()
+    }
+
+    pub fn set_glyph(&mut self, glyph_name: Option<&str>, project: &Project) {
+        self.active_glyph = glyph_name.map(String::from);
+        self.active_segments = match glyph_name {
+            Some(name) => project.get_glyph(name)
+                .map(| glyph| glyph.segments.iter().cloned().collect())
+                .unwrap_or_default(),
+            None => HashSet::new(),
+        };
+    }
+
+    pub fn get_active_glyph(&self) -> Option<&str> {
+        self.active_glyph.as_deref()
+    }
+
+    // TODO: THIS ISN'T QUITE RIGHT
+    pub fn draw(&self, draw: &Draw) {
+        if !self.validate_segment_points() {
+            println!("WARNING: Invalid segment points detected, skipping draw");
+            return;
+        }
+
+        for segment in self.segments.values() {
+            if self.active_glyph.is_none() || self.active_segments.contains(&segment.id) {
+                for command in &segment.draw_commands {
+                    command.draw(draw);
+                }
+            }
+        }
+    }
+
+    fn validate_segment_points(&self) -> bool {
+        for segment in self.segments.values() {
+            for command in &segment.draw_commands {
+                match command {
+                    DrawCommand::Line { start, end, .. } => {
+                        if !start.x.is_finite() || !start.y.is_finite() ||
+                           !end.x.is_finite() || !end.y.is_finite() {
+                            println!("Invalid line points: start={:?}, end={:?}", start, end);
+                            return false;
+                        }
+                    },
+                    DrawCommand::Arc { points, .. } => {
+                        for point in points {
+                            if !point.x.is_finite() || !point.y.is_finite() {
+                                println!("Invalid arc point: {:?}", point);
+                                return false;
+                            }
+                        }
+                    },
+                    DrawCommand::Circle { center, radius, .. } => {
+                        if !center.x.is_finite() || !center.y.is_finite() || !radius.is_finite() {
+                            println!("Invalid circle: center={:?}, radius={}", center, radius);
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
     }
 }
 

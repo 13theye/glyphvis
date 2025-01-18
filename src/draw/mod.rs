@@ -6,7 +6,7 @@
 //pub mod grid_draw;
 //pub use grid_draw::RenderableSegment;
 
-pub mod path_draw;
+//pub mod path_draw;
 
 use nannou::prelude::*;
 

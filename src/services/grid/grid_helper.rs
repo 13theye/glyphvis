@@ -312,6 +312,7 @@ pub fn get_neighbor_direction(x: u32, y: u32, neighbor_x: u32, neighbor_y: u32) 
 }
 
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

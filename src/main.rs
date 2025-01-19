@@ -2,8 +2,8 @@
 use nannou::prelude::*;
 
 use glyphvis::{
-    models:: Project ,
-    views:: { CachedGrid, Transform2D, DrawStyle },
+    models:: { Project, GlyphModel },
+    views:: { CachedGrid, DrawStyle },
     services:: { FrameRecorder, OutputFormat },
     effects::grid_effects::{ GridEffect, PulseEffect, ColorCycleEffect },
 };
@@ -26,7 +26,7 @@ const TEXTURE_SAMPLES: u32 = 4;
 // path to the output frames
 const OUTPUT_DIR: &str = "./frames/";
 // capture frame limit
-const FRAME_LIMIT: u32 = 20000;
+const FRAME_LIMIT: u32 = 30000;
 // output format
 const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 
@@ -35,16 +35,17 @@ const WINDOW_SIZE: [u32; 2] = [1897, 480];    // 1/2.5 scale
 // path to the project file
 const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/debug.json";
 // grid scale factor
-const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
+//const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
 
 struct Model {
     // Core components:
     project: Project,
     grid: CachedGrid,
-    current_effect: Box<dyn GridEffect>,
+    glyphs: GlyphModel,
 
     // Rendering components:
+    current_effect: Box<dyn GridEffect>,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
@@ -76,13 +77,10 @@ fn model(app: &App) -> Model {
         .expect("Failed to load project file");
     
     // Create grid from project
-    let mut grid = CachedGrid::new(&project);
+    let grid = CachedGrid::new(&project);
     println!("Created grid with {} segments", grid.segments.len());
 
-    // let glyph_model = GlyphModel::new(&project);
-
-    // Set initial glyph
-    grid.set_glyph(Some("쿵3"), &project);
+    let glyphs = GlyphModel::new(&project);
 
     // Create window
     let window_id = app.new_window()
@@ -146,9 +144,9 @@ fn model(app: &App) -> Model {
     Model {
         project,
         grid,
-        //glyph_model,
+        glyphs,
+
         current_effect: effect,
-        
         texture,
         draw,
         draw_renderer,
@@ -162,25 +160,7 @@ fn model(app: &App) -> Model {
 fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
         Key::Space => {
-            // Get list of glyph names from project
-            let glyph_names: Vec<&String> = model.project.glyphs.keys().collect();
-            if !glyph_names.is_empty() {
-                // Find current glyph and get next one
-                let current = model.grid.get_active_glyph();
-                let next_idx = match current {
-                    Some(current_name) => {
-                        glyph_names.iter()
-                            .position(|&name| name == current_name)
-                            .map(|pos| (pos + 1) % glyph_names.len())
-                            .unwrap_or(0)
-                    },
-                    None => 0
-                };
-                // Set next glyph
-                let next_name = glyph_names[next_idx];
-                model.grid.set_glyph(Some(next_name), &model.project);
-                println!("Switched to glyph: {}", next_name);
-            }
+            model.glyphs.next_glyph();
         },
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
@@ -212,12 +192,12 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.background().color(BLACK);
 
     // Apply the current effect
-    let base_params = DrawStyle {
+    let bg_style = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
         stroke_weight: 5.0,
     };
 
-    let glyph_params = DrawStyle {
+    let glyph_style = DrawStyle {
         color: rgb(1.0, 0.2, 0.0),
         stroke_weight: 5.0,
     };
@@ -234,6 +214,28 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         saturation: 1.0,
         brightness: 1.0,
     };
+
+    let glyph_segments = model.glyphs.get_renderable_segments(
+        &model.project,
+        &model.grid,
+        glyph_style,
+        Some(&colorcycle_effect),
+        app.time,
+        false,
+        false,
+    );
+
+    let bg_segments = model.glyphs.get_renderable_segments(
+        &model.project,
+        &model.grid,
+        bg_style,
+        Some(&pulse_effect),
+        app.time,
+        true,
+        false,
+    );
+
+    
 
     /*
 
@@ -276,9 +278,9 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     */
 
     // Draw grid with effects
-    model.grid.draw_background_grid(&draw, &base_params);
-    model.grid.draw_active_segments(&draw, &glyph_params);
-
+    model.grid.draw_segments(&draw, bg_segments);
+    model.grid.draw_segments(&draw, glyph_segments);
+/*
     // Add debug visualization of coordinate system
     draw.line()
         .points(pt2(0.0, 0.0), pt2(100.0, 0.0))
@@ -288,10 +290,12 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         .points(pt2(0.0, 0.0), pt2(0.0, 100.0))
         .color(BLUE)
         .stroke_weight(1.0);
+ */
+
 
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
-
+ 
 
     /*
     // Create grid transform
@@ -319,7 +323,7 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 
 // ******************************* Grid Setup Helpers ********************************
-
+/* 
 fn calculate_grid_transform(texture: &wgpu::Texture, grid: &CachedGrid) -> Transform2D {
     // Calculate scale to fit grid in view
     // Calculate base scale from view height
@@ -355,7 +359,7 @@ fn calculate_grid_transform(texture: &wgpu::Texture, grid: &CachedGrid) -> Trans
         rotation: 0.0,
     }
 }
-
+*/
 
 // ******************************* Rendering and Capture *****************************
 
@@ -462,7 +466,7 @@ fn render_progress(app: &App, model: &mut Model) {
 
 // ******************************* Debug stuff *******************************
 
-
+/*
 fn print_grid_info(grid: &CachedGrid) {
     println!("\nGrid Info:");
     println!("Dimensions: {:?}", grid.dimensions);
@@ -482,3 +486,4 @@ fn print_grid_info(grid: &CachedGrid) {
     }
      
 }
+    */

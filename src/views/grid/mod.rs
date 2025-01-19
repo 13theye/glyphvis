@@ -3,5 +3,5 @@
 pub mod transform;
 pub mod cached_grid;
 
-pub use cached_grid::{ CachedGrid, DrawCommand, DrawStyle };
+pub use cached_grid::{ CachedGrid, CachedSegment, RenderableSegment, DrawCommand, DrawStyle };
 pub use transform::Transform2D;

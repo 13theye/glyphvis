@@ -6,7 +6,6 @@
 // Types in this module:
 // DrawCommand, CachedSegment, and CachedGrid
 
-use nannou::color::ConvertInto;
 use nannou::prelude::*;
 use std::collections::{ HashMap, HashSet };
 
@@ -103,6 +102,11 @@ impl Default for DrawStyle {
     }
 }
 
+pub struct RenderableSegment<'a>{
+    pub segment: &'a CachedSegment,
+    pub style: DrawStyle,
+}
+
 
 // A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
@@ -113,7 +117,6 @@ pub struct CachedSegment {
     pub original_path: PathElement,
     pub edge_type: EdgeType,
     pub transform: Transform2D,
-    pub style: DrawStyle,
 }
 
 impl CachedSegment {
@@ -138,12 +141,7 @@ impl CachedSegment {
             original_path: path.clone(),
             edge_type,
             transform: Transform2D::default(),
-            style: DrawStyle::default(),
         }
-    }
-
-    pub fn set_style(&mut self, style: DrawStyle) {
-        self.style = style;
     }
 
     fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D) -> Vec<DrawCommand> {
@@ -364,24 +362,21 @@ impl CachedGrid {
     }
 
     // Rendering methods
-    pub fn draw_segments(&self, draw: &Draw, style: &DrawStyle, segments: Vec<&CachedSegment>) {
+    pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
         for segment in segments {
-            for command in &segment.draw_commands {
-                command.draw(draw, style);
+            for command in &segment.segment.draw_commands {
+                command.draw(draw, &segment.style);
             }
         }
     }
 
+/*
     pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
         self.segments
             .values()
             .filter(| segment | self.active_segments.contains(&segment.id))
             .flat_map(| segment | &segment.draw_commands)
             .for_each(| command | command.draw(draw, style));
-    }
-
-    pub fn draw_full_grid(&self, draw: &Draw, style: &DrawStyle) {
-        self.draw_segments(draw, style,self.segments.values().collect());
     }
 
     pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
@@ -398,6 +393,7 @@ impl CachedGrid {
             segment.apply_transform(transform);
         }
     }
+    */
 
     // Utility methods
     pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
@@ -425,7 +421,7 @@ impl CachedGrid {
         self.active_glyph.as_deref()
     }
 
-
+/* 
     fn validate_segment_points(&self) -> bool {
         for segment in self.segments.values() {
             for command in &segment.draw_commands {
@@ -457,6 +453,7 @@ impl CachedGrid {
         }
         true
     }
+    */
 }
 
 

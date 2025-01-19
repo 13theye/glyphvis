@@ -61,7 +61,7 @@ impl DrawCommand {
                     .stroke_weight(style.stroke_weight)
                     .color(style.color)
                     .caps_round();
-            },
+                            },
             DrawCommand::Arc { points, .. } => {
                 for window in points.windows(2) {
                     if let [p1, p2] = window {

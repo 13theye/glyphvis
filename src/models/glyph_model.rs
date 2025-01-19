@@ -1,7 +1,7 @@
 // src/models/glyph_model.rs
 // a structure that holds ready-to-render glyphs
 // data model and constructors for Glyphs, which are on the same level as Grids.
-// also applies effects at the Glyph level
+// also applies effects
 
 use nannou::prelude::*;
 use std::collections::HashSet;
@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use crate::models::data_model::{Project, Glyph};
 use crate::views:: { CachedGrid, DrawStyle, RenderableSegment };
 
-use crate::effects::grid_effects::GridEffect;
+use crate::effects::EffectsManager;
 
 pub struct GlyphModel {
     glyph_names: Vec<String>,
@@ -28,8 +28,9 @@ impl GlyphModel {
         }
     }
 
-    pub fn next_glyph(&mut self) {
+    pub fn next_glyph(&mut self, project: &Project) -> HashSet<String> {
         self.current_glyph_index = (self.current_glyph_index + 1) % self.glyph_names.len();
+        self.get_active_segments(project)
         //let current_name = &self.glyph_names[self.current_glyph_index];
         //println!("Showing glyph: {}", current_name);
     }
@@ -50,8 +51,8 @@ impl GlyphModel {
         &self,
         project: &Project,
         grid: &'a CachedGrid,
-        style: DrawStyle,
-        effect: Option<&dyn GridEffect>,
+        base_style: DrawStyle,
+        effect_manager: &EffectsManager,
         time: f32,
         bg_flag: bool,
         debug_flag: bool,
@@ -74,46 +75,42 @@ impl GlyphModel {
                 for segment in segments {
                     if !bg_flag {
                         if active_segment_ids.contains(&segment.id) {
-                            let mut segment_style = if debug_flag {
+                            let base_style = if debug_flag {
                                 let g = debug_color(x, y);
                                 DrawStyle {
                                     color: rgb(0.9, g, 0.0),
-                                    stroke_weight: style.stroke_weight,
+                                    stroke_weight: base_style.stroke_weight,
                                 }
                             } else {
-                                style.clone()
+                                base_style.clone()
                             };
 
                             // Apply effect if one is provided
-                            if let Some(effect) = effect {
-                            segment_style = effect.apply(&segment_style, time);
-                            }
+                            let final_style = effect_manager.apply_effects(&segment.id, base_style, time);
 
                             return_segments.push(RenderableSegment {
                                 segment,
-                                style: segment_style,
+                                style: final_style,
                             });
                         }
                     } else {
                         if !active_segment_ids.contains(&segment.id) {
-                            let mut segment_style = if debug_flag {
+                            let base_style = if debug_flag {
                                 let g = debug_color(x, y);
                                 DrawStyle {
                                     color: rgb(0.0, g, 1.0),
-                                    stroke_weight: style.stroke_weight,
+                                    stroke_weight: base_style.stroke_weight,
                                 }
                             } else {
-                                style.clone()
+                                base_style.clone()
                             };
 
                             // Apply effect if one is provided
-                            if let Some(effect) = effect {
-                            segment_style = effect.apply(&segment_style, time);
-                            }
+                            let final_style = effect_manager.apply_effects(&segment.id, base_style, time);
 
                             return_segments.push(RenderableSegment {
                                 segment,
-                                style: segment_style,
+                                style: final_style,
                             });
                         }
                     }

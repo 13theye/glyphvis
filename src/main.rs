@@ -5,17 +5,9 @@ use glyphvis::{
     models:: { Project, GlyphModel },
     views:: { CachedGrid, DrawStyle },
     services:: { FrameRecorder, OutputFormat },
-    effects::grid_effects::{ GridEffect, PulseEffect, ColorCycleEffect },
+    effects::{ EffectsManager, init_effects },
+
 };
-
-//use glyphvis::views::Transform2D;
-
-//use glyphvis::services::FrameRecorder;
-//use glyphvis::services::frame_recorder::OutputFormat;
-
-//use glyphvis::draw::DrawParams;
-//use glyphvis::draw::grid_draw;
-//use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
 
 // APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
 
@@ -33,7 +25,7 @@ const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 // size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
 const WINDOW_SIZE: [u32; 2] = [1897, 480];    // 1/2.5 scale
 // path to the project file
-const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/debug.json";
+const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
 // grid scale factor
 //const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
@@ -45,7 +37,7 @@ struct Model {
     glyphs: GlyphModel,
 
     // Rendering components:
-    current_effect: Box<dyn GridEffect>,
+    effects_manager: EffectsManager,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
@@ -134,19 +126,15 @@ fn model(app: &App) -> Model {
         OUTPUT_FORMAT,
     );
 
-    // Set up initial effect
-    let effect: Box<dyn GridEffect> = Box::new(PulseEffect {
-        frequency: 1.0,
-        min_brightness: 0.2,
-        max_brightness: 0.6,
-    });
+    // Create effects
+    
 
     Model {
         project,
         grid,
         glyphs,
 
-        current_effect: effect,
+        effects_manager: init_effects(&app),
         texture,
         draw,
         draw_renderer,
@@ -157,10 +145,13 @@ fn model(app: &App) -> Model {
     }
 }
 
-fn key_pressed(_app: &App, model: &mut Model, key: Key) {
+fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         Key::Space => {
-            model.glyphs.next_glyph();
+            let segment_ids = model.glyphs.next_glyph(&model.project);
+            for segment_id in segment_ids {
+                model.effects_manager.activate_segment(&segment_id, "power_on", app.time);
+            }
         },
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
@@ -203,23 +194,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     };
 
 
-    let pulse_effect = PulseEffect {
-        frequency: 1.0,
-        min_brightness: 0.2,
-        max_brightness: 0.6,
-    };
-
-    let colorcycle_effect = ColorCycleEffect {
-        frequency: 1.0,
-        saturation: 1.0,
-        brightness: 1.0,
-    };
-
     let glyph_segments = model.glyphs.get_renderable_segments(
         &model.project,
         &model.grid,
         glyph_style,
-        Some(&colorcycle_effect),
+        &model.effects_manager,
         app.time,
         false,
         false,
@@ -229,53 +208,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         &model.project,
         &model.grid,
         bg_style,
-        Some(&pulse_effect),
+        &model.effects_manager,
         app.time,
         true,
         false,
     );
-
-    
-
-    /*
-
-    // Get and draw background grid segments
-    let background_segments = model.grid.get_background_segments(
-        grid_params,
-        &model.glyph_model.get_active_segments(&model.project),
-        Some(&pulse_effect),
-        app.time,
-        debug_flag
-    );
-    
-    // Get and draw glyph segments
-    let glyph_segments = model.glyph_model.get_renderable_segments(
-        &model.project,
-        &model.grid,
-        glyph_params,
-        Some(&colorcycle_effect),
-        app.time,
-        debug_flag
-    );
-
-    //let effect_params = model.current_effect.apply(&base_params, app.time);
-    */
-
-    /* 
-    // we're going to want to move this to the CachedGrid model
-    for segment in model.grid.segments.values_mut() {
-        for cmd in &mut segment.draw_commands {
-            match cmd {
-                DrawCommand::Line { color, stroke_weight, .. } |
-                DrawCommand::Arc { color, stroke_weight, .. } |
-                DrawCommand::Circle { color, stroke_weight, .. } => {
-                    *color = effect_params.color;
-                    *stroke_weight = effect_params.stroke_weight;
-                }
-            }
-        }
-    }
-    */
 
     // Draw grid with effects
     model.grid.draw_segments(&draw, bg_segments);
@@ -295,16 +232,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
- 
-
-    /*
-    // Create grid transform
-    let grid_transform = Transform2D {
-        translation: Vec2::new(offset_x, offset_y),
-        scale: max_tile_size / model.grid.viewbox.width,
-        rotation: 0.0,
-    };
-    */
 
 
 }

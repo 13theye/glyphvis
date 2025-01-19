@@ -10,9 +10,9 @@ pub fn init_effects(app: &App) -> EffectsManager {
     let mut effects_manager = EffectsManager::new();
 
     let power_on_effect = PowerOnEffect::new(
-        rgb(1.0, 0.0, 0.0),
+        rgb(1.0, 0.0, 0.0), // currently not used
         0.05,
-        0.3,
+        0.25,
     );
 
     effects_manager.add(

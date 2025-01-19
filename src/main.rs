@@ -1,5 +1,6 @@
 // src/main.rs
 use nannou::prelude::*;
+use rand::Rng;
 
 use glyphvis::{
     models:: { Project, GlyphModel },
@@ -42,6 +43,8 @@ struct Model {
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
+    random: rand::rngs::ThreadRng,
+    effect_target_style: DrawStyle,
 
     // Frame recording:
     frame_recorder: FrameRecorder,
@@ -139,6 +142,11 @@ fn model(app: &App) -> Model {
         draw,
         draw_renderer,
         texture_reshaper,
+        random: rand::thread_rng(),
+        effect_target_style: DrawStyle {
+            color: rgb(1.0, 0.0, 0.0),
+            stroke_weight: 5.0,
+        },
 
         frame_recorder,
         exit_requested: false,
@@ -151,6 +159,11 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             let segment_ids = model.glyphs.next_glyph(&model.project);
             for segment_id in segment_ids {
                 model.effects_manager.activate_segment(&segment_id, "power_on", app.time);
+                let glyph_style = DrawStyle {
+                    color: rgb(model.random.gen(), model.random.gen(), model.random.gen()),
+                    stroke_weight: 5.0,
+                };
+                model.effect_target_style = glyph_style;
             }
         },
         Key::R => model.frame_recorder.toggle_recording(),
@@ -188,16 +201,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
 
-    let glyph_style = DrawStyle {
-        color: rgb(1.0, 0.2, 0.0),
-        stroke_weight: 5.0,
-    };
-
 
     let glyph_segments = model.glyphs.get_renderable_segments(
         &model.project,
         &model.grid,
-        glyph_style,
+        &model.effect_target_style,
         &model.effects_manager,
         app.time,
         false,
@@ -207,7 +215,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let bg_segments = model.glyphs.get_renderable_segments(
         &model.project,
         &model.grid,
-        bg_style,
+        &bg_style,
         &model.effects_manager,
         app.time,
         true,

@@ -51,7 +51,7 @@ impl GlyphModel {
         &self,
         project: &Project,
         grid: &'a CachedGrid,
-        base_style: DrawStyle,
+        base_style: &DrawStyle,
         effect_manager: &EffectsManager,
         time: f32,
         bg_flag: bool,

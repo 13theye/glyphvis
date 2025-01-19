@@ -20,7 +20,7 @@ use glyphvis::{
 // APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
 
 // size of the render and capture
-const TEXTURE_SIZE: [u32; 2] = [3840, 1280];
+const TEXTURE_SIZE: [u32; 2] = [4742, 1200];
 // number of samples for the texture
 const TEXTURE_SAMPLES: u32 = 4;
 // path to the output frames
@@ -31,7 +31,7 @@ const FRAME_LIMIT: u32 = 20000;
 const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 
 // size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
-const WINDOW_SIZE: [u32; 2] = [1000, 333];
+const WINDOW_SIZE: [u32; 2] = [1897, 480];    // 1/2.5 scale
 // path to the project file
 const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/debug.json";
 // grid scale factor
@@ -209,17 +209,17 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // normal rendering routine begin:
     let draw = &model.draw;
-    draw.background().color(ORANGE);
+    draw.background().color(BLACK);
 
     // Apply the current effect
     let base_params = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
-        stroke_weight: 10.0,
+        stroke_weight: 5.0,
     };
 
     let glyph_params = DrawStyle {
         color: rgb(1.0, 0.2, 0.0),
-        stroke_weight: 10.0,
+        stroke_weight: 5.0,
     };
 
     //let effect_params = model.current_effect.apply(&base_params, app.time);

@@ -2,10 +2,10 @@
 use nannou::prelude::*;
 
 use glyphvis::{
-    models::{ Project, ViewBox },
-    views:: { CachedGrid, Transform2D, DrawCommand, DrawStyle },
+    models:: Project ,
+    views:: { CachedGrid, Transform2D, DrawStyle },
     services:: { FrameRecorder, OutputFormat },
-    effects::grid_effects::{ GridEffect, PulseEffect },
+    effects::grid_effects::{ GridEffect, PulseEffect, ColorCycleEffect },
 };
 
 //use glyphvis::views::Transform2D;
@@ -222,7 +222,42 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
 
+
+    let pulse_effect = PulseEffect {
+        frequency: 1.0,
+        min_brightness: 0.2,
+        max_brightness: 0.6,
+    };
+
+    let colorcycle_effect = ColorCycleEffect {
+        frequency: 1.0,
+        saturation: 1.0,
+        brightness: 1.0,
+    };
+
+    /*
+
+    // Get and draw background grid segments
+    let background_segments = model.grid.get_background_segments(
+        grid_params,
+        &model.glyph_model.get_active_segments(&model.project),
+        Some(&pulse_effect),
+        app.time,
+        debug_flag
+    );
+    
+    // Get and draw glyph segments
+    let glyph_segments = model.glyph_model.get_renderable_segments(
+        &model.project,
+        &model.grid,
+        glyph_params,
+        Some(&colorcycle_effect),
+        app.time,
+        debug_flag
+    );
+
     //let effect_params = model.current_effect.apply(&base_params, app.time);
+    */
 
     /* 
     // we're going to want to move this to the CachedGrid model
@@ -257,82 +292,16 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
 
-    /* 
-    // Create default grid DrawParams
-    let grid_params = DrawParams {
-        color: rgb(0.2, 0.2, 0.2),
-        stroke_weight: 10.0,
-    };
-    
-    // Create default glyph DrawParams
-    let glyph_params = DrawParams {
-        color: rgb(0.0, 0.0, 0.0),
-        stroke_weight: 10.0,
-    };
 
+    /*
     // Create grid transform
     let grid_transform = Transform2D {
         translation: Vec2::new(offset_x, offset_y),
         scale: max_tile_size / model.grid.viewbox.width,
         rotation: 0.0,
     };
-
-    let pulse_effect = PulseEffect {
-        frequency: 1.0,
-        min_brightness: 0.2,
-        max_brightness: 0.6,
-    };
-
-    let colorcycle_effect = ColorCycleEffect {
-        frequency: 1.0,
-        saturation: 1.0,
-        brightness: 1.0,
-    };
-
-    // Draw the debug origin
-    if debug_flag {
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(10.0, 0.0))
-            .color(RED);
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(0.0, 10.0))
-            .color(BLUE);
-    }
-
-    // Get and draw background grid segments
-    let background_segments = model.grid.get_background_segments(
-        grid_params,
-        &model.glyph_model.get_active_segments(&model.project),
-        Some(&pulse_effect),
-        app.time,
-        debug_flag
-    );
-    
-    grid_draw::draw_segments(
-        &draw,
-        &model.grid,
-        &grid_transform,
-        &background_segments,
-    );
-
-    // Get and draw glyph segments
-    let glyph_segments = model.glyph_model.get_renderable_segments(
-        &model.project,
-        &model.grid,
-        glyph_params,
-        Some(&colorcycle_effect),
-        app.time,
-        debug_flag
-    );
-
-    grid_draw::draw_segments(
-        &draw,
-        &model.grid,
-        &grid_transform,
-        &glyph_segments,
-    );
-
     */
+
 
 }
 

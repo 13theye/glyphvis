@@ -142,6 +142,10 @@ impl CachedSegment {
         }
     }
 
+    pub fn set_style(&mut self, style: DrawStyle) {
+        self.style = style;
+    }
+
     fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D) -> Vec<DrawCommand> {
         match path {
             PathElement::Line { x1, y1, x2, y2 } => {

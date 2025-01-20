@@ -1,42 +1,52 @@
 // src/main.rs
 use nannou::prelude::*;
+use rand::Rng;
 
-use glyphvis::models::{ Project, GridModel, GlyphModel };
+use glyphvis::{
+    models:: { Project, GlyphModel },
+    views:: { CachedGrid, DrawStyle },
+    services:: { FrameRecorder, OutputFormat },
+    effects::{ EffectsManager, init_effects },
 
-use glyphvis::services::FrameRecorder;
-use glyphvis::services::frame_recorder::OutputFormat;
-
-use glyphvis::draw::{ Transform2D, DrawParams };
-use glyphvis::draw::grid_draw;
-use glyphvis::effects::grid_effects::{ PulseEffect, ColorCycleEffect };
+};
 
 // APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
 
 // size of the render and capture
-const TEXTURE_SIZE: [u32; 2] = [3840, 1280];
+const TEXTURE_SIZE: [u32; 2] = [4742, 1200];
 // number of samples for the texture
 const TEXTURE_SAMPLES: u32 = 4;
 // path to the output frames
 const OUTPUT_DIR: &str = "./frames/";
 // capture frame limit
-const FRAME_LIMIT: u32 = 20000;
+const FRAME_LIMIT: u32 = 30000;
 // output format
 const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 
 // size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
-const WINDOW_SIZE: [u32; 2] = [1000, 333];
+const WINDOW_SIZE: [u32; 2] = [1897, 480];    // 1/2.5 scale
 // path to the project file
 const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
+// grid scale factor
+//const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
 
 struct Model {
+    // Core components:
     project: Project,
-    grid: GridModel,
-    glyph_model: GlyphModel,
+    grid: CachedGrid,
+    glyphs: GlyphModel,
+
+    // Rendering components:
+    effects_manager: EffectsManager,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
+    random: rand::rngs::ThreadRng,
+    effect_target_style: DrawStyle,
+
+    // Frame recording:
     frame_recorder: FrameRecorder,
     exit_requested: bool,
 }
@@ -59,13 +69,13 @@ fn model(app: &App) -> Model {
 
     // Load project
     let project = Project::load(PROJECT_PATH)
-    .expect("Failed to load project file");
+        .expect("Failed to load project file");
     
     // Create grid from project
-    let grid = GridModel::new(&project);
-    println!("Created grid with {} elements", grid.elements.len());
+    let grid = CachedGrid::new(&project);
+    println!("Created grid with {} segments", grid.segments.len());
 
-    let glyph_model = GlyphModel::new(&project);
+    let glyphs = GlyphModel::new(&project);
 
     // Create window
     let window_id = app.new_window()
@@ -75,13 +85,11 @@ fn model(app: &App) -> Model {
         .key_pressed(key_pressed)
         .build()
         .unwrap();
-    let window = app.window(window_id).unwrap();    
+    let window = app.window(window_id).unwrap();
 
-    // Retrieve the wgpu device
+    // Set up render texture
     let device = window.device();
-    
-    // Create our custom texture.
-    let sample_count = window.msaa_samples();
+    let draw = nannou::Draw::new();
     let texture = wgpu::TextureBuilder::new()
         .size(texture_size)
         // Our texture will be used as the RENDER_ATTACHMENT for our `Draw` render pass.
@@ -95,10 +103,10 @@ fn model(app: &App) -> Model {
         // Build
         .build(device);
 
-    let draw = nannou::Draw::new();
-
+    // Set up rendering pipeline
     let draw_renderer = nannou::draw::RendererBuilder::new()
-        .build_from_texture_descriptor(device, texture.descriptor());
+    .build_from_texture_descriptor(device, texture.descriptor());
+    let sample_count = window.msaa_samples();
 
     // Create the texture reshaper.
     let texture_view = texture.view().build();
@@ -121,22 +129,43 @@ fn model(app: &App) -> Model {
         OUTPUT_FORMAT,
     );
 
+    // Create effects
+    
+
     Model {
         project,
         grid,
-        glyph_model,
+        glyphs,
+
+        effects_manager: init_effects(&app),
         texture,
         draw,
         draw_renderer,
         texture_reshaper,
+        random: rand::thread_rng(),
+        effect_target_style: DrawStyle {
+            color: rgb(1.0, 0.0, 0.0),
+            stroke_weight: 5.0,
+        },
+
         frame_recorder,
         exit_requested: false,
     }
 }
 
-fn key_pressed(_app: &App, model: &mut Model, key: Key) {
+fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
-        Key::Space => model.glyph_model.next_glyph(),
+        Key::Space => {
+            let segment_ids = model.glyphs.next_glyph(&model.project);
+            for segment_id in segment_ids {
+                model.effects_manager.activate_segment(&segment_id, "power_on", app.time);
+                let glyph_style = DrawStyle {
+                    color: rgb(model.random.gen(), model.random.gen(), model.random.gen()),
+                    stroke_weight: 5.0,
+                };
+                model.effect_target_style = glyph_style;
+            }
+        },
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
             let (processed, total) = model.frame_recorder.get_queue_status();
@@ -151,176 +180,67 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
-    let debug_flag = false;
+    //let debug_flag = false;
 
     // auto cycle glyphs
     //model.glyph_model.next_glyph();
 
     // frames processing progress bar:
     if model.exit_requested {
-        if model.frame_recorder.has_pending_frames() {
-            // Clear the window and show progress
-            let draw = &model.draw;
-            draw.background().color(BLACK);
-            
-            let (processed, total) = model.frame_recorder.get_queue_status();
-            
-            // Draw progress text
-            let text = format!("{} / {}\nframes saved", processed, total);
-            draw.text(&text)
-                .color(WHITE)
-                .font_size(32)
-                .x_y(0.0, 50.0);
-                
-            // Draw progress bar
-            let progress = processed as f32 / total as f32;
-            let bar_width = 400.0;
-            let bar_height = 30.0;
-            
-            // Background bar
-            draw.rect()
-                .color(GRAY)
-                .w_h(bar_width, bar_height)
-                .x_y(0.0, -50.0);
-                
-            // Progress bar
-            draw.rect()
-                .color(GREEN)
-                .w_h(bar_width * progress, bar_height)
-                .x_y(-bar_width/2.0 + (bar_width * progress)/2.0, -50.0);
-
-
-            // Render progress graphic:
-            let window = app.main_window();
-            let device = window.device();
-            let ce_desc = wgpu::CommandEncoderDescriptor {
-                label: Some("Texture renderer"),};
-            let mut encoder = device.create_command_encoder(&ce_desc);
-            let texture_view = model.texture.view().build();
-
-            model.draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
-            window.queue().submit(Some(encoder.finish()));        
-
-            // IMPORTANT: Add a small sleep to prevent maxing out CPU
-            std::thread::sleep(std::time::Duration::from_millis(200));
-        } else {
-            // Only quit once all frames are processed
-            app.quit();
-        }
+        handle_exit_state(app, model);  
         return;  // Important: return here to not continue with normal rendering
     }
 
     // normal rendering routine begin:
-
     let draw = &model.draw;
-
     draw.background().color(BLACK);
-    
-    // Calculate grid layout
-    //let window_rect = app.window_rect();
-    let max_tile_size = f32::min(
-        //window_rect.w() / model.grid.width as f32,
-        //window_rect.h() / model.grid.height as f32
-        model.texture.size()[1] as f32 / 2.0 / model.grid.width as f32,
-        model.texture.size()[1] as f32 / 2.0 / model.grid.height as f32
-    ) * 0.95;                                       // SCALE FACTOR: TO REFACTOR
 
-    let grid_width = max_tile_size * model.grid.width as f32;
-    let grid_height = max_tile_size * model.grid.height as f32;
-    let offset_x = -grid_width / 2.0;
-    let offset_y = -grid_height / 2.0;
-    
-    // Create default grid DrawParams
-    let grid_params = DrawParams {
+    // Apply the current effect
+    let bg_style = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
-        stroke_weight: 10.0,
-    };
-    
-    // Create default glyph DrawParams
-    let glyph_params = DrawParams {
-        color: rgb(0.0, 0.0, 0.0),
-        stroke_weight: 10.0,
+        stroke_weight: 5.0,
     };
 
-    // Create grid transform
-    let grid_transform = Transform2D {
-        translation: Vec2::new(offset_x, offset_y),
-        scale: max_tile_size / model.grid.viewbox.width,
-        rotation: 0.0,
-    };
 
-    let pulse_effect = PulseEffect {
-        frequency: 1.0,
-        min_brightness: 0.2,
-        max_brightness: 0.6,
-    };
-
-    let colorcycle_effect = ColorCycleEffect {
-        frequency: 1.0,
-        saturation: 1.0,
-        brightness: 1.0,
-    };
-
-    // Draw the debug origin
-    if debug_flag {
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(10.0, 0.0))
-            .color(RED);
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(0.0, 10.0))
-            .color(BLUE);
-    }
-
-    // Get and draw background grid segments
-    let background_segments = model.grid.get_background_segments(
-        grid_params,
-        &model.glyph_model.get_active_segments(&model.project),
-        Some(&pulse_effect),
-        app.time,
-        debug_flag
-    );
-    
-    grid_draw::draw_segments(
-        &draw,
-        &model.grid,
-        &grid_transform,
-        &background_segments,
-    );
-
-    // Get and draw glyph segments
-    let glyph_segments = model.glyph_model.get_renderable_segments(
+    let glyph_segments = model.glyphs.get_renderable_segments(
         &model.project,
         &model.grid,
-        glyph_params,
-        Some(&colorcycle_effect),
+        &model.effect_target_style,
+        &model.effects_manager,
         app.time,
-        debug_flag
+        false,
+        false,
     );
 
-    grid_draw::draw_segments(
-        &draw,
+    let bg_segments = model.glyphs.get_renderable_segments(
+        &model.project,
         &model.grid,
-        &grid_transform,
-        &glyph_segments,
+        &bg_style,
+        &model.effects_manager,
+        app.time,
+        true,
+        false,
     );
 
+    // Draw grid with effects
+    model.grid.draw_segments(&draw, bg_segments);
+    model.grid.draw_segments(&draw, glyph_segments);
+/*
+    // Add debug visualization of coordinate system
+    draw.line()
+        .points(pt2(0.0, 0.0), pt2(100.0, 0.0))
+        .color(RED)
+        .stroke_weight(1.0);
+    draw.line()
+        .points(pt2(0.0, 0.0), pt2(0.0, 100.0))
+        .color(BLUE)
+        .stroke_weight(1.0);
+ */
 
-    // render path draw to texture only & capture
-    let window = app.main_window();
-    let device = window.device();
-    let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Texture renderer"),};
-    let mut encoder = device.create_command_encoder(&ce_desc);
-    let texture_view = model.texture.view().build();
 
-    model.draw_renderer.encode_render_pass(device, &mut encoder, &model.draw, 2.0, model.texture.size(), &texture_view, None);
+    // Rnder to texture and handle frame recording
+    render_and_capture(app, model);
 
-    // Capture the texture for FrameRecorder
-    if model.frame_recorder.is_recording() {
-        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
-    }
-
-    window.queue().submit(Some(encoder.finish()));
 
 }
 
@@ -335,3 +255,170 @@ fn view(_app: &App, model: &Model, frame: Frame) {
         .encode_render_pass(frame.texture_view(), &mut *encoder);
 
 }
+
+
+// ******************************* Grid Setup Helpers ********************************
+/* 
+fn calculate_grid_transform(texture: &wgpu::Texture, grid: &CachedGrid) -> Transform2D {
+    // Calculate scale to fit grid in view
+    // Calculate base scale from view height
+    println!("\n=== Grid Transform Calculation ===");
+
+    let (grid_x, grid_y) = grid.dimensions;
+    let texture_height = texture.size()[1] as f32;
+    
+    // Calculate scale to fit grid in view
+    let max_grid_dim = grid_x.max(grid_y) as f32;
+    //let base_scale = texture_height / 2.0 / max_grid_dim;
+    //let scale = base_scale * GRID_SCALE_FACTOR;
+    let scale = 1.0;
+    
+    println!("Grid dimensions: {}x{}", grid_x, grid_y);
+    println!("Texture height: {}", texture_height);
+    //println!("Base scale: {}", base_scale);
+    println!("Final scale: {}", scale);
+
+    // Center the grid
+    let grid_size = Vec2::new(
+        scale * grid_x as f32,
+        scale * grid_y as f32
+    );
+    let offset = -grid_size / 2.0;
+    
+    println!("Grid size: {:?}", grid_size);
+    println!("Center offset: {:?}", offset);
+
+    Transform2D {
+        translation: offset,
+        scale,
+        rotation: 0.0,
+    }
+}
+*/
+
+// ******************************* Rendering and Capture *****************************
+
+fn render_and_capture(app: &App, model: &mut Model) {
+    let window = app.main_window();
+    let device = window.device();
+    let ce_desc = wgpu::CommandEncoderDescriptor {
+        label: Some("Texture renderer"),};
+    let mut encoder = device.create_command_encoder(&ce_desc);
+    let texture_view = model.texture.view().build();
+
+    model.draw_renderer.encode_render_pass(
+        device, 
+        &mut encoder, 
+        &model.draw, 
+        2.0, 
+        model.texture.size(), 
+        &texture_view, 
+        None
+    );
+
+    // Capture the texture for FrameRecorder
+    if model.frame_recorder.is_recording() {
+        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
+    }
+
+    window.queue().submit(Some(encoder.finish()));
+}
+
+
+// ******************************* Exit State Handling *******************************
+
+fn handle_exit_state(app: &App, model: &mut Model) {
+    if model.frame_recorder.has_pending_frames() {
+        draw_progress_screen(app, model);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    } else {
+        app.quit(); // quit only once all frames are processed
+    }
+}
+
+fn draw_progress_screen(app: &App, model: &mut Model) {
+    // Clear the window and show progress
+    let draw = &model.draw;
+    draw.background().color(BLACK);
+
+    let (processed, total)  = model.frame_recorder.get_queue_status();
+
+    // Draw progress text
+    let text = format!("{} / {}\nframes saved", processed, total);
+    draw.text(&text)
+        .color(WHITE)
+        .font_size(32)
+        .x_y(0.0, 50.0);
+        
+    // Draw progress bar
+    let progress = processed as f32 / total as f32;
+    draw_progress_bar(draw, progress);
+
+    // Render progress screen
+    render_progress(app, model);
+}
+
+fn draw_progress_bar(draw: &Draw, progress: f32) {
+    let bar_width = 400.0;
+    let bar_height = 30.0;
+
+    // Background bar
+    draw.rect()
+    .color(GRAY)
+    .w_h(bar_width, bar_height)
+    .x_y(0.0, -50.0);
+        
+    // Progress bar
+    draw.rect()
+        .color(GREEN)
+        .w_h(bar_width * progress, bar_height)
+        .x_y(-bar_width/2.0 + (bar_width * progress)/2.0, -50.0);
+}
+
+fn render_progress(app: &App, model: &mut Model) {
+    let window = app.main_window();
+    let device = window.device();
+    let ce_desc = wgpu::CommandEncoderDescriptor {
+        label: Some("Progress renderer"),};
+    let mut encoder = device.create_command_encoder(&ce_desc);
+    let texture_view = model.texture.view().build();
+
+    model.draw_renderer.encode_render_pass(
+        device, 
+        &mut encoder, 
+        &model.draw, 
+        2.0, 
+        model.texture.size(), 
+        &texture_view, 
+        None
+    );
+    window.queue().submit(Some(encoder.finish()));        
+}
+
+
+
+
+
+// ******************************* Debug stuff *******************************
+
+/*
+fn print_grid_info(grid: &CachedGrid) {
+    println!("\nGrid Info:");
+    println!("Dimensions: {:?}", grid.dimensions);
+    println!("Viewbox: {:?}", grid.viewbox);
+    println!("Segment count: {}", grid.segments.len());
+    
+    // Print first few segments for inspection
+    
+    for (i, (id, segment)) in grid.segments.iter().take(2).enumerate() {
+        println!("\nSegment {}: {}", i, id);
+        println!("Position: {:?}", segment.tile_pos);
+        println!("Edge type: {:?}", segment.edge_type);
+        
+        for (j, cmd) in segment.draw_commands.iter().take(2).enumerate() {
+            println!("  Command {}: {:?}", j, cmd);
+        }
+    }
+     
+}
+    */

@@ -1,7 +1,8 @@
 pub mod data_model;
-pub mod grid_model;
 pub mod glyph_model;
+pub mod geometry;
+
 
 pub use data_model::Project;
-pub use grid_model::GridModel;
 pub use glyph_model::GlyphModel;
+pub use geometry::{ ViewBox, EdgeType, PathElement, GridElement};

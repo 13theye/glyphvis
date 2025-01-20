@@ -2,12 +2,14 @@
 // these effects are applied to sets of segments, like Glyphs and Grids.
 
 use nannou::prelude::*;
+use super::Effect;
+use crate::views::DrawStyle;
 
-use crate::draw::DrawParams;
-
+/* 
 pub trait GridEffect {
-    fn apply(&self, base_params: &DrawParams, time: f32) -> DrawParams;
+    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle;
 }
+*/
 
 pub struct PulseEffect {
     pub frequency: f32,
@@ -15,13 +17,13 @@ pub struct PulseEffect {
     pub max_brightness: f32,
 }
 
-impl GridEffect for PulseEffect {
-    fn apply(&self, base_params: &DrawParams, time: f32) -> DrawParams {
+impl Effect for PulseEffect {
+    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle {
         let brightness = (time * self.frequency).sin() * 0.5 + 0.5;
         let brightness = self.min_brightness + brightness * (self.max_brightness - self.min_brightness);
 
         let color = base_params.color;
-        DrawParams {
+        DrawStyle {
             color: rgb(
                 color.red * brightness,
                 color.green * brightness,
@@ -29,6 +31,11 @@ impl GridEffect for PulseEffect {
             ),
             stroke_weight: base_params.stroke_weight,
         }
+    }
+
+    // this is a continuous effect
+    fn is_finished(&self) -> bool {
+        false
     }
 }
 
@@ -38,12 +45,16 @@ pub struct ColorCycleEffect {
     pub brightness: f32,
 }
 
-impl GridEffect for ColorCycleEffect {
-    fn apply(&self, base_params: &DrawParams, time: f32) -> DrawParams {
+impl Effect for ColorCycleEffect {
+    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle {
         let hue = (time * self.frequency) % 1.0;
-        DrawParams {
+        DrawStyle {
             color: hsv(hue, self.saturation, self.brightness).into(),
             stroke_weight: base_params.stroke_weight,
         }
+    }
+
+    fn is_finished(&self) -> bool {
+        false
     }
 }

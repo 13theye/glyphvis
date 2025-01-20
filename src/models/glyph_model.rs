@@ -1,17 +1,15 @@
 // src/models/glyph_model.rs
 // a structure that holds ready-to-render glyphs
 // data model and constructors for Glyphs, which are on the same level as Grids.
-// also applies effects at the Glyph level
+// also applies effects
 
 use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
-use crate::models::grid_model::GridModel;
-use crate::draw::grid_draw::RenderableSegment;
+use crate::views:: { CachedGrid, DrawStyle, RenderableSegment };
 
-use crate::draw::DrawParams;
-use crate::effects::grid_effects::GridEffect;
+use crate::effects::EffectsManager;
 
 pub struct GlyphModel {
     glyph_names: Vec<String>,
@@ -30,8 +28,9 @@ impl GlyphModel {
         }
     }
 
-    pub fn next_glyph(&mut self) {
+    pub fn next_glyph(&mut self, project: &Project) -> HashSet<String> {
         self.current_glyph_index = (self.current_glyph_index + 1) % self.glyph_names.len();
+        self.get_active_segments(project)
         //let current_name = &self.glyph_names[self.current_glyph_index];
         //println!("Showing glyph: {}", current_name);
     }
@@ -51,49 +50,73 @@ impl GlyphModel {
     pub fn get_renderable_segments<'a>(
         &self,
         project: &Project,
-        grid: &'a GridModel,
-        params: DrawParams,
-        effect: Option<&dyn GridEffect>,
+        grid: &'a CachedGrid,
+        base_style: &DrawStyle,
+        effect_manager: &EffectsManager,
         time: f32,
+        bg_flag: bool,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
-        let mut segments = Vec::new();
+
+        let mut return_segments = Vec::new();
         let active_segment_ids = self.get_active_segments(project);
+        let (grid_x, grid_y) = grid.dimensions;
         
+        // debug color function
         let debug_color = |x: u32, y: u32| -> f32 {
-            ((x + y) as f32) / (grid.height + grid.width) as f32
+            ((x + y) as f32) / (grid_x + grid_y) as f32
         };
 
-        for y in 1..=grid.height {
-            for x in 1..=grid.width {
-                let elements = grid.get_elements_at(x, y);
+        // iterate over tiles
+        for y in 1..=grid_y {
+            for x in 1..=grid_x {
+                let segments = grid.get_segments_at(x, y);
                 
-                for element in elements {
-                    let segment_id = format!("{},{} : {}", x, y, element.id);
-                    if active_segment_ids.contains(&segment_id) {
-                        let mut element_params = if debug_flag {
-                            let g = debug_color(x, y);
-                            DrawParams {
-                                color: rgb(0.9, g, 0.0),
-                                stroke_weight: params.stroke_weight,
-                            }
-                        } else {
-                            params.clone()
-                        };
+                for segment in segments {
+                    if !bg_flag {
+                        if active_segment_ids.contains(&segment.id) {
+                            let base_style = if debug_flag {
+                                let g = debug_color(x, y);
+                                DrawStyle {
+                                    color: rgb(0.9, g, 0.0),
+                                    stroke_weight: base_style.stroke_weight,
+                                }
+                            } else {
+                                base_style.clone()
+                            };
 
-                        // Apply effect if one is provided
-                        if let Some(effect) = effect {
-                            element_params = effect.apply(&element_params, time);
+                            // Apply effect if one is provided
+                            let final_style = effect_manager.apply_effects(&segment.id, base_style, time);
+
+                            return_segments.push(RenderableSegment {
+                                segment,
+                                style: final_style,
+                            });
                         }
+                    } else {
+                        if !active_segment_ids.contains(&segment.id) {
+                            let base_style = if debug_flag {
+                                let g = debug_color(x, y);
+                                DrawStyle {
+                                    color: rgb(0.0, g, 1.0),
+                                    stroke_weight: base_style.stroke_weight,
+                                }
+                            } else {
+                                base_style.clone()
+                            };
 
-                        segments.push(RenderableSegment {
-                            element,
-                            params: element_params,
-                        });
+                            // Apply effect if one is provided
+                            let final_style = effect_manager.apply_effects(&segment.id, base_style, time);
+
+                            return_segments.push(RenderableSegment {
+                                segment,
+                                style: final_style,
+                            });
+                        }
                     }
                 }
             }
         }
-        segments
+        return_segments
     }
 }

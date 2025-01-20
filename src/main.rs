@@ -376,7 +376,7 @@ fn render_progress(app: &App, model: &mut Model) {
 
 // ******************************* Debug stuff *******************************
 
-fn draw_three_grids(app: &App, model: &mut Model) {
+fn make_three_grids(app: &App, model: &mut Model) {
 
     let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-2000.0, 0.0), 0.0);
     let grid_2 = GridInstance::new(app, &model.project, "Grid Center".to_string(), pt2(0.0, 0.0), 0.0);

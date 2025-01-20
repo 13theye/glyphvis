@@ -10,9 +10,6 @@ use crate::effects::{init_effects, EffectsManager};
 pub struct GridInstance {
     pub id: String,
     pub grid: CachedGrid,
-
-    pub active_glyph: Option<String>,
-    pub active_segments: HashSet<String>,
     
     pub effects_manager: EffectsManager,
     pub transform: Transform2D,
@@ -32,16 +29,16 @@ impl GridInstance {
         Self {
             id,
             grid,
-            active_glyph: None,
 
-            active_segments: HashSet::new(),
             effects_manager: init_effects::init_effects(app),
-
             transform,
             visible: true,
         }
     }
 
+    pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
+        self.grid.draw_segments(draw, segments);
+    }
     
 
 

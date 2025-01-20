@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use crate::views::DrawStyle;
 
-
 pub enum EffectType {
     Grid(Box<dyn Effect>),
     Segment(Box<dyn SegmentEffect>),

@@ -388,14 +388,14 @@ impl CachedGrid {
             .flat_map(| segment | &segment.draw_commands)
             .for_each(| command | command.draw(draw, style));
     }
-
+*/
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         self.transform = transform.clone();
         for segment in self.segments.values_mut() {
             segment.apply_transform(transform);
         }
     }
-    */
+    
 
     // Utility methods
     pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {

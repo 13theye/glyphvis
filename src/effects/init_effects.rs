@@ -4,7 +4,7 @@
 use nannou::prelude::*;
 use super::effects_manager::*;
 use super::power_on_effect::PowerOnEffect;
-use super::grid_effects::{ PulseEffect, ColorCycleEffect };
+//use super::grid_effects::{ PulseEffect, ColorCycleEffect };
 
 pub fn init_effects(app: &App) -> EffectsManager {
     let mut effects_manager = EffectsManager::new();

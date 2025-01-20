@@ -7,7 +7,7 @@ use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
-use crate::views:: { GridInstance, CachedGrid, DrawStyle, RenderableSegment };
+use crate::views:: { GridInstance, DrawStyle, RenderableSegment };
 
 use crate::effects::EffectsManager;
 
@@ -38,6 +38,10 @@ impl GlyphController {
     pub fn get_current_glyph<'a>(&self, project: &'a Project) -> Option<&'a Glyph> {
         let current_name = &self.glyph_names[self.current_glyph_index];
         project.get_glyph(current_name)
+    }
+
+    pub fn get_glyph<'a>(&self, project: &'a Project, name: &str) -> Option<&'a Glyph> {
+        project.get_glyph(name)
     }
 
     pub fn get_active_segments(&self, project: &Project) -> HashSet<String> {

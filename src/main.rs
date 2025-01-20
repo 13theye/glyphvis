@@ -5,10 +5,10 @@ use rand::Rng;
 
 use glyphvis::{
     models:: Project,
-    views:: { GridInstance, CachedGrid, DrawStyle },
+    views:: { GridInstance, DrawStyle },
     controllers:: GlyphController,
     services:: { FrameRecorder, OutputFormat },
-    effects::{ EffectsManager, init_effects },
+    //effects::{ EffectsManager, init_effects },
 
 };
 
@@ -212,10 +212,12 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
 
+    /* 
     let glyph_style = DrawStyle {
         color: rgb(0.7, 0.1, 0.1),
         stroke_weight: 5.0,
     };
+    */
 
 
 
@@ -223,7 +225,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
         let glyph_segments = model.glyphs.get_renderable_segments(
             &model.project,
-            &grid_instance,
+            grid_instance,
             &model.effect_target_style,
             &grid_instance.effects_manager,
             app.time,
@@ -233,7 +235,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
         let bg_segments = model.glyphs.get_renderable_segments(
             &model.project,
-            &grid_instance,
+            grid_instance,
             &bg_style,
             &grid_instance.effects_manager,
             app.time,
@@ -246,10 +248,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         grid_instance.draw_segments(&draw, bg_segments);
         grid_instance.draw_segments(&draw, glyph_segments);
     }
-    
-
-    //grid.grid.draw_segments(&draw, bg_segments);
-    //grid.grid.draw_segments(&draw, glyph_segments);
 
 /*
     // Add debug visualization of coordinate system
@@ -263,10 +261,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         .stroke_weight(1.0);
  */
 
-
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
-
 
 }
 

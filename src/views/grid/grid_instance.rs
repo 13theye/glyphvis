@@ -1,10 +1,10 @@
 // src/views/grid_manager.rs
 
 use nannou::prelude::*;
-use std::collections::{ HashMap, HashSet };
+//use std::collections::{ HashMap, HashSet };
 
 use crate::models::Project;
-use crate::views::{ Transform2D, CachedGrid, RenderableSegment, DrawStyle };
+use crate::views::{ Transform2D, CachedGrid, RenderableSegment };
 use crate::effects::{init_effects, EffectsManager};
 
 pub struct GridInstance {

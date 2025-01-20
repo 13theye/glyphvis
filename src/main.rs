@@ -24,7 +24,7 @@ const FRAME_LIMIT: u32 = 30000;
 const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 
 // size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
-const WINDOW_SIZE: [u32; 2] = [1000, 333];
+const WINDOW_SIZE: [u32; 2] = [1897, 480];
 // path to the project file
 const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
 // grid scale factor

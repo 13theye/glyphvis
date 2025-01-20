@@ -102,6 +102,7 @@ impl Default for DrawStyle {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct RenderableSegment<'a>{
     pub segment: &'a CachedSegment,
     pub style: DrawStyle,
@@ -227,6 +228,7 @@ impl CachedSegment {
 }
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
+#[derive(Debug, Clone)]
 pub struct CachedGrid {
     pub dimensions: (u32, u32), // number of tiles in x and y
     pub segments: HashMap<String, CachedSegment>,

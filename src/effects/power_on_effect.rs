@@ -45,7 +45,7 @@ impl PowerOnEffect {
 
 impl SegmentEffect for PowerOnEffect {
 
-    fn apply_to_segment(&self, segment_id: &str, base_style: &DrawStyle, current_time: f32) -> DrawStyle {
+    fn apply_to_segment(&self, segment_id: &str, target_style: &DrawStyle, current_time: f32) -> DrawStyle {
         let mut states = self.segment_states.borrow_mut();
         if let Some(state) = states.get(segment_id) {
             let elapsed_time = current_time - state.activation_time;
@@ -60,21 +60,21 @@ impl SegmentEffect for PowerOnEffect {
                 // Fade to target color
                 let fade_progress = (elapsed_time - self.flash_duration) / self.fade_duration;
                 let white = rgb(1.0, 1.0, 1.0);
-                exp_color(white, base_style.color, fade_progress)
+                exp_flash(white, target_style.color, fade_progress)
                 
             } else {
                 // Animation complete
                 states.remove(segment_id);
-                base_style.color
+                target_style.color
             };
 
             DrawStyle {
                 color, 
-                stroke_weight: base_style.stroke_weight,
+                stroke_weight: target_style.stroke_weight,
             }
             
         } else {
-            base_style.clone()
+            target_style.clone()
         }   
     }
 
@@ -99,15 +99,31 @@ impl SegmentEffect for PowerOnEffect {
 
 }
 
-
+/*
 fn exp_color(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb<f32> {
-    let decay_rate = 1.0;
+    let decay_rate = 1.5;
     let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Adjust for a sharp drop with a long tail
     rgb(
         start.red + (end.red - start.red) * (1.0 - (-adjusted_time * decay_rate).exp()),
         start.green + (end.green - start.green) * (1.0 - (-adjusted_time * decay_rate).exp()),
         start.blue + (end.blue - start.blue) * (1.0 - (-adjusted_time * decay_rate).exp()),
     )
+}
+*/
+
+fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb <f32> {
+    let decay_rate = 5.0;
+    let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Adjust for a sharp drop with a long tail
+    let hsl_start = Hsl::from(start);
+    let hsl_end = Hsl::from(end);
+
+    let result = Hsl::new(
+        hsl_end.hue,
+        hsl_end.saturation,
+        hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * (1.0 - (-adjusted_time * decay_rate).exp()),
+    );
+    Rgb::from(result)
+
 }
 
 fn lerp_color(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb<f32> {

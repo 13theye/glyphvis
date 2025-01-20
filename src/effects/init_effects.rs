@@ -11,8 +11,8 @@ pub fn init_effects(app: &App) -> EffectsManager {
 
     let power_on_effect = PowerOnEffect::new(
         rgb(1.0, 0.0, 0.0), // currently not used
-        0.05,
-        0.25,
+        0.01,
+        0.3,
     );
 
     effects_manager.add(
@@ -30,8 +30,8 @@ pub fn init_effects(app: &App) -> EffectsManager {
         })),
         app.time,
     );   
-    */ 
-    /*
+    
+    
     effects_manager.add(
         "colorcycle".to_string(),
         EffectType::Grid(Box::new(ColorCycleEffect {

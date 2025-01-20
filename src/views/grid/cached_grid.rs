@@ -264,11 +264,12 @@ impl CachedGrid {
                         &viewbox,
                         grid_dims,
                     );
-                
+                    /* 
                     // Only print edge elements for brevity
                     if edge_type != EdgeType::None {
                         println!("Created {} at ({},{}) - {:?}", element_id, x, y, edge_type);
                     }
+                    */
 
                     segments.insert(segment.id.clone(), segment);
                 }

@@ -7,16 +7,16 @@ use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
-use crate::views:: { CachedGrid, DrawStyle, RenderableSegment };
+use crate::views:: { GridInstance, CachedGrid, DrawStyle, RenderableSegment };
 
 use crate::effects::EffectsManager;
 
-pub struct GlyphModel {
+pub struct GlyphController {
     glyph_names: Vec<String>,
     current_glyph_index: usize,
 }
 
-impl GlyphModel {
+impl GlyphController {
     pub fn new(project: &Project) -> Self {
         let mut glyph_names: Vec<String> = project.glyphs.keys().cloned().collect();
         glyph_names.sort();
@@ -50,16 +50,17 @@ impl GlyphModel {
     pub fn get_renderable_segments<'a>(
         &self,
         project: &Project,
-        grid: &'a CachedGrid,
+        grid_instance: &'a GridInstance,
         base_style: &DrawStyle,
         effect_manager: &EffectsManager,
         time: f32,
         bg_flag: bool,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
-
+    
         let mut return_segments = Vec::new();
         let active_segment_ids = self.get_active_segments(project);
+        let grid = &grid_instance.grid;
         let (grid_x, grid_y) = grid.dimensions;
         
         // debug color function

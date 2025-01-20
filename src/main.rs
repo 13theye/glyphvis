@@ -1,10 +1,12 @@
 // src/main.rs
 use nannou::prelude::*;
+use std::collections::HashMap;
 use rand::Rng;
 
 use glyphvis::{
-    models:: { Project, GlyphModel },
+    models:: Project,
     views:: { GridInstance, CachedGrid, DrawStyle },
+    controllers:: GlyphController,
     services:: { FrameRecorder, OutputFormat },
     effects::{ EffectsManager, init_effects },
 
@@ -34,8 +36,8 @@ const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json"
 struct Model {
     // Core components:
     project: Project,
-    grids: Vec<GridInstance>,    //grid: CachedGrid,
-    glyphs: GlyphModel,
+    grids: HashMap<String, GridInstance>,    //grid: CachedGrid,
+    glyphs: GlyphController,
 
     // Rendering components:
     //effects_manager: EffectsManager,
@@ -44,7 +46,7 @@ struct Model {
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
-    //effect_target_style: DrawStyle,
+    effect_target_style: DrawStyle, // for testing
 
     // Frame recording:
     frame_recorder: FrameRecorder,
@@ -77,7 +79,7 @@ fn model(app: &App) -> Model {
     println!("Created grid with {} segments", grid.segments.len());
     */
 
-    let glyphs = GlyphModel::new(&project);
+    let glyphs = GlyphController::new(&project);
 
     // Create window
     let window_id = app.new_window()
@@ -136,7 +138,7 @@ fn model(app: &App) -> Model {
 
     Model {
         project,
-        grids: Vec::new(),   //grid,
+        grids: HashMap::new(),   //grid,
         glyphs,
 
         //effects_manager: init_effects(&app),
@@ -145,10 +147,10 @@ fn model(app: &App) -> Model {
         draw_renderer,
         texture_reshaper,
         random: rand::thread_rng(),
-        /*effect_target_style: DrawStyle {
+        effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
             stroke_weight: 5.0,
-        },*/
+        },
 
         frame_recorder,
         exit_requested: false,
@@ -157,20 +159,23 @@ fn model(app: &App) -> Model {
 
 fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
-        /*Key::Space => {
+        Key::Space => {
             let segment_ids = model.glyphs.next_glyph(&model.project);
-            for segment_id in segment_ids {
-                model.effects_manager.activate_segment(&segment_id, "power_on", app.time);
-                let glyph_style = DrawStyle {
-                    color: rgb(model.random.gen(), model.random.gen(), model.random.gen()),
-                    stroke_weight: 5.0,
-                };
-                model.effect_target_style = glyph_style;
+            let glyph_style = DrawStyle {
+                color: rgb(model.random.gen(), model.random.gen(), model.random.gen()),
+                stroke_weight: 5.0,
+            };
+            
+            for (_, grid_instance) in model.grids.iter_mut() {
+                for segment_id in &segment_ids {
+                    grid_instance.effects_manager.activate_segment(&segment_id, "power_on", app.time);
+
+                    model.effect_target_style = glyph_style.clone();
+                }
             }
-        }, */
+        }, 
         Key::G => {
-            let grid = GridInstance::new(app, &model.project, pt2(0.0, 0.0), 0.0);
-            model.grids.push(grid);
+            make_three_grids(app, model);
         },
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
@@ -207,34 +212,39 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
 
+    let glyph_style = DrawStyle {
+        color: rgb(0.7, 0.1, 0.1),
+        stroke_weight: 5.0,
+    };
 
-    let glyph_segments = model.glyphs.get_renderable_segments(
-        &model.project,
-        &model.grid,
-        &model.effect_target_style,
-        &model.effects_manager,
-        app.time,
-        false,
-        false,
-    );
 
-    let bg_segments = model.glyphs.get_renderable_segments(
-        &model.project,
-        &model.grid,
-        &bg_style,
-        &model.effects_manager,
-        app.time,
-        true,
-        false,
-    );
 
-    
-    // Draw grid with effects
-    for grid in &model.grids {
-            //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
-            //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
-            grid.draw_segments(&draw, bg_segments);
-            grid.draw_segments(&draw, glyph_segments);
+    for (_, grid_instance) in model.grids.iter() {
+
+        let glyph_segments = model.glyphs.get_renderable_segments(
+            &model.project,
+            &grid_instance,
+            &model.effect_target_style,
+            &grid_instance.effects_manager,
+            app.time,
+            false,
+            false,
+        );
+
+        let bg_segments = model.glyphs.get_renderable_segments(
+            &model.project,
+            &grid_instance,
+            &bg_style,
+            &grid_instance.effects_manager,
+            app.time,
+            true,
+            false,
+        );
+
+        //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
+        //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
+        grid_instance.draw_segments(&draw, bg_segments);
+        grid_instance.draw_segments(&draw, glyph_segments);
     }
     
 
@@ -378,13 +388,17 @@ fn render_progress(app: &App, model: &mut Model) {
 
 fn make_three_grids(app: &App, model: &mut Model) {
 
-    let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-2000.0, 0.0), 0.0);
+    let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-600.0, 0.0), 0.0);
     let grid_2 = GridInstance::new(app, &model.project, "Grid Center".to_string(), pt2(0.0, 0.0), 0.0);
-    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(2000.0, 0.0), 0.0);
+    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(600.0, 0.0), 0.0);
 
-    model.grids.push(grid_1);
-    model.grids.push(grid_2);
-    model.grids.push(grid_3);
+    model.grids.insert(grid_1.id.clone(),grid_1);
+    model.grids.insert(grid_2.id.clone(), grid_2);
+    model.grids.insert(grid_3.id.clone(), grid_3);
+
+    for (_, grid) in model.grids.iter() {
+        grid.print_grid_info();
+    }
 }
 
 

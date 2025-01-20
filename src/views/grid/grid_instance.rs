@@ -12,7 +12,7 @@ pub struct GridInstance {
     pub grid: CachedGrid,
     
     pub effects_manager: EffectsManager,
-    pub transform: Transform2D,
+    pub location: Transform2D,
     pub visible: bool,
 }
 
@@ -31,32 +31,35 @@ impl GridInstance {
             grid,
 
             effects_manager: init_effects::init_effects(app),
-            transform,
+            location: transform,
             visible: true,
         }
+    }
+
+    pub fn apply_transform(&mut self, transform: &Transform2D) {
+        self.location.combine(transform);
+        self.grid.apply_transform(transform);
     }
 
     pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
         self.grid.draw_segments(draw, segments);
     }
+
+    pub fn activate_segment_effect(&mut self, segment_id: &str, effect_name: &str, time: f32) {
+        self.effects_manager.activate_segment(segment_id, effect_name, time);
+    }
     
-
-
-
-
-
-
-    fn print_grid_info(&self, grid: &CachedGrid) {
-        println!("<====== Grid Instance {} ======>", self.id);
+    pub fn print_grid_info(&self) {
+        println!("<====== Grid Instance: {} ======>", self.id);
         println!("\nGrid Info:");
-        println!("Position: {:?}", self.transform.translation);
-        println!("Dimensions: {:?}", grid.dimensions);
-        println!("Viewbox: {:?}", grid.viewbox);
-        println!("Segment count: {}", grid.segments.len());
+        println!("Location: {:?}", self.location.translation);
+        println!("Dimensions: {:?}", self.grid.dimensions);
+        println!("Viewbox: {:?}", self.grid.viewbox);
+        println!("Segment count: {}\n", self.grid.segments.len());
         
         // Print first few segments for inspection
-        
-        for (i, (id, segment)) in grid.segments.iter().take(2).enumerate() {
+        /*
+        for (i, (id, segment)) in self.grid.segments.iter().take(2).enumerate() {
             println!("\nSegment {}: {}", i, id);
             println!("Position: {:?}", segment.tile_pos);
             println!("Edge type: {:?}", segment.edge_type);
@@ -64,7 +67,8 @@ impl GridInstance {
             for (j, cmd) in segment.draw_commands.iter().take(2).enumerate() {
                 println!("  Command {}: {:?}", j, cmd);
             }
-        }
+             
+        }*/
     }
 
 }

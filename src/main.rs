@@ -4,7 +4,7 @@ use rand::Rng;
 
 use glyphvis::{
     models:: { Project, GlyphModel },
-    views:: { CachedGrid, DrawStyle },
+    views:: { GridInstance, CachedGrid, DrawStyle },
     services:: { FrameRecorder, OutputFormat },
     effects::{ EffectsManager, init_effects },
 
@@ -34,17 +34,17 @@ const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json"
 struct Model {
     // Core components:
     project: Project,
-    grid: CachedGrid,
+    grids: Vec<GridInstance>,    //grid: CachedGrid,
     glyphs: GlyphModel,
 
     // Rendering components:
-    effects_manager: EffectsManager,
+    //effects_manager: EffectsManager,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
-    effect_target_style: DrawStyle,
+    //effect_target_style: DrawStyle,
 
     // Frame recording:
     frame_recorder: FrameRecorder,
@@ -71,9 +71,11 @@ fn model(app: &App) -> Model {
     let project = Project::load(PROJECT_PATH)
         .expect("Failed to load project file");
     
+    /*
     // Create grid from project
     let grid = CachedGrid::new(&project);
     println!("Created grid with {} segments", grid.segments.len());
+    */
 
     let glyphs = GlyphModel::new(&project);
 
@@ -134,19 +136,19 @@ fn model(app: &App) -> Model {
 
     Model {
         project,
-        grid,
+        grids: Vec::new(),   //grid,
         glyphs,
 
-        effects_manager: init_effects(&app),
+        //effects_manager: init_effects(&app),
         texture,
         draw,
         draw_renderer,
         texture_reshaper,
         random: rand::thread_rng(),
-        effect_target_style: DrawStyle {
+        /*effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
             stroke_weight: 5.0,
-        },
+        },*/
 
         frame_recorder,
         exit_requested: false,
@@ -155,7 +157,7 @@ fn model(app: &App) -> Model {
 
 fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
-        Key::Space => {
+        /*Key::Space => {
             let segment_ids = model.glyphs.next_glyph(&model.project);
             for segment_id in segment_ids {
                 model.effects_manager.activate_segment(&segment_id, "power_on", app.time);
@@ -165,6 +167,10 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 };
                 model.effect_target_style = glyph_style;
             }
+        }, */
+        Key::G => {
+            let grid = GridInstance::new(app, &model.project, pt2(0.0, 0.0), 0.0);
+            model.grids.push(grid);
         },
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
@@ -222,9 +228,19 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         false,
     );
 
+    
     // Draw grid with effects
-    model.grid.draw_segments(&draw, bg_segments);
-    model.grid.draw_segments(&draw, glyph_segments);
+    for grid in &model.grids {
+            //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
+            //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
+            grid.draw_segments(&draw, bg_segments);
+            grid.draw_segments(&draw, glyph_segments);
+    }
+    
+
+    //grid.grid.draw_segments(&draw, bg_segments);
+    //grid.grid.draw_segments(&draw, glyph_segments);
+
 /*
     // Add debug visualization of coordinate system
     draw.line()
@@ -256,45 +272,6 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 }
 
-
-// ******************************* Grid Setup Helpers ********************************
-/* 
-fn calculate_grid_transform(texture: &wgpu::Texture, grid: &CachedGrid) -> Transform2D {
-    // Calculate scale to fit grid in view
-    // Calculate base scale from view height
-    println!("\n=== Grid Transform Calculation ===");
-
-    let (grid_x, grid_y) = grid.dimensions;
-    let texture_height = texture.size()[1] as f32;
-    
-    // Calculate scale to fit grid in view
-    let max_grid_dim = grid_x.max(grid_y) as f32;
-    //let base_scale = texture_height / 2.0 / max_grid_dim;
-    //let scale = base_scale * GRID_SCALE_FACTOR;
-    let scale = 1.0;
-    
-    println!("Grid dimensions: {}x{}", grid_x, grid_y);
-    println!("Texture height: {}", texture_height);
-    //println!("Base scale: {}", base_scale);
-    println!("Final scale: {}", scale);
-
-    // Center the grid
-    let grid_size = Vec2::new(
-        scale * grid_x as f32,
-        scale * grid_y as f32
-    );
-    let offset = -grid_size / 2.0;
-    
-    println!("Grid size: {:?}", grid_size);
-    println!("Center offset: {:?}", offset);
-
-    Transform2D {
-        translation: offset,
-        scale,
-        rotation: 0.0,
-    }
-}
-*/
 
 // ******************************* Rendering and Capture *****************************
 
@@ -397,9 +374,19 @@ fn render_progress(app: &App, model: &mut Model) {
 
 
 
-
-
 // ******************************* Debug stuff *******************************
+
+fn draw_three_grids(app: &App, model: &mut Model) {
+
+    let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-2000.0, 0.0), 0.0);
+    let grid_2 = GridInstance::new(app, &model.project, "Grid Center".to_string(), pt2(0.0, 0.0), 0.0);
+    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(2000.0, 0.0), 0.0);
+
+    model.grids.push(grid_1);
+    model.grids.push(grid_2);
+    model.grids.push(grid_3);
+}
+
 
 /*
 fn print_grid_info(grid: &CachedGrid) {

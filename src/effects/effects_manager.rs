@@ -80,7 +80,7 @@ impl EffectsManager {
     }
 
     // Apply all active effects
-    pub fn apply_effects(&self, segment_id: &str, base_style: DrawStyle, time:f32) -> DrawStyle {
+    pub fn apply_segment_effects(&self, segment_id: &str, base_style: DrawStyle, time:f32) -> DrawStyle {
         if self.effects.is_empty() {
             return base_style;
         }
@@ -94,7 +94,8 @@ impl EffectsManager {
 
             match &instance.effect {
                 EffectType::Grid(effect) => {
-                    current_style = effect.apply(&base_style, time);
+                    //current_style = effect.apply(&base_style, time);
+                    current_style = base_style.clone();
                 }
                 EffectType::Segment(effect) => {
                     if effect.is_segment_active(segment_id) {
@@ -106,6 +107,35 @@ impl EffectsManager {
 
         current_style
     }
+
+        // Apply all active effects
+        pub fn apply_grid_effects(&self, segment_id: &str, base_style: DrawStyle, time:f32) -> DrawStyle {
+            if self.effects.is_empty() {
+                return base_style;
+            }
+    
+            let mut current_style = base_style.clone();
+    
+            for instance in self.effects.values() {
+                if !instance.is_active {
+                    continue;
+                }
+    
+                match &instance.effect {
+                    EffectType::Grid(effect) => {
+                        current_style = effect.apply(&base_style, time);
+                    }
+                    EffectType::Segment(effect) => {
+                        if effect.is_segment_active(segment_id) {
+                            //current_style = effect.apply_to_segment(segment_id, &base_style, time);
+                            current_style = base_style.clone();
+                        }
+                    }
+                }
+            }
+    
+            current_style
+        }
 
     // for segment-specific operations
     pub fn activate_segment(&mut self, segment_id: &str, effect_name: &str, time: f32) {

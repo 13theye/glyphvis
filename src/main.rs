@@ -5,7 +5,7 @@ use rand::Rng;
 
 use glyphvis::{
     models:: Project,
-    views:: { GridInstance, DrawStyle },
+    views:: { GridInstance, DrawStyle, Transform2D },
     controllers:: GlyphController,
     services:: { FrameRecorder, OutputFormat },
     //effects::{ EffectsManager, init_effects },
@@ -32,6 +32,8 @@ const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json"
 // grid scale factor
 //const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
+const BPM: u32 = 120;
+
 
 struct Model {
     // Core components:
@@ -46,6 +48,8 @@ struct Model {
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
+
+    // Style
     effect_target_style: DrawStyle, // for testing
 
     // Frame recording:
@@ -161,8 +165,9 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         Key::Space => {
             let segment_ids = model.glyphs.next_glyph(&model.project);
+            let color_hsl = hsl (model.random.gen(), model.random.gen(), 0.3);
             let glyph_style = DrawStyle {
-                color: rgb(model.random.gen(), model.random.gen(), model.random.gen()),
+                color: Rgb::from(color_hsl),
                 stroke_weight: 5.0,
             };
             
@@ -175,7 +180,13 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
         }, 
         Key::G => {
-            make_three_grids(app, model);
+            if model.grids.is_empty() {
+                make_three_grids(app, model);
+            } else {
+                for (_, grid_instance) in model.grids.iter_mut() {
+                    grid_instance.visible = !grid_instance.visible;
+                }  
+            }
         },
         Key::R => model.frame_recorder.toggle_recording(),
         Key::Q => {
@@ -185,6 +196,26 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 model.frame_recorder.toggle_recording();
             }
             model.exit_requested = true;
+        },
+        Key::Right => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                let position_delta = Transform2D {
+                    translation: pt2(10.0, 0.0),
+                    scale: 1.0,
+                    rotation: 0.0,
+                };
+                grid_instance.apply_transform(&position_delta);
+            }
+        },
+        Key::Left => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                let position_delta = Transform2D {
+                    translation: pt2(-10.0, 0.0),
+                    scale: 1.0,
+                    rotation: 0.0,
+                };
+                grid_instance.apply_transform(&position_delta);
+            }
         },
         _ => (),
     }
@@ -223,7 +254,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     for (_, grid_instance) in model.grids.iter() {
 
-        let glyph_segments = model.glyphs.get_renderable_segments(
+        let ready_segments = model.glyphs.get_renderable_segments(
             &model.project,
             grid_instance,
             &model.effect_target_style,
@@ -232,7 +263,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             false,
             false,
         );
-
+/* 
         let bg_segments = model.glyphs.get_renderable_segments(
             &model.project,
             grid_instance,
@@ -242,11 +273,14 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             true,
             false,
         );
+        */
 
-        //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
-        //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
-        grid_instance.draw_segments(&draw, bg_segments);
-        grid_instance.draw_segments(&draw, glyph_segments);
+        if grid_instance.visible {
+            //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
+            //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
+            //grid_instance.draw_segments(&draw, bg_segments);
+            grid_instance.draw_segments(&draw, ready_segments);
+        }
     }
 
 /*

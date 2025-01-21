@@ -7,7 +7,7 @@ use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Project, Glyph};
-use crate::views:: { GridInstance, DrawStyle, RenderableSegment };
+use crate::views:: { GridInstance, DrawStyle, RenderableSegment, Layer };
 
 use crate::effects::EffectsManager;
 
@@ -91,11 +91,12 @@ impl GlyphController {
                             };
 
                             // Apply effect if one is provided
-                            let final_style = effect_manager.apply_effects(&segment.id, base_style, time);
+                            let final_style = effect_manager.apply_segment_effects(&segment.id, base_style, time);
 
                             return_segments.push(RenderableSegment {
                                 segment,
                                 style: final_style,
+                                layer: Layer::Foreground,
                             });
                         }
                     } else {
@@ -111,11 +112,12 @@ impl GlyphController {
                             };
 
                             // Apply effect if one is provided
-                            let final_style = effect_manager.apply_effects(&segment.id, base_style, time);
+                            let final_style = effect_manager.apply_grid_effects(&segment.id, base_style, time);
 
                             return_segments.push(RenderableSegment {
                                 segment,
                                 style: final_style,
+                                layer: Layer::Background,
                             });
                         }
                     }

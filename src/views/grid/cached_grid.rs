@@ -103,9 +103,16 @@ impl Default for DrawStyle {
 }
 
 #[derive(Debug, Clone)]
+pub enum Layer {
+    Background,
+    Foreground,
+}
+
+#[derive(Debug, Clone)]
 pub struct RenderableSegment<'a>{
     pub segment: &'a CachedSegment,
     pub style: DrawStyle,
+    pub layer: Layer,
 }
 
 

@@ -254,7 +254,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
 
 fn update(app: &App, model: &mut Model, _update: Update) {
 
-    // FPS
+    // FPS calculation
     if model.debug_flag {
         let now = Instant::now();
         let duration = now - model.last_update;
@@ -262,6 +262,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         model.fps = 1.0/duration.as_secs_f32();
     }
 
+    // Update the current model-wide glyph here -- solves timing issues
     if model.needs_glyph_update{
         update_glyph(app, model);
         model.needs_glyph_update = false;
@@ -277,7 +278,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return;  // Important: return here to not continue with normal rendering
     }
 
-    // Set bg style
+    // Set background base style
     let bg_style = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
         stroke_weight: 5.0,
@@ -292,6 +293,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     //let start_time = std::time::Instant::now();
 
+    // Loop over each GridInstance and Draw
     for (_, grid_instance) in model.grids.iter() {
         
         //let grid_start = std::time::Instant::now();
@@ -306,7 +308,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             false,
         );
 
-        // render operations
+        // drawing operations
         if grid_instance.visible {
             grid_instance.draw_segments(&draw, ready_segments);
         }

@@ -1,7 +1,7 @@
-// src/models/glyph_model.rs
-// a structure that holds ready-to-render glyphs
-// data model and constructors for Glyphs, which are on the same level as Grids.
-// also applies effects
+// src/controller/glyph_controller.rs
+/// GlyphController coordinates between the Project and the GridInstance
+/// Gets the Glyph's segment_ids from Project
+/// Uses that to build foreground and background RenderableSegments from GridInstance
 
 use nannou::prelude::*;
 use std::collections::HashSet;

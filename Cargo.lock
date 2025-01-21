@@ -709,6 +709,7 @@ version = "0.0.1"
 dependencies = [
  "nannou",
  "rand 0.8.5",
+ "rayon",
  "regex",
  "serde",
  "serde_json",

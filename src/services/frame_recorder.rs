@@ -2,14 +2,15 @@
 // FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk
 // Its own thread is used to process frames in batches to avoid blocking the main thread
 
+use rayon::prelude::*;
 use std::fs::{ create_dir_all, File };
 use std::io::BufWriter;
 use std::sync::{ Arc, Mutex };
 use std::sync::mpsc::{ channel, Sender };
+use std::sync::atomic::{ AtomicUsize, AtomicBool, Ordering };
 use std::collections::VecDeque;
 use nannou::wgpu;
 use nannou::image::RgbaImage;
-use std::sync::atomic::{ AtomicUsize, AtomicBool, Ordering };
 
 const BATCH_SIZE: usize = 10; // Process n frames at a time
 const FPS: u64 = 30;
@@ -243,7 +244,13 @@ fn process_frame_batch(
     frames_processed: &AtomicUsize,
     _frames_in_queue: &AtomicUsize,
 ) {
-    while let Some((frame_number, frame_data, width, height)) = frame_buffer.pop_front() {
+
+    // Convert batch of frames to a vector for parallel processing
+    let frames: Vec<_> = frame_buffer.drain(..).collect();
+
+    // Process frames in parallel
+
+    frames.into_par_iter().for_each(|(frame_number, frame_data, width, height)| {
         if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
             let filename = match format {
                 //OutputFormat::PNG => format!("{}/frame{:05}.png", output_dir, frame_number),
@@ -282,7 +289,7 @@ fn process_frame_batch(
                 frames_processed.fetch_add(1, Ordering::SeqCst);
             }
         }
-    }
+    });
 }
 
 #[cfg(test)]

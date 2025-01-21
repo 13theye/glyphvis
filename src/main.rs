@@ -182,12 +182,19 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
         Key::Space => {
             model.needs_glyph_update = true;
         }, 
+        Key::Backslash => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.reset_location();
+            }
+        },
         Key::G => {
             if model.grids.is_empty() {
                 make_three_grids(app, model);
             } else {
-                for (_, grid_instance) in model.grids.iter_mut() {
-                    grid_instance.visible = !grid_instance.visible;
+                for (name, grid_instance) in model.grids.iter_mut() {
+                    if name != "Grid Center"{
+                        grid_instance.visible = !grid_instance.visible;
+                    }
                 }  
             }
         },
@@ -328,7 +335,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
  */
 
     // Visualize FPS (Optional)
-    draw.text(&format!("FPS: {:.2}", model.fps))
+    draw.text(&format!("FPS: {:.1}", model.fps))
         .x_y(1100.0, 290.0)
         .color(RED);
 
@@ -336,7 +343,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     render_and_capture(app, model);
 
     let total_duration = start_time.elapsed();
-    println!("Total update time: {:?}", total_duration);
+    //println!("Total update time: {:?}", total_duration);
 
 }
 

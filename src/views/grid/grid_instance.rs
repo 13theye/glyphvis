@@ -12,7 +12,10 @@ pub struct GridInstance {
     pub grid: CachedGrid,
     
     pub effects_manager: EffectsManager,
-    pub location: Transform2D,
+    pub spawn_location: Point2,
+    pub spawn_rotation: f32,
+    pub current_location: Point2,
+    pub current_rotation: f32,
     pub visible: bool,
 }
 
@@ -31,20 +34,33 @@ impl GridInstance {
             grid,
 
             effects_manager: init_effects::init_effects(app),
-            location: transform,
+            spawn_location: position,
+            spawn_rotation: rotation,
+            current_location: position,
+            current_rotation: rotation,
             visible: true,
         }
     }
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        self.location = self.location.combine(transform);
+        self.current_location += transform.translation;
+        println!("{:?} Current location: {:?}", self.id, self.current_location);
         self.grid.apply_transform(transform);
+    }
+
+    pub fn reset_location(&mut self) {
+        let transform = Transform2D {
+            translation: self.spawn_location - self.current_location,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+        self.apply_transform(&transform);
     }
 
     pub fn rotate_in_place(&mut self, angle: f32) {
         // 1. Transform to pivot-relative space
         let to_local = Transform2D {
-            translation: -self.location.translation,
+            translation: -self.current_location,
             scale: 1.0,
             rotation: 0.0,
         };
@@ -58,7 +74,7 @@ impl GridInstance {
 
         // 3. Transform back
         let to_world = Transform2D {
-            translation: self.location.translation,
+            translation: self.current_location,
             scale: 1.0,
             rotation: 0.0,
         };
@@ -69,7 +85,7 @@ impl GridInstance {
         self.grid.apply_transform(&to_world);
         
         // Update location's rotation (but not position)
-        self.location.rotation += angle;
+        self.current_rotation += angle;
     }
 
 
@@ -84,7 +100,7 @@ impl GridInstance {
     pub fn print_grid_info(&self) {
         println!("<====== Grid Instance: {} ======>", self.id);
         println!("\nGrid Info:");
-        println!("Location: {:?}", self.location.translation);
+        println!("Location: {:?}", self.current_location);
         println!("Dimensions: {:?}", self.grid.dimensions);
         println!("Viewbox: {:?}", self.grid.viewbox);
         println!("Segment count: {}\n", self.grid.segments.len());

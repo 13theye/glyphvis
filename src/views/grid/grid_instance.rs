@@ -44,7 +44,6 @@ impl GridInstance {
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         self.current_location += transform.translation;
-        println!("{:?} Current location: {:?}", self.id, self.current_location);
         self.grid.apply_transform(transform);
     }
 

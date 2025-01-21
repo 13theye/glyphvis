@@ -93,7 +93,7 @@ impl EffectsManager {
             }
 
             match &instance.effect {
-                EffectType::Grid(effect) => {
+                EffectType::Grid(_) => {
                     //current_style = effect.apply(&base_style, time);
                     continue;
                 }

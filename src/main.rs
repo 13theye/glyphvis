@@ -33,25 +33,25 @@ const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json"
 // grid scale factor
 //const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
-const BPM: u32 = 120;
+// const BPM: u32 = 120;
 
 
 struct Model {
     // Core components:
     project: Project,
-    grids: HashMap<String, GridInstance>,    //grid: CachedGrid,
+    grids: HashMap<String, GridInstance>,    //<grid_id : CachedGrid>
     glyphs: GlyphController,
 
     // Rendering components:
-    //effects_manager: EffectsManager,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
 
-    // Sync
+    // Message
     needs_glyph_update: bool,
+    debug_flag: bool,
 
     // Style
     effect_target_style: DrawStyle, // for testing
@@ -153,7 +153,6 @@ fn model(app: &App) -> Model {
         grids: HashMap::new(),   //grid,
         glyphs,
 
-        //effects_manager: init_effects(&app),
         texture,
         draw,
         draw_renderer,
@@ -161,6 +160,7 @@ fn model(app: &App) -> Model {
         random: rand::thread_rng(),
 
         needs_glyph_update: false,
+        debug_flag: false,
 
         effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
@@ -179,14 +179,17 @@ fn model(app: &App) -> Model {
 
 fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
+        // show next glyph
         Key::Space => {
             model.needs_glyph_update = true;
-        }, 
+        },
+        // Return grids to where they spawned
         Key::Backslash => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.reset_location();
             }
         },
+        // Init grids or hide/show them
         Key::G => {
             if model.grids.is_empty() {
                 make_three_grids(app, model);
@@ -199,6 +202,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
         },
         Key::R => model.frame_recorder.toggle_recording(),
+        // Graceful quit that waits for frame queue to be processed
         Key::Q => {
             let (processed, total) = model.frame_recorder.get_queue_status();
             println!("Processed {} frames out of {}", processed, total);
@@ -207,6 +211,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
             model.exit_requested = true;
         },
+        // Move grids 10pts to the right
         Key::Right => {
             let position_delta = Transform2D {
                 translation: pt2(10.0, 0.0),
@@ -217,6 +222,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 grid_instance.apply_transform(&position_delta);
             }
         },
+        // Move grids 10pts to the left
         Key::Left => {
             let position_delta = Transform2D {
                 translation: pt2(-10.0, 0.0),
@@ -227,28 +233,34 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 grid_instance.apply_transform(&position_delta);
             }
         },
+        // Rotate grids 90 degrees
         Key::Up => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.rotate_in_place(90.0)
             }
         },
+        // Rotate grids -90 degrees
         Key::Down => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.rotate_in_place(-90.0);
             }
         },
+        Key::P => {
+            model.debug_flag = !model.debug_flag;
+        }
         _ => (),
     }
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
-    //let debug_flag = false;
 
     // FPS
-    let now = Instant::now();
-    let duration = now - model.last_update;
-    model.last_update = now;
-    model.fps = 1.0/duration.as_secs_f32();
+    if model.debug_flag {
+        let now = Instant::now();
+        let duration = now - model.last_update;
+        model.last_update = now;
+        model.fps = 1.0/duration.as_secs_f32();
+    }
 
     if model.needs_glyph_update{
         update_glyph(app, model);
@@ -265,9 +277,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return;  // Important: return here to not continue with normal rendering
     }
 
-    // auto cycle glyphs
-    //model.glyph_model.next_glyph();
-
     // Set bg style
     let bg_style = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
@@ -281,9 +290,9 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     };
     */
 
-    let start_time = std::time::Instant::now();
+    //let start_time = std::time::Instant::now();
 
-    for (name, grid_instance) in model.grids.iter() {
+    for (_, grid_instance) in model.grids.iter() {
         
         //let grid_start = std::time::Instant::now();
 
@@ -296,53 +305,39 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             app.time,
             false,
         );
-/* 
-        let bg_segments = model.glyphs.get_renderable_segments(
-            &model.project,
-            grid_instance,
-            &bg_style,
-            &grid_instance.effects_manager,
-            app.time,
-            true,
-            false,
-        );
-        */
 
         // render operations
         if grid_instance.visible {
-            //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
-            //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
-            //grid_instance.draw_segments(&draw, bg_segments);
             grid_instance.draw_segments(&draw, ready_segments);
-
         }
 
         //let grid_duration = grid_start.elapsed();
         //println!("Grid {} update time: {:?}", name, grid_duration);
     }
 
+    if model.debug_flag {
+        // Draw (+,+) axes
+        let draw = &model.draw;
+        draw.line()
+            .points(pt2(0.0, 0.0), pt2(50.0, 0.0))
+            .color(RED)
+            .stroke_weight(1.0);
+        draw.line()
+            .points(pt2(0.0, 0.0), pt2(0.0, 50.0))
+            .color(BLUE)
+            .stroke_weight(1.0);
 
-/*
-    // Add debug visualization of coordinate system
-    draw.line()
-        .points(pt2(0.0, 0.0), pt2(100.0, 0.0))
-        .color(RED)
-        .stroke_weight(1.0);
-    draw.line()
-        .points(pt2(0.0, 0.0), pt2(0.0, 100.0))
-        .color(BLUE)
-        .stroke_weight(1.0);
- */
+        // Visualize FPS (Optional)
+        draw.text(&format!("FPS: {:.1}", model.fps))
+            .x_y(1100.0, 290.0)
+            .color(RED);
 
-    // Visualize FPS (Optional)
-    draw.text(&format!("FPS: {:.1}", model.fps))
-        .x_y(1100.0, 290.0)
-        .color(RED);
+    }
 
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
 
-    let total_duration = start_time.elapsed();
+    //let total_duration = start_time.elapsed();
     //println!("Total update time: {:?}", total_duration);
 
 }
@@ -497,26 +492,3 @@ fn make_three_grids(app: &App, model: &mut Model) {
         grid.print_grid_info();
     }
 }
-
-
-/*
-fn print_grid_info(grid: &CachedGrid) {
-    println!("\nGrid Info:");
-    println!("Dimensions: {:?}", grid.dimensions);
-    println!("Viewbox: {:?}", grid.viewbox);
-    println!("Segment count: {}", grid.segments.len());
-    
-    // Print first few segments for inspection
-    
-    for (i, (id, segment)) in grid.segments.iter().take(2).enumerate() {
-        println!("\nSegment {}: {}", i, id);
-        println!("Position: {:?}", segment.tile_pos);
-        println!("Edge type: {:?}", segment.edge_type);
-        
-        for (j, cmd) in segment.draw_commands.iter().take(2).enumerate() {
-            println!("  Command {}: {:?}", j, cmd);
-        }
-    }
-     
-}
-    */

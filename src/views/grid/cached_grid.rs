@@ -7,7 +7,7 @@
 // DrawCommand, CachedSegment, and CachedGrid
 
 use nannou::prelude::*;
-use std::collections::{ HashMap, HashSet };
+use std::collections::HashMap;
 
 use crate::models::{ ViewBox, EdgeType, PathElement, Project };
 use crate::services::svg::{parse_svg, detect_edge_type};

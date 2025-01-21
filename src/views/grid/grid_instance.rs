@@ -37,9 +37,41 @@ impl GridInstance {
     }
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        self.location.combine(transform);
+        self.location = self.location.combine(transform);
         self.grid.apply_transform(transform);
     }
+
+    pub fn rotate_in_place(&mut self, angle: f32) {
+        // 1. Transform to pivot-relative space
+        let to_local = Transform2D {
+            translation: -self.location.translation,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+
+        // 2. Just rotation
+        let rotate = Transform2D {
+            translation: Vec2::ZERO,
+            scale: 1.0,
+            rotation: angle,
+        };
+
+        // 3. Transform back
+        let to_world = Transform2D {
+            translation: self.location.translation,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+
+        // Apply each transform in sequence
+        self.grid.apply_transform(&to_local);
+        self.grid.apply_transform(&rotate);
+        self.grid.apply_transform(&to_world);
+        
+        // Update location's rotation (but not position)
+        self.location.rotation += angle;
+    }
+
 
     pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
         self.grid.draw_segments(draw, &segments);

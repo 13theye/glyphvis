@@ -211,23 +211,13 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
         },
         Key::Up => {
-            let position_delta = Transform2D {
-                translation: pt2(0.0, 0.0),
-                scale: 1.0,
-                rotation: 90.0,
-            };
             for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.apply_transform(&position_delta);
+                grid_instance.rotate_in_place(90.0)
             }
         },
         Key::Down => {
-            let position_delta = Transform2D {
-                translation: pt2(0.0, 0.0),
-                scale: 1.0,
-                rotation: -90.0,
-            };
             for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.apply_transform(&position_delta);
+                grid_instance.rotate_in_place(-90.0);
             }
         },
         _ => (),

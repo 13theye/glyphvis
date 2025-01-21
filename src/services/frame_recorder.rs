@@ -148,12 +148,6 @@ impl FrameRecorder {
             return;
         }
 
-        // Check if previous capture is still in progress
-        if self.capture_in_progress.load(Ordering::SeqCst) {
-            println!("Capture in progress, skipping frame");
-            return;
-        }
-
         // Check if enough time has passed since last capture
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -161,11 +155,28 @@ impl FrameRecorder {
             .as_nanos() as u64;
 
         let mut last_capture = self.last_capture.lock().unwrap();
+
+        let time_since_last = now - *last_capture;
+        if time_since_last > FRAME_TIME * 2 {  // If we've missed more than one frame interval
+            println!("WARNING: Frame timing gap detected - {}ms since last capture (expected {}ms)", 
+                    time_since_last / 1_000_000, 
+                    FRAME_TIME / 1_000_000);
+
+        // Check if previous capture is still in progress
+        if self.capture_in_progress.load(Ordering::SeqCst) {
+            println!("DEBUG: Previous capture still processing after {}ms", 
+            time_since_last / 1_000_000);
+            return;
+        }
+}
+
         if now - *last_capture < FRAME_TIME {
             return;
         }
 
         *last_capture = now;
+        let capture_start = std::time::Instant::now();
+
 
         let mut frame_number = self.frame_number.lock().unwrap();
         if *frame_number >= self.frame_limit {
@@ -187,7 +198,11 @@ impl FrameRecorder {
         
         // Create snapshot in its own scope to ensure proper cleanup
         let snapshot = {
+            let snapshot_start = std::time::Instant::now();
+
             let snapshot = self.texture_capturer.capture(device, encoder, texture);
+            println!("DEBUG: Texture capture took {}ms", 
+                snapshot_start.elapsed().as_micros() as f64 / 1000.0);
             snapshot
         };
         
@@ -195,11 +210,15 @@ impl FrameRecorder {
         let height = texture.height();
 
         if let Err(e) = snapshot.read(move |result| {
+            let read_start = std::time::Instant::now();
+
             match result {
                 Ok(buffer) => {
                     // Scope the buffer data conversion
                     let data = {
                         let raw_data = buffer.to_owned().into_raw();
+                        println!("DEBUG: Buffer conversion took {}ms", 
+                            read_start.elapsed().as_micros() as f64 / 1000.0);
                         raw_data
                     }; // buffer is dropped here
                     frames_in_queue.fetch_add(1, Ordering::SeqCst);
@@ -215,6 +234,8 @@ impl FrameRecorder {
             }
 
             // Clear capture in progress flag
+            println!("DEBUG: Total capture pipeline took {}ms", 
+            capture_start.elapsed().as_micros() as f64 / 1000.0);
             capture_in_progress_outer.store(false, Ordering::SeqCst);
 
         }) {

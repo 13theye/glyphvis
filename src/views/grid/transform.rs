@@ -1,4 +1,5 @@
 use nannou::prelude::*;
+use std::f32::consts::PI;
 
 #[derive(Debug, Clone)]
 pub struct Transform2D {
@@ -33,8 +34,9 @@ impl Transform2D {
         let scaled = point * self.scale;
 
         // 2. Rotate
-        let cos_rot = self.rotation.cos();
-        let sin_rot = self.rotation.sin();
+        let rotation = self.rotation * PI / 180.0;
+        let cos_rot = rotation.cos();
+        let sin_rot = rotation.sin();
         let rotated = pt2(
             scaled.x * cos_rot - scaled.y * sin_rot,
             scaled.x * sin_rot + scaled.y * cos_rot,

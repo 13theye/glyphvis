@@ -149,6 +149,7 @@ impl FrameRecorder {
 
         // Check if previous capture is still in progress
         if self.capture_in_progress.load(Ordering::SeqCst) {
+            println!("Capture in progress, skipping frame");
             return;
         }
 
@@ -162,6 +163,7 @@ impl FrameRecorder {
         if now - *last_capture < FRAME_TIME {
             return;
         }
+
         *last_capture = now;
 
         let mut frame_number = self.frame_number.lock().unwrap();

@@ -1,6 +1,7 @@
 // src/main.rs
 use nannou::prelude::*;
 use std::collections::HashMap;
+use std::time::Instant;
 use rand::Rng;
 
 use glyphvis::{
@@ -58,6 +59,10 @@ struct Model {
     // Frame recording:
     frame_recorder: FrameRecorder,
     exit_requested: bool,
+
+    // FPS
+    last_update: Instant,
+    fps: f32,
 }
 
 fn main() {
@@ -164,6 +169,11 @@ fn model(app: &App) -> Model {
 
         frame_recorder,
         exit_requested: false,
+
+        // FPS
+        last_update: Instant::now(),
+        fps: 0.0,
+
     }
 }
 
@@ -227,6 +237,12 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
 fn update(app: &App, model: &mut Model, _update: Update) {
     //let debug_flag = false;
 
+    // FPS
+    let now = Instant::now();
+    let duration = now - model.last_update;
+    model.last_update = now;
+    model.fps = 1.0/duration.as_secs_f32();
+
     if model.needs_glyph_update{
         update_glyph(app, model);
         model.needs_glyph_update = false;
@@ -258,7 +274,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     };
     */
 
-    for (_, grid_instance) in model.grids.iter() {
+    let start_time = std::time::Instant::now();
+
+    for (name, grid_instance) in model.grids.iter() {
+        
+        //let grid_start = std::time::Instant::now();
 
         let ready_segments = model.glyphs.get_renderable_segments(
             &model.project,
@@ -267,7 +287,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             &bg_style,
             &grid_instance.effects_manager,
             app.time,
-            false,
             false,
         );
 /* 
@@ -288,8 +307,13 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
             //grid_instance.draw_segments(&draw, bg_segments);
             grid_instance.draw_segments(&draw, ready_segments);
+
         }
+
+        //let grid_duration = grid_start.elapsed();
+        //println!("Grid {} update time: {:?}", name, grid_duration);
     }
+
 
 /*
     // Add debug visualization of coordinate system
@@ -303,8 +327,16 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         .stroke_weight(1.0);
  */
 
+    // Visualize FPS (Optional)
+    draw.text(&format!("FPS: {:.2}", model.fps))
+        .x_y(1100.0, 290.0)
+        .color(RED);
+
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
+
+    let total_duration = start_time.elapsed();
+    println!("Total update time: {:?}", total_duration);
 
 }
 

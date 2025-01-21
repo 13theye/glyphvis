@@ -14,7 +14,7 @@ use crate::services::svg::{parse_svg, detect_edge_type};
 use crate::services::grid::*;
 use crate::views::Transform2D;
 
-const ARC_RESOLUTION: usize = 128;
+const ARC_RESOLUTION: usize = 25;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data
@@ -124,7 +124,7 @@ pub struct CachedSegment {
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
-    pub transform: Transform2D,
+    //pub transform: Transform2D,
 }
 
 impl CachedSegment {
@@ -148,7 +148,7 @@ impl CachedSegment {
             draw_commands,
             original_path: path.clone(),
             edge_type,
-            transform: Transform2D::default(),
+            //transform: Transform2D::default(),
         }
     }
 
@@ -241,8 +241,6 @@ pub struct CachedGrid {
     pub segments: HashMap<String, CachedSegment>,
     pub viewbox: ViewBox,
     pub transform: Transform2D,
-    pub active_glyph: Option<String>, // active glyph name
-    pub active_segments: HashSet<String>, // active segments by id
 }
 
 impl CachedGrid {
@@ -291,8 +289,6 @@ impl CachedGrid {
             segments,
             viewbox: viewbox,
             transform: Transform2D::default(),
-            active_glyph: None,
-            active_segments: HashSet::new(),
         }
     }
 
@@ -429,20 +425,6 @@ impl CachedGrid {
             .values()
             .filter(|segment| segment.tile_pos == (x, y))
             .collect()
-    }
-
-    pub fn set_glyph(&mut self, glyph_name: Option<&str>, project: &Project) {
-        self.active_glyph = glyph_name.map(String::from);
-        self.active_segments = match glyph_name {
-            Some(name) => project.get_glyph(name)
-                .map(| glyph| glyph.segments.iter().cloned().collect())
-                .unwrap_or_default(),
-            None => HashSet::new(),
-        };
-    }
-
-    pub fn get_active_glyph(&self) -> Option<&str> {
-        self.active_glyph.as_deref()
     }
 
 /* 

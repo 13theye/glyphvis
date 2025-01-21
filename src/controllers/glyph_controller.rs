@@ -59,7 +59,6 @@ impl GlyphController {
         background_style: &DrawStyle,
         effect_manager: &EffectsManager,
         time: f32,
-        bg_flag: bool,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
     

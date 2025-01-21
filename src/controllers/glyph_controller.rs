@@ -55,7 +55,8 @@ impl GlyphController {
         &self,
         project: &Project,
         grid_instance: &'a GridInstance,
-        base_style: &DrawStyle,
+        foreground_style: &DrawStyle,
+        background_style: &DrawStyle,
         effect_manager: &EffectsManager,
         time: f32,
         bg_flag: bool,
@@ -78,52 +79,49 @@ impl GlyphController {
                 let segments = grid.get_segments_at(x, y);
                 
                 for segment in segments {
-                    if !bg_flag {
-                        if active_segment_ids.contains(&segment.id) {
-                            let base_style = if debug_flag {
-                                let g = debug_color(x, y);
-                                DrawStyle {
-                                    color: rgb(0.9, g, 0.0),
-                                    stroke_weight: base_style.stroke_weight,
-                                }
-                            } else {
-                                base_style.clone()
-                            };
 
-                            // Apply effect if one is provided
-                            let final_style = effect_manager.apply_segment_effects(&segment.id, base_style, time);
+                    if active_segment_ids.contains(&segment.id) {
+                        let base_style = if debug_flag {
+                            let g = debug_color(x, y);
+                            DrawStyle {
+                                color: rgb(0.9, g, 0.0),
+                                stroke_weight: foreground_style.stroke_weight,
+                            }
+                        } else {
+                            foreground_style.clone()
+                        };
+                        // Apply effect if one is provided
+                        let final_style = effect_manager.apply_segment_effects(&segment.id, base_style, time);
 
-                            return_segments.push(RenderableSegment {
-                                segment,
-                                style: final_style,
-                                layer: Layer::Foreground,
-                            });
-                        }
+                        return_segments.push(RenderableSegment {
+                            segment,
+                            style: final_style,
+                            layer: Layer::Foreground,
+                        });
+
                     } else {
-                        if !active_segment_ids.contains(&segment.id) {
-                            let base_style = if debug_flag {
-                                let g = debug_color(x, y);
-                                DrawStyle {
-                                    color: rgb(0.0, g, 1.0),
-                                    stroke_weight: base_style.stroke_weight,
-                                }
-                            } else {
-                                base_style.clone()
-                            };
+                        let base_style = if debug_flag {
+                            let g = debug_color(x, y);
+                            DrawStyle {
+                                color: rgb(0.0, g, 1.0),
+                                stroke_weight: foreground_style.stroke_weight,
+                            }
+                        } else {
+                            background_style.clone()
+                        };
+                        // Apply effect if one is provided
+                        let final_style = effect_manager.apply_grid_effects(&segment.id, base_style, time);
 
-                            // Apply effect if one is provided
-                            let final_style = effect_manager.apply_grid_effects(&segment.id, base_style, time);
-
-                            return_segments.push(RenderableSegment {
-                                segment,
-                                style: final_style,
-                                layer: Layer::Background,
-                            });
-                        }
-                    }
+                        return_segments.push(RenderableSegment {
+                            segment,
+                            style: final_style,
+                            layer: Layer::Background,
+                        });
+                    };
                 }
             }
         }
+
         return_segments
     }
 }

@@ -49,6 +49,9 @@ struct Model {
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
 
+    // Sync
+    needs_glyph_update: bool,
+
     // Style
     effect_target_style: DrawStyle, // for testing
 
@@ -151,6 +154,9 @@ fn model(app: &App) -> Model {
         draw_renderer,
         texture_reshaper,
         random: rand::thread_rng(),
+
+        needs_glyph_update: false,
+
         effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
             stroke_weight: 5.0,
@@ -164,20 +170,7 @@ fn model(app: &App) -> Model {
 fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         Key::Space => {
-            let segment_ids = model.glyphs.next_glyph(&model.project);
-            let color_hsl = hsl (model.random.gen(), model.random.gen(), 0.3);
-            let glyph_style = DrawStyle {
-                color: Rgb::from(color_hsl),
-                stroke_weight: 5.0,
-            };
-            
-            for (_, grid_instance) in model.grids.iter_mut() {
-                for segment_id in &segment_ids {
-                    grid_instance.effects_manager.activate_segment(&segment_id, "power_on", app.time);
-
-                    model.effect_target_style = glyph_style.clone();
-                }
-            }
+            model.needs_glyph_update = true;
         }, 
         Key::G => {
             if model.grids.is_empty() {
@@ -224,20 +217,16 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
 fn update(app: &App, model: &mut Model, _update: Update) {
     //let debug_flag = false;
 
-    // auto cycle glyphs
-    //model.glyph_model.next_glyph();
-
     // frames processing progress bar:
     if model.exit_requested {
         handle_exit_state(app, model);  
         return;  // Important: return here to not continue with normal rendering
     }
 
-    // normal rendering routine begin:
-    let draw = &model.draw;
-    draw.background().color(BLACK);
+    // auto cycle glyphs
+    //model.glyph_model.next_glyph();
 
-    // Apply the current effect
+    // Set bg style
     let bg_style = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
         stroke_weight: 5.0,
@@ -250,7 +239,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     };
     */
 
-
+    if model.needs_glyph_update{
+        update_glyph(app, model);
+        model.needs_glyph_update = false;
+    }
 
     for (_, grid_instance) in model.grids.iter() {
 
@@ -258,6 +250,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             &model.project,
             grid_instance,
             &model.effect_target_style,
+            &bg_style,
             &grid_instance.effects_manager,
             app.time,
             false,
@@ -275,6 +268,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         );
         */
 
+        // render operations
+            // setting up draw
+        let draw = &model.draw;
+        draw.background().color(BLACK);
         if grid_instance.visible {
             //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
             //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
@@ -310,6 +307,26 @@ fn view(_app: &App, model: &Model, frame: Frame) {
         .texture_reshaper
         .encode_render_pass(frame.texture_view(), &mut *encoder);
 
+}
+
+// ******************************* State-triggered functions *****************************
+
+
+fn update_glyph(app: &App, model: &mut Model) {
+    let segment_ids = model.glyphs.next_glyph(&model.project);
+    let color_hsl = hsl (model.random.gen(), model.random.gen(), 0.3);
+    let glyph_style = DrawStyle {
+        color: Rgb::from(color_hsl),
+        stroke_weight: 5.0,
+    };
+    
+    for (_, grid_instance) in model.grids.iter_mut() {
+        for segment_id in &segment_ids {
+            grid_instance.effects_manager.activate_segment(&segment_id, "power_on", app.time);
+
+            model.effect_target_style = glyph_style.clone();
+        }
+    }
 }
 
 

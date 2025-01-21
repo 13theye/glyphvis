@@ -102,7 +102,7 @@ impl Default for DrawStyle {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Layer {
     Background,
     Foreground,
@@ -372,12 +372,26 @@ impl CachedGrid {
     }
 
     // Rendering methods
-    pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
-        for segment in segments {
-            for command in &segment.segment.draw_commands {
-                command.draw(draw, &segment.style);
-            }
-        }
+    pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
+        // Process and draw background segments
+        segments
+            .iter()
+            .filter(|segment| segment.layer == Layer::Background)
+            .for_each(|segment| {
+                for command in &segment.segment.draw_commands {
+                    command.draw(draw, &segment.style);
+                }
+            });
+    
+        // Process and draw foreground segments
+        segments
+            .iter()
+            .filter(|segment| segment.layer == Layer::Foreground)
+            .for_each(|segment| {
+                for command in &segment.segment.draw_commands {
+                    command.draw(draw, &segment.style);
+                }
+            });
     }
 
 /*

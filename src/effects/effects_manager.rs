@@ -95,7 +95,7 @@ impl EffectsManager {
             match &instance.effect {
                 EffectType::Grid(effect) => {
                     //current_style = effect.apply(&base_style, time);
-                    current_style = base_style.clone();
+                    continue;
                 }
                 EffectType::Segment(effect) => {
                     if effect.is_segment_active(segment_id) {
@@ -128,7 +128,7 @@ impl EffectsManager {
                     EffectType::Segment(effect) => {
                         if effect.is_segment_active(segment_id) {
                             //current_style = effect.apply_to_segment(segment_id, &base_style, time);
-                            current_style = base_style.clone();
+                            continue;
                         }
                     }
                 }

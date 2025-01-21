@@ -42,7 +42,7 @@ impl GridInstance {
     }
 
     pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
-        self.grid.draw_segments(draw, segments);
+        self.grid.draw_segments(draw, &segments);
     }
 
     pub fn activate_segment_effect(&mut self, segment_id: &str, effect_name: &str, time: f32) {

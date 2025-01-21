@@ -5,4 +5,5 @@ pub mod grid;
 //pub mod ui;
 
 pub use grid::transform::Transform2D;
-pub use grid::cached_grid::{ CachedGrid, CachedSegment, RenderableSegment, DrawCommand, DrawStyle };
+pub use grid::cached_grid::{ CachedGrid, CachedSegment, RenderableSegment, Layer, DrawCommand, DrawStyle };
+pub use grid::grid_instance::GridInstance;

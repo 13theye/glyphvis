@@ -1,12 +1,15 @@
 // src/main.rs
 use nannou::prelude::*;
+use std::collections::HashMap;
+use std::time::Instant;
 use rand::Rng;
 
 use glyphvis::{
-    models:: { Project, GlyphModel },
-    views:: { CachedGrid, DrawStyle },
+    models:: Project,
+    views:: { GridInstance, DrawStyle, Transform2D },
+    controllers:: GlyphController,
     services:: { FrameRecorder, OutputFormat },
-    effects::{ EffectsManager, init_effects },
+    //effects::{ EffectsManager, init_effects },
 
 };
 
@@ -30,25 +33,36 @@ const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json"
 // grid scale factor
 //const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
+// const BPM: u32 = 120;
+
 
 struct Model {
     // Core components:
     project: Project,
-    grid: CachedGrid,
-    glyphs: GlyphModel,
+    grids: HashMap<String, GridInstance>,    //<grid_id : CachedGrid>
+    glyphs: GlyphController,
 
     // Rendering components:
-    effects_manager: EffectsManager,
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
-    effect_target_style: DrawStyle,
+
+    // Message
+    needs_glyph_update: bool,
+    debug_flag: bool,
+
+    // Style
+    effect_target_style: DrawStyle, // for testing
 
     // Frame recording:
     frame_recorder: FrameRecorder,
     exit_requested: bool,
+
+    // FPS
+    last_update: Instant,
+    fps: f32,
 }
 
 fn main() {
@@ -71,11 +85,13 @@ fn model(app: &App) -> Model {
     let project = Project::load(PROJECT_PATH)
         .expect("Failed to load project file");
     
+    /*
     // Create grid from project
     let grid = CachedGrid::new(&project);
     println!("Created grid with {} segments", grid.segments.len());
+    */
 
-    let glyphs = GlyphModel::new(&project);
+    let glyphs = GlyphController::new(&project);
 
     // Create window
     let window_id = app.new_window()
@@ -134,15 +150,18 @@ fn model(app: &App) -> Model {
 
     Model {
         project,
-        grid,
+        grids: HashMap::new(),   //grid,
         glyphs,
 
-        effects_manager: init_effects(&app),
         texture,
         draw,
         draw_renderer,
         texture_reshaper,
         random: rand::thread_rng(),
+
+        needs_glyph_update: false,
+        debug_flag: false,
+
         effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
             stroke_weight: 5.0,
@@ -150,23 +169,40 @@ fn model(app: &App) -> Model {
 
         frame_recorder,
         exit_requested: false,
+
+        // FPS
+        last_update: Instant::now(),
+        fps: 0.0,
+
     }
 }
 
 fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
+        // show next glyph
         Key::Space => {
-            let segment_ids = model.glyphs.next_glyph(&model.project);
-            for segment_id in segment_ids {
-                model.effects_manager.activate_segment(&segment_id, "power_on", app.time);
-                let glyph_style = DrawStyle {
-                    color: rgb(model.random.gen(), model.random.gen(), model.random.gen()),
-                    stroke_weight: 5.0,
-                };
-                model.effect_target_style = glyph_style;
+            model.needs_glyph_update = true;
+        },
+        // Return grids to where they spawned
+        Key::Backslash => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.reset_location();
+            }
+        },
+        // Init grids or hide/show them
+        Key::G => {
+            if model.grids.is_empty() {
+                make_three_grids(app, model);
+            } else {
+                for (name, grid_instance) in model.grids.iter_mut() {
+                    if name != "Grid Center"{
+                        grid_instance.visible = !grid_instance.visible;
+                    }
+                }  
             }
         },
         Key::R => model.frame_recorder.toggle_recording(),
+        // Graceful quit that waits for frame queue to be processed
         Key::Q => {
             let (processed, total) = model.frame_recorder.get_queue_status();
             println!("Processed {} frames out of {}", processed, total);
@@ -175,15 +211,65 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
             model.exit_requested = true;
         },
+        // Move grids 10pts to the right
+        Key::Right => {
+            let position_delta = Transform2D {
+                translation: pt2(10.0, 0.0),
+                scale: 1.0,
+                rotation: 0.0,
+            };
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.apply_transform(&position_delta);
+            }
+        },
+        // Move grids 10pts to the left
+        Key::Left => {
+            let position_delta = Transform2D {
+                translation: pt2(-10.0, 0.0),
+                scale: 1.0,
+                rotation: 0.0,
+            };
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.apply_transform(&position_delta);
+            }
+        },
+        // Rotate grids 90 degrees
+        Key::Up => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.rotate_in_place(90.0)
+            }
+        },
+        // Rotate grids -90 degrees
+        Key::Down => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.rotate_in_place(-90.0);
+            }
+        },
+        Key::P => {
+            model.debug_flag = !model.debug_flag;
+        }
         _ => (),
     }
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
-    //let debug_flag = false;
 
-    // auto cycle glyphs
-    //model.glyph_model.next_glyph();
+    // FPS
+    if model.debug_flag {
+        let now = Instant::now();
+        let duration = now - model.last_update;
+        model.last_update = now;
+        model.fps = 1.0/duration.as_secs_f32();
+    }
+
+    if model.needs_glyph_update{
+        update_glyph(app, model);
+        model.needs_glyph_update = false;
+    }
+
+    // Clear the window
+    let draw = &model.draw;
+    draw.background().color(BLACK);
 
     // frames processing progress bar:
     if model.exit_requested {
@@ -191,56 +277,68 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return;  // Important: return here to not continue with normal rendering
     }
 
-    // normal rendering routine begin:
-    let draw = &model.draw;
-    draw.background().color(BLACK);
-
-    // Apply the current effect
+    // Set bg style
     let bg_style = DrawStyle {
         color: rgb(0.2, 0.2, 0.2),
         stroke_weight: 5.0,
     };
 
+    /* 
+    let glyph_style = DrawStyle {
+        color: rgb(0.7, 0.1, 0.1),
+        stroke_weight: 5.0,
+    };
+    */
 
-    let glyph_segments = model.glyphs.get_renderable_segments(
-        &model.project,
-        &model.grid,
-        &model.effect_target_style,
-        &model.effects_manager,
-        app.time,
-        false,
-        false,
-    );
+    //let start_time = std::time::Instant::now();
 
-    let bg_segments = model.glyphs.get_renderable_segments(
-        &model.project,
-        &model.grid,
-        &bg_style,
-        &model.effects_manager,
-        app.time,
-        true,
-        false,
-    );
+    for (_, grid_instance) in model.grids.iter() {
+        
+        //let grid_start = std::time::Instant::now();
 
-    // Draw grid with effects
-    model.grid.draw_segments(&draw, bg_segments);
-    model.grid.draw_segments(&draw, glyph_segments);
-/*
-    // Add debug visualization of coordinate system
-    draw.line()
-        .points(pt2(0.0, 0.0), pt2(100.0, 0.0))
-        .color(RED)
-        .stroke_weight(1.0);
-    draw.line()
-        .points(pt2(0.0, 0.0), pt2(0.0, 100.0))
-        .color(BLUE)
-        .stroke_weight(1.0);
- */
+        let ready_segments = model.glyphs.get_renderable_segments(
+            &model.project,
+            grid_instance,
+            &model.effect_target_style,
+            &bg_style,
+            &grid_instance.effects_manager,
+            app.time,
+            false,
+        );
 
+        // render operations
+        if grid_instance.visible {
+            grid_instance.draw_segments(&draw, ready_segments);
+        }
+
+        //let grid_duration = grid_start.elapsed();
+        //println!("Grid {} update time: {:?}", name, grid_duration);
+    }
+
+    if model.debug_flag {
+        // Draw (+,+) axes
+        let draw = &model.draw;
+        draw.line()
+            .points(pt2(0.0, 0.0), pt2(50.0, 0.0))
+            .color(RED)
+            .stroke_weight(1.0);
+        draw.line()
+            .points(pt2(0.0, 0.0), pt2(0.0, 50.0))
+            .color(BLUE)
+            .stroke_weight(1.0);
+
+        // Visualize FPS (Optional)
+        draw.text(&format!("FPS: {:.1}", model.fps))
+            .x_y(1100.0, 290.0)
+            .color(RED);
+
+    }
 
     // Rnder to texture and handle frame recording
     render_and_capture(app, model);
 
+    //let total_duration = start_time.elapsed();
+    //println!("Total update time: {:?}", total_duration);
 
 }
 
@@ -256,45 +354,26 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 }
 
+// ******************************* State-triggered functions *****************************
 
-// ******************************* Grid Setup Helpers ********************************
-/* 
-fn calculate_grid_transform(texture: &wgpu::Texture, grid: &CachedGrid) -> Transform2D {
-    // Calculate scale to fit grid in view
-    // Calculate base scale from view height
-    println!("\n=== Grid Transform Calculation ===");
 
-    let (grid_x, grid_y) = grid.dimensions;
-    let texture_height = texture.size()[1] as f32;
+fn update_glyph(app: &App, model: &mut Model) {
+    let segment_ids = model.glyphs.next_glyph(&model.project);
+    let color_hsl = hsl (model.random.gen(), model.random.gen(), 0.3);
+    let glyph_style = DrawStyle {
+        color: Rgb::from(color_hsl),
+        stroke_weight: 5.0,
+    };
     
-    // Calculate scale to fit grid in view
-    let max_grid_dim = grid_x.max(grid_y) as f32;
-    //let base_scale = texture_height / 2.0 / max_grid_dim;
-    //let scale = base_scale * GRID_SCALE_FACTOR;
-    let scale = 1.0;
-    
-    println!("Grid dimensions: {}x{}", grid_x, grid_y);
-    println!("Texture height: {}", texture_height);
-    //println!("Base scale: {}", base_scale);
-    println!("Final scale: {}", scale);
+    for (_, grid_instance) in model.grids.iter_mut() {
+        for segment_id in &segment_ids {
+            grid_instance.effects_manager.activate_segment(&segment_id, "power_on", app.time);
 
-    // Center the grid
-    let grid_size = Vec2::new(
-        scale * grid_x as f32,
-        scale * grid_y as f32
-    );
-    let offset = -grid_size / 2.0;
-    
-    println!("Grid size: {:?}", grid_size);
-    println!("Center offset: {:?}", offset);
-
-    Transform2D {
-        translation: offset,
-        scale,
-        rotation: 0.0,
+            model.effect_target_style = glyph_style.clone();
+        }
     }
 }
-*/
+
 
 // ******************************* Rendering and Capture *****************************
 
@@ -397,28 +476,19 @@ fn render_progress(app: &App, model: &mut Model) {
 
 
 
-
-
 // ******************************* Debug stuff *******************************
 
-/*
-fn print_grid_info(grid: &CachedGrid) {
-    println!("\nGrid Info:");
-    println!("Dimensions: {:?}", grid.dimensions);
-    println!("Viewbox: {:?}", grid.viewbox);
-    println!("Segment count: {}", grid.segments.len());
-    
-    // Print first few segments for inspection
-    
-    for (i, (id, segment)) in grid.segments.iter().take(2).enumerate() {
-        println!("\nSegment {}: {}", i, id);
-        println!("Position: {:?}", segment.tile_pos);
-        println!("Edge type: {:?}", segment.edge_type);
-        
-        for (j, cmd) in segment.draw_commands.iter().take(2).enumerate() {
-            println!("  Command {}: {:?}", j, cmd);
-        }
+fn make_three_grids(app: &App, model: &mut Model) {
+
+    let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-600.0, 0.0), 90.0);
+    let grid_2 = GridInstance::new(app, &model.project, "Grid Center".to_string(), pt2(0.0, 0.0), 0.0);
+    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(600.0, 0.0), -90.0);
+
+    model.grids.insert(grid_1.id.clone(),grid_1);
+    model.grids.insert(grid_2.id.clone(), grid_2);
+    model.grids.insert(grid_3.id.clone(), grid_3);
+
+    for (_, grid) in model.grids.iter() {
+        grid.print_grid_info();
     }
-     
 }
-    */

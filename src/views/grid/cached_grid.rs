@@ -7,14 +7,14 @@
 // DrawCommand, CachedSegment, and CachedGrid
 
 use nannou::prelude::*;
-use std::collections::{ HashMap, HashSet };
+use std::collections::HashMap;
 
 use crate::models::{ ViewBox, EdgeType, PathElement, Project };
 use crate::services::svg::{parse_svg, detect_edge_type};
 use crate::services::grid::*;
 use crate::views::Transform2D;
 
-const ARC_RESOLUTION: usize = 128;
+const ARC_RESOLUTION: usize = 25;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data
@@ -102,10 +102,17 @@ impl Default for DrawStyle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Layer {
+    Background,
+    Foreground,
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderableSegment<'a>{
     pub segment: &'a CachedSegment,
     pub style: DrawStyle,
+    pub layer: Layer,
 }
 
 
@@ -117,7 +124,7 @@ pub struct CachedSegment {
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
-    pub transform: Transform2D,
+    //pub transform: Transform2D,
 }
 
 impl CachedSegment {
@@ -141,7 +148,7 @@ impl CachedSegment {
             draw_commands,
             original_path: path.clone(),
             edge_type,
-            transform: Transform2D::default(),
+            //transform: Transform2D::default(),
         }
     }
 
@@ -220,7 +227,7 @@ impl CachedSegment {
     }
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        self.transform = transform.clone();
+        //self.transform = transform.clone();
         for command in &mut self.draw_commands {
             command.apply_transform(transform);
         }
@@ -234,8 +241,6 @@ pub struct CachedGrid {
     pub segments: HashMap<String, CachedSegment>,
     pub viewbox: ViewBox,
     pub transform: Transform2D,
-    pub active_glyph: Option<String>, // active glyph name
-    pub active_segments: HashSet<String>, // active segments by id
 }
 
 impl CachedGrid {
@@ -264,11 +269,12 @@ impl CachedGrid {
                         &viewbox,
                         grid_dims,
                     );
-                
+                    /* 
                     // Only print edge elements for brevity
                     if edge_type != EdgeType::None {
                         println!("Created {} at ({},{}) - {:?}", element_id, x, y, edge_type);
                     }
+                    */
 
                     segments.insert(segment.id.clone(), segment);
                 }
@@ -283,8 +289,6 @@ impl CachedGrid {
             segments,
             viewbox: viewbox,
             transform: Transform2D::default(),
-            active_glyph: None,
-            active_segments: HashSet::new(),
         }
     }
 
@@ -364,12 +368,26 @@ impl CachedGrid {
     }
 
     // Rendering methods
-    pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
-        for segment in segments {
-            for command in &segment.segment.draw_commands {
-                command.draw(draw, &segment.style);
-            }
-        }
+    pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
+        // Process and draw background segments
+        segments
+            .iter()
+            .filter(|segment| segment.layer == Layer::Background)
+            .for_each(|segment| {
+                for command in &segment.segment.draw_commands {
+                    command.draw(draw, &segment.style);
+                }
+            });
+    
+        // Process and draw foreground segments
+        segments
+            .iter()
+            .filter(|segment| segment.layer == Layer::Foreground)
+            .for_each(|segment| {
+                for command in &segment.segment.draw_commands {
+                    command.draw(draw, &segment.style);
+                }
+            });
     }
 
 /*
@@ -388,14 +406,14 @@ impl CachedGrid {
             .flat_map(| segment | &segment.draw_commands)
             .for_each(| command | command.draw(draw, style));
     }
-
+*/
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        self.transform = transform.clone();
+        //self.transform = transform.clone();
         for segment in self.segments.values_mut() {
             segment.apply_transform(transform);
         }
     }
-    */
+    
 
     // Utility methods
     pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
@@ -407,20 +425,6 @@ impl CachedGrid {
             .values()
             .filter(|segment| segment.tile_pos == (x, y))
             .collect()
-    }
-
-    pub fn set_glyph(&mut self, glyph_name: Option<&str>, project: &Project) {
-        self.active_glyph = glyph_name.map(String::from);
-        self.active_segments = match glyph_name {
-            Some(name) => project.get_glyph(name)
-                .map(| glyph| glyph.segments.iter().cloned().collect())
-                .unwrap_or_default(),
-            None => HashSet::new(),
-        };
-    }
-
-    pub fn get_active_glyph(&self) -> Option<&str> {
-        self.active_glyph.as_deref()
     }
 
 /* 

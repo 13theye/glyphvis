@@ -11,7 +11,7 @@ pub fn init_effects(app: &App) -> EffectsManager {
 
     let power_on_effect = PowerOnEffect::new(
         rgb(1.0, 0.0, 0.0), // currently not used
-        0.01,
+        0.05,
         0.3,
     );
 
@@ -20,28 +20,29 @@ pub fn init_effects(app: &App) -> EffectsManager {
         EffectType::Segment(Box::new(power_on_effect)),
         app.time,
     );  
-    /*
+    
     effects_manager.add(
         "pulse".to_string(),
         EffectType::Grid(Box::new(PulseEffect {
-            frequency: 1.0,
+            frequency: 2.0,
             min_brightness: 0.2,
             max_brightness: 0.6,
         })),
         app.time,
     );   
     
-    
+    /*
     effects_manager.add(
         "colorcycle".to_string(),
         EffectType::Grid(Box::new(ColorCycleEffect {
-            frequency: 1.0,
-            saturation: 1.0,
-            brightness: 1.0,
+            frequency: 0.5,
+            saturation: 0.5,
+            brightness: 0.5,
         })),
         app.time,
-    );
- */
+         
+    ); */
+ 
 
     effects_manager
 }

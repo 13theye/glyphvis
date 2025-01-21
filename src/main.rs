@@ -191,22 +191,42 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             model.exit_requested = true;
         },
         Key::Right => {
+            let position_delta = Transform2D {
+                translation: pt2(10.0, 0.0),
+                scale: 1.0,
+                rotation: 0.0,
+            };
             for (_, grid_instance) in model.grids.iter_mut() {
-                let position_delta = Transform2D {
-                    translation: pt2(10.0, 0.0),
-                    scale: 1.0,
-                    rotation: 0.0,
-                };
                 grid_instance.apply_transform(&position_delta);
             }
         },
         Key::Left => {
+            let position_delta = Transform2D {
+                translation: pt2(-10.0, 0.0),
+                scale: 1.0,
+                rotation: 0.0,
+            };
             for (_, grid_instance) in model.grids.iter_mut() {
-                let position_delta = Transform2D {
-                    translation: pt2(-10.0, 0.0),
-                    scale: 1.0,
-                    rotation: 0.0,
-                };
+                grid_instance.apply_transform(&position_delta);
+            }
+        },
+        Key::Up => {
+            let position_delta = Transform2D {
+                translation: pt2(0.0, 0.0),
+                scale: 1.0,
+                rotation: 90.0,
+            };
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.apply_transform(&position_delta);
+            }
+        },
+        Key::Down => {
+            let position_delta = Transform2D {
+                translation: pt2(0.0, 0.0),
+                scale: 1.0,
+                rotation: -90.0,
+            };
+            for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.apply_transform(&position_delta);
             }
         },
@@ -216,6 +236,15 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
 
 fn update(app: &App, model: &mut Model, _update: Update) {
     //let debug_flag = false;
+
+    if model.needs_glyph_update{
+        update_glyph(app, model);
+        model.needs_glyph_update = false;
+    }
+
+    // Clear the window
+    let draw = &model.draw;
+    draw.background().color(BLACK);
 
     // frames processing progress bar:
     if model.exit_requested {
@@ -238,11 +267,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
     */
-
-    if model.needs_glyph_update{
-        update_glyph(app, model);
-        model.needs_glyph_update = false;
-    }
 
     for (_, grid_instance) in model.grids.iter() {
 
@@ -269,9 +293,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         */
 
         // render operations
-            // setting up draw
-        let draw = &model.draw;
-        draw.background().color(BLACK);
         if grid_instance.visible {
             //grid.effects_manager.apply_effects(&grid.grid.id, bg_style, app.time);
             //grid.effects_manager.apply_effects(&grid.grid.id, model.effect_target_style, app.time);
@@ -437,7 +458,7 @@ fn make_three_grids(app: &App, model: &mut Model) {
 
     let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-600.0, 0.0), 90.0);
     let grid_2 = GridInstance::new(app, &model.project, "Grid Center".to_string(), pt2(0.0, 0.0), 0.0);
-    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(600.0, 0.0), 0.0);
+    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(600.0, 0.0), -90.0);
 
     model.grids.insert(grid_1.id.clone(),grid_1);
     model.grids.insert(grid_2.id.clone(), grid_2);

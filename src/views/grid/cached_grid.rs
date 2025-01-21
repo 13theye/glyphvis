@@ -227,7 +227,7 @@ impl CachedSegment {
     }
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        self.transform = transform.clone();
+        //self.transform = transform.clone();
         for command in &mut self.draw_commands {
             command.apply_transform(transform);
         }
@@ -412,7 +412,7 @@ impl CachedGrid {
     }
 */
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        self.transform = transform.clone();
+        //self.transform = transform.clone();
         for segment in self.segments.values_mut() {
             segment.apply_transform(transform);
         }

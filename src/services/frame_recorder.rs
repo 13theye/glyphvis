@@ -36,7 +36,6 @@ pub struct FrameRecorder {
     capture_in_progress: Arc<AtomicBool>,
 
     // capture pipeline
-    texture_capturer: wgpu::TextureCapturer,
     texture_reshaper: wgpu::TextureReshaper,
     resolved_texture: wgpu::Texture, // for MSAA resolution
     staging_buffers: Vec<Arc<wgpu::Buffer>>,
@@ -151,7 +150,6 @@ impl FrameRecorder {
             frames_processed,
             capture_in_progress: Arc::new(AtomicBool::new(false)),
 
-            texture_capturer: wgpu::TextureCapturer::default(),
             texture_reshaper,
             resolved_texture,
             staging_buffers,
@@ -225,7 +223,7 @@ impl FrameRecorder {
         }
 
         *last_capture = now;
-        let capture_start = std::time::Instant::now();
+        let capture_start: std::time::Instant = std::time::Instant::now();
 
 
         let mut frame_number = self.frame_number.lock().unwrap();
@@ -251,15 +249,19 @@ impl FrameRecorder {
 
         // GPU
          // Step 1: Use the reshaper to resolve MSAA
+         let frame_start = std::time::Instant::now();
          self.texture_reshaper.encode_render_pass(
             &self.resolved_texture.view().build(),
             encoder,
         );
+        println!("MSAA resolve took: {:?}", frame_start.elapsed());
+
 
         // Calculate minimum bytes per row required by wgpu
         let bytes_per_row = wgpu::util::align_to(self.resolved_texture.width() * 4, 256);
 
         // Step 2: Copy from resolved texture to staging buffer
+        let copy_start = std::time::Instant::now();
         encoder.copy_texture_to_buffer(
             self.resolved_texture.as_image_copy(),
             wgpu::ImageCopyBuffer {
@@ -276,6 +278,8 @@ impl FrameRecorder {
                 depth_or_array_layers: 1,
             },
         );
+        println!("Texture to buffer copy took: {:?}", copy_start.elapsed());
+
 
         // END GPU
 
@@ -283,7 +287,6 @@ impl FrameRecorder {
 
         let sender = self.frame_sender.clone();
         let frames_in_queue = self.frames_in_queue.clone();
-        let frames_in_queue_outer = self.frames_in_queue.clone();
         let capture_in_progress_outer = self.capture_in_progress.clone();
 
         // GPU add
@@ -293,16 +296,19 @@ impl FrameRecorder {
         let height = render_texture.height();
         // END GPU add
 
-
         device.poll(wgpu::Maintain::Poll);
 
         // Map buffer and process data
+        let buffer_map_start = std::time::Instant::now();
         staging_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
             if let Ok(()) = result {
+
+                let unpad_start = std::time::Instant::now();
+
                 let unpadded_data = {
                     let mapped_memory = staging_buffer_clone.slice(..).get_mapped_range();
                     let mut unpadded_data = Vec::with_capacity((width * height * 4) as usize);
-                    
+
                     // Use copy_from_slice for bulk copying of consecutive rows
                     let actual_row_bytes = (width * 4) as usize;
                     let mut src_offset = 0;
@@ -324,17 +330,26 @@ impl FrameRecorder {
                     
                     unpadded_data
                 };
+                println!("Unpadding took: {:?}", unpad_start.elapsed());
 
                 staging_buffer_clone.unmap();
-        
+                
+                let send_start = std::time::Instant::now();
                 frames_in_queue.fetch_add(1, Ordering::SeqCst);
                 if let Err(e) = sender.send((frame_num, unpadded_data, width, height)) {
                     frames_in_queue.fetch_sub(1, Ordering::SeqCst);
                     eprintln!("Failed to send frame: {}", e);
                 }
+                println!("Frame send took: {:?}", send_start.elapsed());
+
             }
             capture_in_progress_outer.store(false, Ordering::SeqCst);
+            println!("Total buffer mapping and processing took: {:?}", buffer_map_start.elapsed());
+
         });
+
+        println!("Total frame capture took: {:?}", frame_start.elapsed());
+
     
         // Poll the device with a timeout to avoid infinite waiting
     let timeout_duration = std::time::Duration::from_millis(50);
@@ -356,57 +371,7 @@ impl FrameRecorder {
     
     println!("WARNING: Device poll timed out after {:?}", timeout_duration);
 
-
-        /* 
-        // Create snapshot in its own scope to ensure proper cleanup
-        let snapshot = {
-            let snapshot_start = std::time::Instant::now();
-
-            let snapshot = self.texture_capturer.capture(device, encoder, texture);
-            println!("DEBUG: Texture capture took {}ms", 
-                snapshot_start.elapsed().as_micros() as f64 / 1000.0);
-            snapshot
-        };
-        
-        let width = texture.width();
-        let height = texture.height();
-
-        if let Err(e) = snapshot.read(move |result| {
-            let read_start = std::time::Instant::now();
-
-            match result {
-                Ok(buffer) => {
-                    // Scope the buffer data conversion
-                    let data = {
-                        let raw_data = buffer.to_owned().into_raw();
-                        println!("DEBUG: Buffer conversion took {}ms", 
-                            read_start.elapsed().as_micros() as f64 / 1000.0);
-                        raw_data
-                    }; // buffer is dropped here
-                    frames_in_queue.fetch_add(1, Ordering::SeqCst);
-                    if let Err(e) = sender.send((frame_num, data, width, height)) {
-                        frames_in_queue.fetch_sub(1, Ordering::SeqCst);
-                        eprintln!("Failed to send frame: {}", e);
-                    }
-                },
-                Err(e) => {
-                    frames_in_queue.fetch_sub(1, Ordering::SeqCst);
-                    eprintln!("Failed to read texture: {:?}", e);
-                }
-            }
-
-            // Clear capture in progress flag
-            println!("DEBUG: Total capture pipeline took {}ms", 
-            capture_start.elapsed().as_micros() as f64 / 1000.0);
-            capture_in_progress_outer.store(false, Ordering::SeqCst);
-
-        }) {
-            frames_in_queue_outer.fetch_sub(1, Ordering::SeqCst);
-            self.capture_in_progress.store(false, Ordering::SeqCst);
-            eprintln!("Failed to read snapshot: {:?}", e);
-        }
-        */
-    }
+}
 
     pub fn get_queue_status(&self) -> (usize, usize) {
         let processed = self.frames_processed.load(Ordering::SeqCst);
@@ -435,6 +400,8 @@ fn process_frame_batch(
     // Process frames in parallel
 
     frames.into_par_iter().for_each(|(frame_number, frame_data, width, height)| {
+        let jpeg_start = std::time::Instant::now();
+
         if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
             let filename = match format {
                 //OutputFormat::PNG => format!("{}/frame{:05}.png", output_dir, frame_number),
@@ -463,6 +430,7 @@ fn process_frame_batch(
                             ))
                         }
                     };
+                    println!("JPEG encoding took: {:?}", jpeg_start.elapsed());
                     result
                 },
             };

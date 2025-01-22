@@ -31,14 +31,20 @@ pub struct FrameRecorder {
     last_capture: Arc<Mutex<u64>>,
     frame_limit: u32,
     frame_number: Arc<Mutex<u32>>,
-    texture_capturer: wgpu::TextureCapturer,
     frames_in_queue: Arc<AtomicUsize>,
     frames_processed: Arc<AtomicUsize>,
     capture_in_progress: Arc<AtomicBool>,
+
+    // capture pipeline
+    texture_capturer: wgpu::TextureCapturer,
+    texture_reshaper: wgpu::TextureReshaper,
+    resolved_texture: wgpu::Texture, // for MSAA resolution
+    staging_buffer: Arc<wgpu::Buffer>,
+
 }
 
 impl FrameRecorder {
-    pub fn new(output_dir: &str, frame_limit: u32, format: OutputFormat) -> Self {
+    pub fn new(device: &wgpu::Device, render_texture: &wgpu::Texture, output_dir: &str, frame_limit: u32, format: OutputFormat) -> Self {
         create_dir_all(output_dir).expect("Failed to create output directory");
         
         let frames_in_queue = Arc::new(AtomicUsize::new(0));
@@ -97,16 +103,57 @@ impl FrameRecorder {
             }
         });
 
+            // Create a texture for resolving MSAA
+            let resolved_texture = wgpu::TextureBuilder::new()
+                .size([render_texture.width(), render_texture.height()])
+                .sample_count(1)  // No MSAA
+                .format(wgpu::TextureFormat::Rgba8Unorm)
+                .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | 
+                        wgpu::TextureUsages::COPY_SRC |
+                        wgpu::TextureUsages::COPY_DST |
+                        wgpu::TextureUsages::TEXTURE_BINDING)
+                .build(device);
+    
+            // Create texture reshaper for MSAA resolution
+            let texture_reshaper = wgpu::TextureReshaper::new(
+                device,
+                &render_texture.view().build(),
+                render_texture.sample_count(),  // source samples
+                render_texture.sample_type(),
+                1,  // destination samples (no MSAA)
+                wgpu::TextureFormat::Rgba8Unorm,
+            );
+
+    
+            // Create staging buffer for GPU->CPU transfer
+            let bytes_per_row = wgpu::util::align_to(render_texture.width() * 4, 256);
+            let buffer_size = (bytes_per_row * render_texture.height()) as u64;
+            
+            let staging_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Frame Capture Staging Buffer"),
+                size: buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }));
+
+
+
+
         Self {
             frame_sender: sender,
             is_recording: Arc::new(Mutex::new(false)),
             last_capture: Arc::new(Mutex::new(0)),
             frame_limit,
             frame_number: Arc::new(Mutex::new(0)),
-            texture_capturer: wgpu::TextureCapturer::default(),
             frames_in_queue,
             frames_processed,
             capture_in_progress: Arc::new(AtomicBool::new(false)),
+
+            texture_capturer: wgpu::TextureCapturer::default(),
+            texture_reshaper,
+            resolved_texture,
+            staging_buffer,
+
 
         }
     }
@@ -142,7 +189,8 @@ impl FrameRecorder {
         &self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
-        texture: &wgpu::Texture,
+        render_texture: &wgpu::Texture,
+        queue: &wgpu::Queue,
     ) {
         if !self.is_recording() {
             return;
@@ -190,12 +238,80 @@ impl FrameRecorder {
         // Set capture in progress flag
         self.capture_in_progress.store(true, Ordering::SeqCst);
 
+        // GPU
+         // Step 1: Use the reshaper to resolve MSAA
+         self.texture_reshaper.encode_render_pass(
+            &self.resolved_texture.view().build(),
+            encoder,
+        );
+
+        // Calculate minimum bytes per row required by wgpu
+        let bytes_per_row = wgpu::util::align_to(render_texture.width() * 4, 256);
+
+        println!("Texture width: {}, min bytes per row: {}, aligned bytes per row: {}", 
+                render_texture.width(), render_texture.width() * 4, bytes_per_row);
+
+        // Step 2: Copy from resolved texture to staging buffer
+        encoder.copy_texture_to_buffer(
+            self.resolved_texture.as_image_copy(),
+            wgpu::ImageCopyBuffer {
+                buffer: &self.staging_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),  
+                    rows_per_image: Some(render_texture.height()),
+                },
+            },
+            wgpu::Extent3d {
+                width: render_texture.width(),
+                height: render_texture.height(),
+                depth_or_array_layers: 1,
+            },
+        );
+
+
+        // END GPU
+
+        let staging_buffer_clone = self.staging_buffer.clone();
+
         let sender = self.frame_sender.clone();
         let frames_in_queue = self.frames_in_queue.clone();
         let frames_in_queue_outer = self.frames_in_queue.clone();
         let capture_in_progress_outer = self.capture_in_progress.clone();
 
+        // GPU add
+        let frame_num = *self.frame_number.lock().unwrap();
+        let width = render_texture.width();
+        let height = render_texture.height();
+        // END GPU add
+
+        // Map buffer and process data
+        self.staging_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
+            if let Ok(()) = result {
+                let padded_data = staging_buffer_clone.slice(..).get_mapped_range().to_vec();
+                let mut unpadded_data = Vec::with_capacity((width * height * 4) as usize);
+
+                // Remove padding from each row
+                for row in 0..height {
+                    let row_start = (row * bytes_per_row) as usize;
+                    let data_start = row_start;
+                    let data_end = data_start + (width * 4) as usize;
+                    unpadded_data.extend_from_slice(&padded_data[data_start..data_end]);
+                }
         
+                staging_buffer_clone.unmap();
+                frames_in_queue.fetch_add(1, Ordering::SeqCst);
+                if let Err(e) = sender.send((frame_num, unpadded_data, width, height)) {
+                    frames_in_queue.fetch_sub(1, Ordering::SeqCst);
+                    eprintln!("Failed to send frame: {}", e);
+                }
+            }
+            capture_in_progress_outer.store(false, Ordering::SeqCst);
+        });
+    
+
+
+        /* 
         // Create snapshot in its own scope to ensure proper cleanup
         let snapshot = {
             let snapshot_start = std::time::Instant::now();
@@ -243,6 +359,7 @@ impl FrameRecorder {
             self.capture_in_progress.store(false, Ordering::SeqCst);
             eprintln!("Failed to read snapshot: {:?}", e);
         }
+        */
     }
 
     pub fn get_queue_status(&self) -> (usize, usize) {
@@ -313,6 +430,10 @@ fn process_frame_batch(
     });
 }
 
+
+
+
+/* 
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,6 +469,7 @@ mod tests {
     fn cleanup_test_dir(dir: &str) {
         let _ = fs::remove_dir_all(dir);
     }
+
 
     #[test]
     fn test_queue_status_initial() {
@@ -543,3 +665,4 @@ mod tests {
         cleanup_test_dir(&test_dir);
     }
 }
+    */

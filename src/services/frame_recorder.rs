@@ -39,8 +39,8 @@ pub struct FrameRecorder {
     texture_capturer: wgpu::TextureCapturer,
     texture_reshaper: wgpu::TextureReshaper,
     resolved_texture: wgpu::Texture, // for MSAA resolution
-    staging_buffer: Arc<wgpu::Buffer>,
-
+    staging_buffers: Vec<Arc<wgpu::Buffer>>,
+    current_buffer_index: Arc<AtomicUsize>,
 }
 
 impl FrameRecorder {
@@ -125,19 +125,21 @@ impl FrameRecorder {
             );
 
     
-            // Create staging buffer for GPU->CPU transfer
+            // Create triple staging buffers for GPU->CPU transfer
+            const NUM_BUFFERS: usize = 3;
             let bytes_per_row = wgpu::util::align_to(render_texture.width() * 4, 256);
             let buffer_size = (bytes_per_row * render_texture.height()) as u64;
             
-            let staging_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Frame Capture Staging Buffer"),
-                size: buffer_size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            }));
-
-
-
+            let mut staging_buffers = Vec::with_capacity(NUM_BUFFERS);
+            for i in 0..NUM_BUFFERS {
+                let staging_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(&format!("Frame Capture Staging Buffer {}", i)),
+                    size: buffer_size,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                }));
+                staging_buffers.push(staging_buffer);
+            }
 
         Self {
             frame_sender: sender,
@@ -152,8 +154,8 @@ impl FrameRecorder {
             texture_capturer: wgpu::TextureCapturer::default(),
             texture_reshaper,
             resolved_texture,
-            staging_buffer,
-
+            staging_buffers,
+            current_buffer_index: Arc::new(AtomicUsize::new(0)),
 
         }
     }
@@ -238,6 +240,15 @@ impl FrameRecorder {
         // Set capture in progress flag
         self.capture_in_progress.store(true, Ordering::SeqCst);
 
+        let buffer_index = {
+            let current = self.current_buffer_index.load(Ordering::SeqCst);
+            let next = (current + 1) % self.staging_buffers.len();
+            self.current_buffer_index.store(next, Ordering::SeqCst);
+            current
+        };        
+        
+        let staging_buffer = self.staging_buffers[buffer_index].clone();
+
         // GPU
          // Step 1: Use the reshaper to resolve MSAA
          self.texture_reshaper.encode_render_pass(
@@ -246,16 +257,13 @@ impl FrameRecorder {
         );
 
         // Calculate minimum bytes per row required by wgpu
-        let bytes_per_row = wgpu::util::align_to(render_texture.width() * 4, 256);
-
-        println!("Texture width: {}, min bytes per row: {}, aligned bytes per row: {}", 
-                render_texture.width(), render_texture.width() * 4, bytes_per_row);
+        let bytes_per_row = wgpu::util::align_to(self.resolved_texture.width() * 4, 256);
 
         // Step 2: Copy from resolved texture to staging buffer
         encoder.copy_texture_to_buffer(
             self.resolved_texture.as_image_copy(),
             wgpu::ImageCopyBuffer {
-                buffer: &self.staging_buffer,
+                buffer: &staging_buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: Some(bytes_per_row),  
@@ -269,10 +277,9 @@ impl FrameRecorder {
             },
         );
 
-
         // END GPU
 
-        let staging_buffer_clone = self.staging_buffer.clone();
+        let staging_buffer_clone = staging_buffer.clone();
 
         let sender = self.frame_sender.clone();
         let frames_in_queue = self.frames_in_queue.clone();
@@ -280,26 +287,46 @@ impl FrameRecorder {
         let capture_in_progress_outer = self.capture_in_progress.clone();
 
         // GPU add
-        let frame_num = *self.frame_number.lock().unwrap();
+        
+       // let frame_num = *self.frame_number.lock().unwrap();
         let width = render_texture.width();
         let height = render_texture.height();
         // END GPU add
 
-        // Map buffer and process data
-        self.staging_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
-            if let Ok(()) = result {
-                let padded_data = staging_buffer_clone.slice(..).get_mapped_range().to_vec();
-                let mut unpadded_data = Vec::with_capacity((width * height * 4) as usize);
 
-                // Remove padding from each row
-                for row in 0..height {
-                    let row_start = (row * bytes_per_row) as usize;
-                    let data_start = row_start;
-                    let data_end = data_start + (width * 4) as usize;
-                    unpadded_data.extend_from_slice(&padded_data[data_start..data_end]);
-                }
-        
+        device.poll(wgpu::Maintain::Poll);
+
+        // Map buffer and process data
+        staging_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
+            if let Ok(()) = result {
+                let unpadded_data = {
+                    let mapped_memory = staging_buffer_clone.slice(..).get_mapped_range();
+                    let mut unpadded_data = Vec::with_capacity((width * height * 4) as usize);
+                    
+                    // Use copy_from_slice for bulk copying of consecutive rows
+                    let actual_row_bytes = (width * 4) as usize;
+                    let mut src_offset = 0;
+                    
+                    // Pre-allocate the full buffer
+                    unpadded_data.resize((width * height * 4) as usize, 0);
+                    
+                    // Copy each row efficiently
+                    for row in 0..height {
+                        let dest_offset = row as usize * actual_row_bytes;
+                        let src_start = src_offset;
+                        let src_end = src_start + actual_row_bytes;
+                        
+                        unpadded_data[dest_offset..dest_offset + actual_row_bytes]
+                            .copy_from_slice(&mapped_memory[src_start..src_end]);
+                        
+                        src_offset += bytes_per_row as usize;
+                    }
+                    
+                    unpadded_data
+                };
+
                 staging_buffer_clone.unmap();
+        
                 frames_in_queue.fetch_add(1, Ordering::SeqCst);
                 if let Err(e) = sender.send((frame_num, unpadded_data, width, height)) {
                     frames_in_queue.fetch_sub(1, Ordering::SeqCst);
@@ -309,6 +336,25 @@ impl FrameRecorder {
             capture_in_progress_outer.store(false, Ordering::SeqCst);
         });
     
+        // Poll the device with a timeout to avoid infinite waiting
+    let timeout_duration = std::time::Duration::from_millis(50);
+    let start_time = std::time::Instant::now();
+    
+    while start_time.elapsed() < timeout_duration {
+        match device.poll(wgpu::Maintain::Wait) {
+            // If maintenance returns true, it means there are no more pending operations
+            true => {
+                return;
+            }
+            false => {
+                // Sleep a tiny bit to prevent tight polling
+                println!("DEBUG: Sleeping 1ms to prevent tight polling");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
+    }
+    
+    println!("WARNING: Device poll timed out after {:?}", timeout_duration);
 
 
         /* 

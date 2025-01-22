@@ -407,6 +407,7 @@ fn render_and_capture(app: &App, model: &mut Model) {
     }
 
     queue.submit(Some(encoder.finish()));
+    device.poll(wgpu::Maintain::Wait);
 }
 
 

@@ -2,10 +2,10 @@
 
 use nannou::prelude::*;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use super::SegmentEffect;
 use crate::views::DrawStyle;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 struct SegmentState {
     activation_time: f32,
@@ -20,7 +20,6 @@ pub struct PowerOnEffect {
     flash_duration: f32,
     fade_duration: f32,
 }
-
 
 impl PowerOnEffect {
     pub fn new(target_color: Rgb<f32>, flash_duration: f32, fade_duration: f32) -> Self {
@@ -44,12 +43,16 @@ impl PowerOnEffect {
 }
 
 impl SegmentEffect for PowerOnEffect {
-
-    fn apply_to_segment(&self, segment_id: &str, target_style: &DrawStyle, current_time: f32) -> DrawStyle {
+    fn apply_to_segment(
+        &self,
+        segment_id: &str,
+        target_style: &DrawStyle,
+        current_time: f32,
+    ) -> DrawStyle {
         let mut states = self.segment_states.borrow_mut();
         if let Some(state) = states.get(segment_id) {
             let elapsed_time = current_time - state.activation_time;
-            
+
             // Calculate color based on animation phase
             let color = if elapsed_time <= self.flash_duration {
                 // Initial white flash phase
@@ -61,7 +64,6 @@ impl SegmentEffect for PowerOnEffect {
                 let fade_progress = (elapsed_time - self.flash_duration) / self.fade_duration;
                 let white = rgb(1.0, 1.0, 1.0);
                 exp_flash(white, target_style.color, fade_progress)
-                
             } else {
                 // Animation complete
                 states.remove(segment_id);
@@ -69,20 +71,22 @@ impl SegmentEffect for PowerOnEffect {
             };
 
             DrawStyle {
-                color, 
+                color,
                 stroke_weight: target_style.stroke_weight,
             }
-            
         } else {
             target_style.clone()
-        }   
+        }
     }
 
     fn activate_segment(&mut self, segment_id: &str, current_time: f32) {
-        self.segment_states.borrow_mut().insert(String::from(segment_id), SegmentState {
-            activation_time: current_time,
-            target_color: self.target_color,
-        });
+        self.segment_states.borrow_mut().insert(
+            String::from(segment_id),
+            SegmentState {
+                activation_time: current_time,
+                target_color: self.target_color,
+            },
+        );
     }
 
     fn deactivate_segment(&mut self, segment_id: &str) {
@@ -96,11 +100,10 @@ impl SegmentEffect for PowerOnEffect {
     fn is_effect_finished(&self) -> bool {
         self.segment_states.borrow().is_empty()
     }
-
 }
 
-fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb <f32> {
-    let decay_rate = 5.0;                             // Steepness of curve
+fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb<f32> {
+    let decay_rate = 5.0; // Steepness of curve
     let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
     let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
     let hsl_end = Hsl::from(end);
@@ -108,10 +111,11 @@ fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb <f32> {
     let result = Hsl::new(
         hsl_end.hue,
         hsl_end.saturation,
-        hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * (1.0 - (-adjusted_time * decay_rate).exp()),
+        hsl_start.lightness
+            + (hsl_end.lightness - hsl_start.lightness)
+                * (1.0 - (-adjusted_time * decay_rate).exp()),
     );
     Rgb::from(result)
-
 }
 
 /*

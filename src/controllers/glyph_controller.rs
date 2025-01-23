@@ -2,12 +2,11 @@
 /// GlyphController coordinates between the Project and the GridInstance
 /// Gets the Glyph's segment_ids from Project
 /// Uses that to build foreground and background RenderableSegments from GridInstance
-
 use nannou::prelude::*;
 use std::collections::HashSet;
 
-use crate::models::data_model::{Project, Glyph};
-use crate::views:: { GridInstance, DrawStyle, RenderableSegment, Layer };
+use crate::models::data_model::{Glyph, Project};
+use crate::views::{DrawStyle, GridInstance, Layer, RenderableSegment};
 
 use crate::effects::EffectsManager;
 
@@ -61,24 +60,20 @@ impl GlyphController {
         time: f32,
         debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
-    
         let mut return_segments = Vec::new();
         let active_segment_ids = self.get_active_segments(project);
         let grid = &grid_instance.grid;
         let (grid_x, grid_y) = grid.dimensions;
-        
+
         // debug color function
-        let debug_color = |x: u32, y: u32| -> f32 {
-            ((x + y) as f32) / (grid_x + grid_y) as f32
-        };
+        let debug_color = |x: u32, y: u32| -> f32 { ((x + y) as f32) / (grid_x + grid_y) as f32 };
 
         // iterate over tiles
         for y in 1..=grid_y {
             for x in 1..=grid_x {
                 let segments = grid.get_segments_at(x, y);
-                
-                for segment in segments {
 
+                for segment in segments {
                     if active_segment_ids.contains(&segment.id) {
                         let base_style = if debug_flag {
                             let g = debug_color(x, y);
@@ -90,14 +85,14 @@ impl GlyphController {
                             foreground_style.clone()
                         };
                         // Apply effect if one is provided
-                        let final_style = effect_manager.apply_segment_effects(&segment.id, base_style, time);
+                        let final_style =
+                            effect_manager.apply_segment_effects(&segment.id, base_style, time);
 
                         return_segments.push(RenderableSegment {
                             segment,
                             style: final_style,
                             layer: Layer::Foreground,
                         });
-
                     } else {
                         let base_style = if debug_flag {
                             let g = debug_color(x, y);
@@ -109,7 +104,8 @@ impl GlyphController {
                             background_style.clone()
                         };
                         // Apply effect if one is provided
-                        let final_style = effect_manager.apply_grid_effects(&segment.id, base_style, time);
+                        let final_style =
+                            effect_manager.apply_grid_effects(&segment.id, base_style, time);
 
                         return_segments.push(RenderableSegment {
                             segment,

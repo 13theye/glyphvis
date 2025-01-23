@@ -2,16 +2,16 @@
 
 // The SVG grid data structures are converted to draw commands and
 // cached in the structures in this module.
-// 
+//
 // Types in this module:
 // DrawCommand, CachedSegment, and CachedGrid
 
 use nannou::prelude::*;
 use std::collections::HashMap;
 
-use crate::models::{ ViewBox, EdgeType, PathElement, Project };
-use crate::services::svg::{parse_svg, detect_edge_type};
+use crate::models::{EdgeType, PathElement, Project, ViewBox};
 use crate::services::grid::*;
+use crate::services::svg::{detect_edge_type, parse_svg};
 use crate::views::Transform2D;
 
 const ARC_RESOLUTION: usize = 25;
@@ -20,17 +20,9 @@ const ARC_RESOLUTION: usize = 25;
 // SVG path data
 #[derive(Debug, Clone)]
 pub enum DrawCommand {
-    Line {
-        start: Point2,
-        end: Point2,
-    },
-    Arc {
-        points: Vec<Point2>,
-    },
-    Circle {
-        center: Point2,
-        radius: f32,
-    },
+    Line { start: Point2, end: Point2 },
+    Arc { points: Vec<Point2> },
+    Circle { center: Point2, radius: f32 },
 }
 
 impl DrawCommand {
@@ -39,20 +31,20 @@ impl DrawCommand {
             DrawCommand::Line { start, end, .. } => {
                 *start = transform.apply_to_point(*start);
                 *end = transform.apply_to_point(*end);
-            },
+            }
             DrawCommand::Arc { points, .. } => {
                 for point in points {
                     *point = transform.apply_to_point(*point);
                 }
-            },
+            }
             DrawCommand::Circle { center, radius, .. } => {
                 *center = transform.apply_to_point(*center);
                 *radius *= transform.scale;
-            },
+            }
         }
     }
 
-    fn draw (&self, draw: &Draw, style: &DrawStyle) {
+    fn draw(&self, draw: &Draw, style: &DrawStyle) {
         match self {
             DrawCommand::Line { start, end, .. } => {
                 draw.line()
@@ -61,7 +53,7 @@ impl DrawCommand {
                     .stroke_weight(style.stroke_weight)
                     .color(style.color)
                     .caps_round();
-                            },
+            }
             DrawCommand::Arc { points, .. } => {
                 for window in points.windows(2) {
                     if let [p1, p2] = window {
@@ -73,7 +65,7 @@ impl DrawCommand {
                             .caps_round();
                     }
                 }
-            },
+            }
             DrawCommand::Circle { center, radius, .. } => {
                 draw.ellipse()
                     .x_y(center.x, center.y)
@@ -82,7 +74,7 @@ impl DrawCommand {
                     .stroke_weight(style.stroke_weight)
                     .color(style.color)
                     .caps_round();
-            },
+            }
         }
     }
 }
@@ -109,12 +101,11 @@ pub enum Layer {
 }
 
 #[derive(Debug, Clone)]
-pub struct RenderableSegment<'a>{
+pub struct RenderableSegment<'a> {
     pub segment: &'a CachedSegment,
     pub style: DrawStyle,
     pub layer: Layer,
 }
-
 
 // A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
@@ -128,17 +119,17 @@ pub struct CachedSegment {
 }
 
 impl CachedSegment {
-    pub fn new(element_id: String, 
-        position: (u32, u32), 
-        path: &PathElement, 
-        edge_type: EdgeType, 
+    pub fn new(
+        element_id: String,
+        position: (u32, u32),
+        path: &PathElement,
+        edge_type: EdgeType,
         viewbox: &ViewBox,
         grid_dims: (u32, u32),
     ) -> Self {
-
         // create the transformation to this tile's position
         let tile_transform = Self::calculate_tile_transform(viewbox, position, grid_dims);
-    
+
         // Generate commands with combined transform
         let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform);
 
@@ -152,51 +143,71 @@ impl CachedSegment {
         }
     }
 
-    fn generate_draw_commands(path: &PathElement, viewbox: &ViewBox, transform: &Transform2D) -> Vec<DrawCommand> {
+    fn generate_draw_commands(
+        path: &PathElement,
+        viewbox: &ViewBox,
+        transform: &Transform2D,
+    ) -> Vec<DrawCommand> {
         match path {
             PathElement::Line { x1, y1, x2, y2 } => {
                 vec![DrawCommand::Line {
                     start: Self::initial_transform(*x1, *y1, viewbox, transform),
                     end: Self::initial_transform(*x2, *y2, viewbox, transform),
                 }]
-            },
+            }
             PathElement::Arc {
-                start_x, start_y, rx, ry, 
-                x_axis_rotation,large_arc, sweep, 
-                end_x, end_y,
+                start_x,
+                start_y,
+                rx,
+                ry,
+                x_axis_rotation,
+                large_arc,
+                sweep,
+                end_x,
+                end_y,
             } => {
                 let start = Self::initial_transform(*start_x, *start_y, viewbox, transform);
                 let end = Self::initial_transform(*end_x, *end_y, viewbox, transform);
 
                 // no need to translate b/c rx, ry are relative measures
                 let (center, start_angle, sweep_angle) = calculate_arc_center(
-                    start, end, *rx, *ry, *x_axis_rotation, *large_arc, *sweep
+                    start,
+                    end,
+                    *rx,
+                    *ry,
+                    *x_axis_rotation,
+                    *large_arc,
+                    *sweep,
                 );
 
                 // Calculate all points, scale radii
                 let points = generate_arc_points(
-                    center, *rx * transform.scale, *ry * transform.scale, 
-                    start_angle, sweep_angle, *x_axis_rotation, ARC_RESOLUTION
+                    center,
+                    *rx * transform.scale,
+                    *ry * transform.scale,
+                    start_angle,
+                    sweep_angle,
+                    *x_axis_rotation,
+                    ARC_RESOLUTION,
                 );
 
-                vec![DrawCommand::Arc {
-                    points,
-                }]
-            },
-            PathElement::Circle {
-                cx, cy, r
-            } => {
+                vec![DrawCommand::Arc { points }]
+            }
+            PathElement::Circle { cx, cy, r } => {
                 vec![DrawCommand::Circle {
                     center: Self::initial_transform(*cx, *cy, viewbox, transform),
                     radius: *r * transform.scale,
                 }]
-            },
+            }
         }
     }
 
     // Transform a point from SVG to Nannou Coordinates, then applies tile transform
     fn initial_transform(
-        svg_x: f32, svg_y: f32, viewbox: &ViewBox, transform: &Transform2D
+        svg_x: f32,
+        svg_y: f32,
+        viewbox: &ViewBox,
+        transform: &Transform2D,
     ) -> Point2 {
         let center_x = viewbox.width / 2.0;
         let center_y = viewbox.height / 2.0;
@@ -207,8 +218,12 @@ impl CachedSegment {
     }
 
     // Translates a point to the correct Tile position
-    fn calculate_tile_transform(viewbox: &ViewBox, position: (u32, u32), grid_dims:(u32, u32)) -> Transform2D {
-        let (x,y) = position;
+    fn calculate_tile_transform(
+        viewbox: &ViewBox,
+        position: (u32, u32),
+        grid_dims: (u32, u32),
+    ) -> Transform2D {
+        let (x, y) = position;
         let (grid_x, grid_y) = grid_dims;
         let tile_width = viewbox.width;
         let tile_height = viewbox.height;
@@ -217,7 +232,8 @@ impl CachedSegment {
         let grid_height = grid_y as f32 * tile_height;
 
         let tile_center_x = (x as f32 - 1.0) * tile_width - grid_width / 2.0 + tile_width / 2.0;
-        let tile_center_y = -((y as f32 - 1.0) * tile_height) + grid_height / 2.0 - tile_height / 2.0;
+        let tile_center_y =
+            -((y as f32 - 1.0) * tile_height) + grid_height / 2.0 - tile_height / 2.0;
 
         Transform2D {
             translation: pt2(tile_center_x, tile_center_y),
@@ -246,8 +262,8 @@ pub struct CachedGrid {
 impl CachedGrid {
     pub fn new(project: &Project) -> Self {
         // Parse viewbox from SVG
-        let viewbox = parse_viewbox(&project.svg_base_tile)
-            .expect("Failed to parse viewbox from SVG");
+        let viewbox =
+            parse_viewbox(&project.svg_base_tile).expect("Failed to parse viewbox from SVG");
 
         // Parse the SVG & create basic grid elements
         let elements = parse_svg(&project.svg_base_tile);
@@ -269,7 +285,7 @@ impl CachedGrid {
                         &viewbox,
                         grid_dims,
                     );
-                    /* 
+                    /*
                     // Only print edge elements for brevity
                     if edge_type != EdgeType::None {
                         println!("Created {} at ({},{}) - {:?}", element_id, x, y, edge_type);
@@ -292,7 +308,7 @@ impl CachedGrid {
         }
     }
 
-    // Unlike Glyphmaker, where we draw all elements and then handle selection logic, 
+    // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
     // in Glyphvis we decide on whether to draw an element at the beginning.
     fn eliminate_overlaps(
         segments: HashMap<String, CachedSegment>,
@@ -314,7 +330,10 @@ impl CachedGrid {
         for segment in segments.values() {
             // Skip if it's not an edge
             if segment.edge_type == EdgeType::None {
-                final_segments.insert(segment.id.clone(), segments.get(&segment.id).unwrap().clone());
+                final_segments.insert(
+                    segment.id.clone(),
+                    segments.get(&segment.id).unwrap().clone(),
+                );
                 continue;
             }
 
@@ -327,21 +346,21 @@ impl CachedGrid {
                 grid_height,
             ) {
                 // check if neighbor has priority
-                let neighbor_has_priority = 
-                    neighbor_x < segment.tile_pos.0 ||
-                    (neighbor_x == segment.tile_pos.1 && neighbor_y < segment.tile_pos.1);
+                let neighbor_has_priority = neighbor_x < segment.tile_pos.0
+                    || (neighbor_x == segment.tile_pos.1 && neighbor_y < segment.tile_pos.1);
 
                 if neighbor_has_priority {
                     // Look for matching segments at neighbor position
-                    if let Some(neighbor_segments) = segments_by_pos.get(&(neighbor_x, neighbor_y)) {
+                    if let Some(neighbor_segments) = segments_by_pos.get(&(neighbor_x, neighbor_y))
+                    {
                         let mut should_keep = true;
-                        
+
                         for neighbor in neighbor_segments {
                             let direction = get_neighbor_direction(
                                 segment.tile_pos.0,
                                 segment.tile_pos.1,
                                 neighbor_x,
-                                neighbor_y
+                                neighbor_y,
                             );
 
                             if check_segment_alignment(segment, *neighbor, direction) {
@@ -351,16 +370,25 @@ impl CachedGrid {
                         }
 
                         if should_keep {
-                            final_segments.insert(segment.id.clone(), segments.get(&segment.id).unwrap().clone());
+                            final_segments.insert(
+                                segment.id.clone(),
+                                segments.get(&segment.id).unwrap().clone(),
+                            );
                         }
                     }
                 } else {
                     // This segment has priority, keep it
-                    final_segments.insert(segment.id.clone(), segments.get(&segment.id).unwrap().clone());
+                    final_segments.insert(
+                        segment.id.clone(),
+                        segments.get(&segment.id).unwrap().clone(),
+                    );
                 }
             } else {
                 // No valid neighbor position, keep the segment
-                final_segments.insert(segment.id.clone(), segments.get(&segment.id).unwrap().clone());
+                final_segments.insert(
+                    segment.id.clone(),
+                    segments.get(&segment.id).unwrap().clone(),
+                );
             }
         }
         // return:
@@ -378,7 +406,7 @@ impl CachedGrid {
                     command.draw(draw, &segment.style);
                 }
             });
-    
+
         // Process and draw foreground segments
         segments
             .iter()
@@ -390,44 +418,42 @@ impl CachedGrid {
             });
     }
 
-/*
-    pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
-        self.segments
-            .values()
-            .filter(| segment | self.active_segments.contains(&segment.id))
-            .flat_map(| segment | &segment.draw_commands)
-            .for_each(| command | command.draw(draw, style));
-    }
+    /*
+        pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
+            self.segments
+                .values()
+                .filter(| segment | self.active_segments.contains(&segment.id))
+                .flat_map(| segment | &segment.draw_commands)
+                .for_each(| command | command.draw(draw, style));
+        }
 
-    pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
-        self.segments
-            .values()
-            .filter(| segment | !self.active_segments.contains(&segment.id))
-            .flat_map(| segment | &segment.draw_commands)
-            .for_each(| command | command.draw(draw, style));
-    }
-*/
+        pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
+            self.segments
+                .values()
+                .filter(| segment | !self.active_segments.contains(&segment.id))
+                .flat_map(| segment | &segment.draw_commands)
+                .for_each(| command | command.draw(draw, style));
+        }
+    */
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         //self.transform = transform.clone();
         for segment in self.segments.values_mut() {
             segment.apply_transform(transform);
         }
     }
-    
 
     // Utility methods
     pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
         self.segments.get(id)
     }
 
-    pub fn get_segments_at(&self, x: u32, y: u32) -> Vec<&CachedSegment> {
+    pub fn get_segments_at(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
         self.segments
             .values()
-            .filter(|segment| segment.tile_pos == (x, y))
-            .collect()
+            .filter(move |segment| segment.tile_pos == (x, y))
     }
 
-/* 
+    /*
     fn validate_segment_points(&self) -> bool {
         for segment in self.segments.values() {
             for command in &segment.draw_commands {
@@ -461,7 +487,6 @@ impl CachedGrid {
     }
     */
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -500,7 +525,7 @@ mod tests {
                 DrawCommand::Line { start, end, .. } => {
                     assert_eq!(start, pt2(10.0, 10.0));
                     assert_eq!(end, pt2(20.0, 20.0));
-                },
+                }
                 _ => panic!("Wrong variant"),
             }
 
@@ -514,7 +539,7 @@ mod tests {
                 DrawCommand::Circle { center, radius, .. } => {
                     assert_eq!(center, pt2(10.0, 10.0));
                     assert_eq!(radius, 10.0);
-                },
+                }
                 _ => panic!("Wrong variant"),
             }
         }
@@ -532,14 +557,14 @@ mod tests {
                 x2: 10.0,
                 y2: 10.0,
             };
-            
+
             let segment = CachedSegment::new(
                 "test".to_string(),
                 (1, 1),
                 &path,
                 EdgeType::None,
                 &viewbox,
-                TEST_GRID_DIMS
+                TEST_GRID_DIMS,
             );
 
             assert_eq!(segment.id, "test");
@@ -551,30 +576,30 @@ mod tests {
         #[test]
         fn test_coordinate_transformation() {
             let viewbox = create_test_viewbox();
-            
+
             // Test center point transformation
             let path = PathElement::Circle {
                 cx: 50.0, // Center of viewbox
                 cy: 50.0,
                 r: 5.0,
             };
-            
+
             let segment = CachedSegment::new(
                 "center_test".to_string(),
                 (1, 1),
                 &path,
                 EdgeType::None,
                 &viewbox,
-                TEST_GRID_DIMS
+                TEST_GRID_DIMS,
             );
 
             // Center point should be transformed to (0,0) in Nannou coordinates
             match &segment.draw_commands[0] {
                 DrawCommand::Circle { center, .. } => {
-                    println!( "Center: {:?}", center);
+                    println!("Center: {:?}", center);
                     assert_eq!(center.x, 0.0);
                     assert_eq!(center.y, 0.0);
-                },
+                }
                 _ => panic!("Expected Circle"),
             }
         }
@@ -589,7 +614,8 @@ mod tests {
                 svg_base_tile: r#"<svg id="test" viewBox="0 0 100 100">
                     <path id="line1" d="M0,0 L100,0"/>
                     <circle id="circle1" cx="50" cy="50" r="5"/>
-                </svg>"#.to_string(),
+                </svg>"#
+                    .to_string(),
                 grid_x: 2,
                 grid_y: 2,
                 glyphs: HashMap::new(),
@@ -601,7 +627,7 @@ mod tests {
         fn test_grid_creation() {
             let project = create_test_project();
             let grid = CachedGrid::new(&project);
-            
+
             assert_eq!(grid.dimensions, (2, 2));
             assert!(!grid.segments.is_empty());
         }
@@ -610,23 +636,20 @@ mod tests {
         fn test_overlap_elimination() {
             let project = create_test_project();
             let grid = CachedGrid::new(&project);
-            
+
             // Test that overlapping edges are properly eliminated
             // For example, if we have a horizontal line at y=0, it should only appear
             // in either the top or bottom tile, not both
             let top_segments = grid.get_segments_at(1, 1);
             let bottom_segments = grid.get_segments_at(1, 2);
-            
+
             // Ensure we don't have the same edge in both tiles
-            let top_edges: Vec<EdgeType> = top_segments.iter()
-                .map(|s| s.edge_type)
-                .collect();
-            let bottom_edges: Vec<EdgeType> = bottom_segments.iter()
-                .map(|s| s.edge_type)
-                .collect();
-            
-            assert!(!(top_edges.contains(&EdgeType::South) && 
-                     bottom_edges.contains(&EdgeType::North)));
+            let top_edges: Vec<EdgeType> = top_segments.map(|s| s.edge_type).collect();
+            let bottom_edges: Vec<EdgeType> = bottom_segments.map(|s| s.edge_type).collect();
+
+            assert!(
+                !(top_edges.contains(&EdgeType::South) && bottom_edges.contains(&EdgeType::North))
+            );
         }
     }
 }

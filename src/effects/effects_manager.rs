@@ -1,7 +1,7 @@
 // src/effects/effects_manager.rs
 
-use std::collections::HashMap;
 use crate::views::DrawStyle;
+use std::collections::HashMap;
 
 pub enum EffectType {
     Grid(Box<dyn Effect>),
@@ -15,7 +15,12 @@ pub trait Effect {
 }
 
 pub trait SegmentEffect: Effect {
-    fn apply_to_segment(&self, segment_id: &str, base_style: &DrawStyle, current_time: f32) -> DrawStyle;
+    fn apply_to_segment(
+        &self,
+        segment_id: &str,
+        base_style: &DrawStyle,
+        current_time: f32,
+    ) -> DrawStyle;
     fn activate_segment(&mut self, segment_id: &str, time: f32);
     fn deactivate_segment(&mut self, segment_id: &str);
     fn is_segment_active(&self, segment_id: &str) -> bool;
@@ -31,7 +36,6 @@ impl<T: SegmentEffect> Effect for T {
     fn is_finished(&self) -> bool {
         SegmentEffect::is_effect_finished(self)
     }
-    
 }
 
 // Effect instance with metadata
@@ -54,11 +58,14 @@ impl EffectsManager {
 
     // Add a new effect
     pub fn add(&mut self, name: String, effect: EffectType, time: f32) {
-        self.effects.insert(name, EffectInstance {
-            effect,
-            is_active: true,
-            start_time: time,
-        });
+        self.effects.insert(
+            name,
+            EffectInstance {
+                effect,
+                is_active: true,
+                start_time: time,
+            },
+        );
     }
 
     // Remove an effect
@@ -80,7 +87,12 @@ impl EffectsManager {
     }
 
     // Apply all active effects
-    pub fn apply_segment_effects(&self, segment_id: &str, base_style: DrawStyle, time:f32) -> DrawStyle {
+    pub fn apply_segment_effects(
+        &self,
+        segment_id: &str,
+        base_style: DrawStyle,
+        time: f32,
+    ) -> DrawStyle {
         if self.effects.is_empty() {
             return base_style;
         }
@@ -108,34 +120,39 @@ impl EffectsManager {
         current_style
     }
 
-        // Apply all active effects
-        pub fn apply_grid_effects(&self, segment_id: &str, base_style: DrawStyle, time:f32) -> DrawStyle {
-            if self.effects.is_empty() {
-                return base_style;
-            }
-    
-            let mut current_style = base_style.clone();
-    
-            for instance in self.effects.values() {
-                if !instance.is_active {
-                    continue;
-                }
-    
-                match &instance.effect {
-                    EffectType::Grid(effect) => {
-                        current_style = effect.apply(&base_style, time);
-                    }
-                    EffectType::Segment(effect) => {
-                        if effect.is_segment_active(segment_id) {
-                            //current_style = effect.apply_to_segment(segment_id, &base_style, time);
-                            continue;
-                        }
-                    }
-                }
-            }
-    
-            current_style
+    // Apply all active effects
+    pub fn apply_grid_effects(
+        &self,
+        segment_id: &str,
+        base_style: DrawStyle,
+        time: f32,
+    ) -> DrawStyle {
+        if self.effects.is_empty() {
+            return base_style;
         }
+
+        let mut current_style = base_style.clone();
+
+        for instance in self.effects.values() {
+            if !instance.is_active {
+                continue;
+            }
+
+            match &instance.effect {
+                EffectType::Grid(effect) => {
+                    current_style = effect.apply(&base_style, time);
+                }
+                EffectType::Segment(effect) => {
+                    if effect.is_segment_active(segment_id) {
+                        //current_style = effect.apply_to_segment(segment_id, &base_style, time);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        current_style
+    }
 
     // for segment-specific operations
     pub fn activate_segment(&mut self, segment_id: &str, effect_name: &str, time: f32) {
@@ -156,9 +173,10 @@ impl EffectsManager {
 
     // Utility functions
     pub fn is_active(&self, name: &str) -> bool {
-        self.effects.get(name)
-        .map(|instance| instance.is_active)
-        .unwrap_or(false)
+        self.effects
+            .get(name)
+            .map(|instance| instance.is_active)
+            .unwrap_or(false)
     }
 
     pub fn has_effect(&self, name: &str) -> bool {

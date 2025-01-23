@@ -15,6 +15,7 @@ use nannou::image::RgbaImage;
 const BATCH_SIZE: usize = 10; // Process n frames at a time
 const FPS: u64 = 30;
 const FRAME_TIME: u64 = 1_000_000_000 / FPS; // Duration in nanoseconds between frames
+const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 #[derive(Clone, Copy)]
 pub enum OutputFormat {
@@ -106,7 +107,7 @@ impl FrameRecorder {
             let resolved_texture = wgpu::TextureBuilder::new()
                 .size([render_texture.width(), render_texture.height()])
                 .sample_count(1)  // No MSAA
-                .format(wgpu::TextureFormat::Rgba8Unorm)
+                .format(RESOLVED_TEXTURE_FORMAT)
                 .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | 
                         wgpu::TextureUsages::COPY_SRC |
                         wgpu::TextureUsages::COPY_DST |
@@ -120,13 +121,14 @@ impl FrameRecorder {
                 render_texture.sample_count(),  // source samples
                 render_texture.sample_type(),
                 1,  // destination samples (no MSAA)
-                wgpu::TextureFormat::Rgba8Unorm,
+                RESOLVED_TEXTURE_FORMAT,
             );
 
     
             // Create triple staging buffers for GPU->CPU transfer
             const NUM_BUFFERS: usize = 3;
-            let bytes_per_row = wgpu::util::align_to(render_texture.width() * 4, 256);
+            let pixel_size = format_bytes_per_pixel(RESOLVED_TEXTURE_FORMAT);
+            let bytes_per_row = wgpu::util::align_to(render_texture.width() * pixel_size, 256);
             let buffer_size = (bytes_per_row * render_texture.height()) as u64;
             
             let mut staging_buffers = Vec::with_capacity(NUM_BUFFERS);
@@ -258,7 +260,8 @@ impl FrameRecorder {
 
 
         // Calculate minimum bytes per row required by wgpu
-        let bytes_per_row = wgpu::util::align_to(self.resolved_texture.width() * 4, 256);
+        let pixel_size = format_bytes_per_pixel(RESOLVED_TEXTURE_FORMAT);
+        let bytes_per_row = wgpu::util::align_to(self.resolved_texture.width() * pixel_size, 256);
 
         // Step 2: Copy from resolved texture to staging buffer
         let copy_start = std::time::Instant::now();
@@ -307,14 +310,14 @@ impl FrameRecorder {
 
                 let unpadded_data = {
                     let mapped_memory = staging_buffer_clone.slice(..).get_mapped_range();
-                    let mut unpadded_data = Vec::with_capacity((width * height * 4) as usize);
+                    let mut unpadded_data = Vec::with_capacity((width * height * pixel_size) as usize);
 
                     // Use copy_from_slice for bulk copying of consecutive rows
-                    let actual_row_bytes = (width * 4) as usize;
+                    let actual_row_bytes = (width * pixel_size) as usize;
                     let mut src_offset = 0;
                     
                     // Pre-allocate the full buffer
-                    unpadded_data.resize((width * height * 4) as usize, 0);
+                    unpadded_data.resize((width * height * pixel_size) as usize, 0);
                     
                     // Copy each row efficiently
                     for row in 0..height {
@@ -442,6 +445,20 @@ fn process_frame_batch(
             }
         }
     });
+}
+
+fn format_bytes_per_pixel(format: wgpu::TextureFormat) -> u32 {
+    match format {
+        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+        wgpu::TextureFormat::Rgba16Float => 8,
+        wgpu::TextureFormat::Rgba32Float => 16,
+        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => 4,
+        wgpu::TextureFormat::Rg16Float => 4,
+        wgpu::TextureFormat::Rg32Float => 8,
+        wgpu::TextureFormat::R32Float => 4,
+        // Add other formats as needed
+        _ => panic!("Unsupported texture format: {:?}", format),
+    }
 }
 
 

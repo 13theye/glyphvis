@@ -389,8 +389,6 @@ fn render_and_capture(app: &App, model: &mut Model) {
     let mut encoder = device.create_command_encoder(&ce_desc);
     let texture_view = model.texture.view().build();
 
-    let queue = window.queue();
-
     model.draw_renderer.encode_render_pass(
         device, 
         &mut encoder, 
@@ -403,10 +401,10 @@ fn render_and_capture(app: &App, model: &mut Model) {
 
     // Capture the texture for FrameRecorder
     if model.frame_recorder.is_recording() {
-        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture, queue);
+        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
     }
 
-    queue.submit(Some(encoder.finish()));
+    window.queue().submit(Some(encoder.finish()));
     device.poll(wgpu::Maintain::Wait);
 }
 

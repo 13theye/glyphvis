@@ -17,6 +17,8 @@ const FPS: u64 = 30;
 const FRAME_TIME: u64 = 1_000_000_000 / FPS; // Duration in nanoseconds between frames
 const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
+const VERBOSE: bool = false; // true to show debug msgs
+
 #[derive(Clone, Copy)]
 pub enum OutputFormat {
     //PNG,
@@ -192,7 +194,6 @@ impl FrameRecorder {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         render_texture: &wgpu::Texture,
-        queue: &wgpu::Queue,
     ) {
         if !self.is_recording() {
             return;
@@ -204,8 +205,8 @@ impl FrameRecorder {
             .unwrap()
             .as_nanos() as u64;
 
+        // Check for timing gaps
         let mut last_capture = self.last_capture.lock().unwrap();
-
         let time_since_last = now - *last_capture;
         if time_since_last > FRAME_TIME * 2 {  // If we've missed more than one frame interval
             println!("WARNING: Frame timing gap detected - {}ms since last capture (expected {}ms)", 
@@ -217,53 +218,52 @@ impl FrameRecorder {
             println!("DEBUG: Previous capture still processing after {}ms", 
             time_since_last / 1_000_000);
             return;
+            }
         }
-}
 
+        // Skip this capture if not enough time has passed
         if now - *last_capture < FRAME_TIME {
             return;
         }
 
+        // Begin capture process - note the time, set capture in progress flag
+        self.capture_in_progress.store(true, Ordering::SeqCst);
         *last_capture = now;
-        let capture_start: std::time::Instant = std::time::Instant::now();
+        let frame_start = std::time::Instant::now();
 
-
+        // Check if we've reached the frame limit
         let mut frame_number = self.frame_number.lock().unwrap();
         if *frame_number >= self.frame_limit {
             self.toggle_recording();
             return;
         }
 
-        let frame_num = *frame_number;
+        // Increment frame number
         *frame_number += 1;
+        let frame_num = *frame_number;
 
-        // Set capture in progress flag
-        self.capture_in_progress.store(true, Ordering::SeqCst);
-
+        // Get the next staging buffer
         let buffer_index = {
             let current = self.current_buffer_index.load(Ordering::SeqCst);
             let next = (current + 1) % self.staging_buffers.len();
             self.current_buffer_index.store(next, Ordering::SeqCst);
             current
         };        
-        
         let staging_buffer = self.staging_buffers[buffer_index].clone();
 
         // GPU
-         // Step 1: Use the reshaper to resolve MSAA
-         let frame_start = std::time::Instant::now();
-         self.texture_reshaper.encode_render_pass(
+        // Step 1: Use the reshaper to resolve MSAA
+        let msaa_start = std::time::Instant::now();
+        self.texture_reshaper.encode_render_pass(
             &self.resolved_texture.view().build(),
-            encoder,
+                        encoder,
         );
-        println!("MSAA resolve took: {:?}", frame_start.elapsed());
+        if VERBOSE {println!("MSAA resolve took: {:?}", msaa_start.elapsed());}
 
-
+        // Step 2: Copy from resolved texture to staging buffer
         // Calculate minimum bytes per row required by wgpu
         let pixel_size = format_bytes_per_pixel(RESOLVED_TEXTURE_FORMAT);
         let bytes_per_row = wgpu::util::align_to(self.resolved_texture.width() * pixel_size, 256);
-
-        // Step 2: Copy from resolved texture to staging buffer
         let copy_start = std::time::Instant::now();
         encoder.copy_texture_to_buffer(
             self.resolved_texture.as_image_copy(),
@@ -281,100 +281,100 @@ impl FrameRecorder {
                 depth_or_array_layers: 1,
             },
         );
-        println!("Texture to buffer copy took: {:?}", copy_start.elapsed());
+        if VERBOSE {println!("Texture to buffer copy took: {:?}", copy_start.elapsed());}
 
 
-        // END GPU
-
+        // Step 3: Map the buffer and send the data
         let staging_buffer_clone = staging_buffer.clone();
-
         let sender = self.frame_sender.clone();
         let frames_in_queue = self.frames_in_queue.clone();
         let capture_in_progress_outer = self.capture_in_progress.clone();
-
-        // GPU add
         
-       // let frame_num = *self.frame_number.lock().unwrap();
         let width = render_texture.width();
         let height = render_texture.height();
-        // END GPU add
 
+        // Submit the encoder (prevents buffer mapping deadlock)
         device.poll(wgpu::Maintain::Poll);
 
         // Map buffer and process data
         let buffer_map_start = std::time::Instant::now();
         staging_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
-            if let Ok(()) = result {
+            match result {
+                Ok(()) => {
+                    let unpad_start = std::time::Instant::now();
 
-                let unpad_start = std::time::Instant::now();
+                    let unpadded_data = {
+                        let mapped_memory = staging_buffer_clone.slice(..).get_mapped_range();
+                        let mut unpadded_data = Vec::with_capacity((width * height * pixel_size) as usize);
 
-                let unpadded_data = {
-                    let mapped_memory = staging_buffer_clone.slice(..).get_mapped_range();
-                    let mut unpadded_data = Vec::with_capacity((width * height * pixel_size) as usize);
-
-                    // Use copy_from_slice for bulk copying of consecutive rows
-                    let actual_row_bytes = (width * pixel_size) as usize;
-                    let mut src_offset = 0;
-                    
-                    // Pre-allocate the full buffer
-                    unpadded_data.resize((width * height * pixel_size) as usize, 0);
-                    
-                    // Copy each row efficiently
-                    for row in 0..height {
-                        let dest_offset = row as usize * actual_row_bytes;
-                        let src_start = src_offset;
-                        let src_end = src_start + actual_row_bytes;
+                        // Use copy_from_slice for bulk copying of consecutive rows
+                        let actual_row_bytes = (width * pixel_size) as usize;
+                        let mut src_offset = 0;
                         
-                        unpadded_data[dest_offset..dest_offset + actual_row_bytes]
-                            .copy_from_slice(&mapped_memory[src_start..src_end]);
+                        // Pre-allocate the full buffer
+                        unpadded_data.resize((width * height * pixel_size) as usize, 0);
                         
-                        src_offset += bytes_per_row as usize;
+                        // Copy each row efficiently
+                        for row in 0..height {
+                            let dest_offset = row as usize * actual_row_bytes;
+                            let src_start = src_offset;
+                            let src_end = src_start + actual_row_bytes;
+                            
+                            unpadded_data[dest_offset..dest_offset + actual_row_bytes]
+                                .copy_from_slice(&mapped_memory[src_start..src_end]);
+                            
+                            src_offset += bytes_per_row as usize;
+                        }
+                        // return
+                        unpadded_data
+                    };
+                    if VERBOSE {println!("Unpadding took: {:?}", unpad_start.elapsed());}
+
+                    staging_buffer_clone.unmap();
+                    
+                    // Send the frame data
+                    let send_start = std::time::Instant::now();
+                    frames_in_queue.fetch_add(1, Ordering::SeqCst);
+                    if let Err(e) = sender.send((frame_num, unpadded_data, width, height)) {
+                        frames_in_queue.fetch_sub(1, Ordering::SeqCst);
+                        eprintln!("Failed to send frame: {}", e);
                     }
-                    
-                    unpadded_data
-                };
-                println!("Unpadding took: {:?}", unpad_start.elapsed());
-
-                staging_buffer_clone.unmap();
-                
-                let send_start = std::time::Instant::now();
-                frames_in_queue.fetch_add(1, Ordering::SeqCst);
-                if let Err(e) = sender.send((frame_num, unpadded_data, width, height)) {
-                    frames_in_queue.fetch_sub(1, Ordering::SeqCst);
-                    eprintln!("Failed to send frame: {}", e);
+                    if VERBOSE {println!("Frame send took: {:?}", send_start.elapsed());}
                 }
-                println!("Frame send took: {:?}", send_start.elapsed());
-
+                Err(e) => {
+                    eprintln!("Buffer mapping error: {}", e);
+                    staging_buffer_clone.unmap();
+                }
             }
             capture_in_progress_outer.store(false, Ordering::SeqCst);
-            println!("Total buffer mapping and processing took: {:?}", buffer_map_start.elapsed());
-
+            if VERBOSE {println!("Total buffer mapping and processing took: {:?}", buffer_map_start.elapsed());}
         });
 
-        println!("Total frame capture took: {:?}", frame_start.elapsed());
+        if VERBOSE {println!("Total frame capture took: {:?}", frame_start.elapsed());}
 
-    
         // Poll the device with a timeout to avoid infinite waiting
-    let timeout_duration = std::time::Duration::from_millis(50);
-    let start_time = std::time::Instant::now();
-    
-    while start_time.elapsed() < timeout_duration {
-        match device.poll(wgpu::Maintain::Wait) {
-            // If maintenance returns true, it means there are no more pending operations
-            true => {
-                return;
-            }
-            false => {
-                // Sleep a tiny bit to prevent tight polling
-                println!("DEBUG: Sleeping 1ms to prevent tight polling");
-                std::thread::sleep(std::time::Duration::from_millis(1));
+        let timeout_duration = std::time::Duration::from_millis(50);
+        let start_time = std::time::Instant::now();
+        
+        while start_time.elapsed() < timeout_duration {
+            match device.poll(wgpu::Maintain::Wait) {
+                // If maintenance returns true, it means there are no more pending operations
+                true => {
+                    return;
+                }
+                false => {
+                    // Sleep a tiny bit to prevent tight polling
+                    println!("DEBUG: Sleeping 1ms to prevent tight polling");
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
             }
         }
-    }
-    
-    println!("WARNING: Device poll timed out after {:?}", timeout_duration);
+        // If we reach this point, the poll timed out. Clean up pending operations.
+        device.poll(wgpu::Maintain::Poll);
+        self.capture_in_progress.store(false, Ordering::SeqCst);
+        println!("WARNING: Device poll timed out after {:?}", timeout_duration);
 
-}
+    }
 
     pub fn get_queue_status(&self) -> (usize, usize) {
         let processed = self.frames_processed.load(Ordering::SeqCst);
@@ -401,18 +401,15 @@ fn process_frame_batch(
     let frames: Vec<_> = frame_buffer.drain(..).collect();
 
     // Process frames in parallel
-
     frames.into_par_iter().for_each(|(frame_number, frame_data, width, height)| {
         let jpeg_start = std::time::Instant::now();
 
         if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
             let filename = match format {
-                //OutputFormat::PNG => format!("{}/frame{:05}.png", output_dir, frame_number),
                 OutputFormat::JPEG(_) => format!("{}/frame{:05}.jpg", output_dir, frame_number),
             };
 
             let result = match format {
-                //OutputFormat::PNG => image_buffer.save(&filename),
                 OutputFormat::JPEG(quality) => {
                     // Process JPEG in a scope to ensure memory is freed immediately
                     let result = {
@@ -433,7 +430,7 @@ fn process_frame_batch(
                             ))
                         }
                     };
-                    println!("JPEG encoding took: {:?}", jpeg_start.elapsed());
+                    if VERBOSE {println!("Frame {:?} encoding took: {:?}", frame_number, jpeg_start.elapsed());}
                     result
                 },
             };
@@ -461,18 +458,59 @@ fn format_bytes_per_pixel(format: wgpu::TextureFormat) -> u32 {
     }
 }
 
-
-
-
-/* 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
     use std::fs;
+    use nannou::wgpu;
+
+    // Helper to create a test wgpu device
+    fn create_test_device() -> (wgpu::Device, wgpu::Queue) {
+        let instance = nannou::wgpu::Instance::default();
+    
+        pollster::block_on(async {
+            let adapter = instance
+                .request_adapter(&nannou::wgpu::RequestAdapterOptions {
+                    power_preference: nannou::wgpu::PowerPreference::HighPerformance,
+                    force_fallback_adapter: false,
+                    compatible_surface: None,
+                })
+                .await
+                .expect("Failed to find appropriate adapter");
+
+            adapter
+                .request_device(
+                    &nannou::wgpu::DeviceDescriptor {
+                        label: None,
+                        features: nannou::wgpu::Features::empty(),
+                        limits: nannou::wgpu::Limits::default(),
+                    },
+                    None,
+                )
+                .await
+                .expect("Failed to create device")
+        })
+    }
+
+    fn create_test_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+        wgpu::TextureBuilder::new()
+            .size([width, height])
+            .sample_count(1)
+            .format(wgpu::TextureFormat::Rgba8UnormSrgb)
+            .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | 
+                   wgpu::TextureUsages::COPY_SRC |
+                   wgpu::TextureUsages::TEXTURE_BINDING)
+            .build(device)
+    }
 
     fn create_test_frame(width: u32, height: u32) -> Vec<u8> {
-        vec![255; (width * height * 4) as usize]
+        let size = (width * height * 4) as usize;
+        let mut data = Vec::with_capacity(size);
+        for i in 0..size {
+            data.push((i % 255) as u8); // Creates a gradient pattern
+        }
+        data
     }
 
     fn create_test_dir() -> String {
@@ -501,50 +539,95 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-
     #[test]
-    fn test_queue_status_initial() {
+    fn test_initialization() {
+        let (device, _) = create_test_device();
+        let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
             100,
             OutputFormat::JPEG(85),
         );
 
+        assert!(!recorder.is_recording(), "Should not be recording initially");
+        assert!(!recorder.has_pending_frames(), "Should not have pending frames initially");
+        
         let (processed, total) = recorder.get_queue_status();
         assert_eq!(processed, 0, "Initial processed count should be 0");
         assert_eq!(total, 0, "Initial total count should be 0");
-        assert!(!recorder.has_pending_frames(), "Should not have pending frames initially");
         
         cleanup_test_dir(&test_dir);
     }
 
     #[test]
-    fn test_queue_status_after_frame() {
+    fn test_recording_toggle() {
+        let (device, _) = create_test_device();
+        let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
             100,
             OutputFormat::JPEG(85),
         );
 
-        let frame_data = create_test_frame(100, 100);
-        recorder.send_frame_data((0, frame_data, 100, 100)).unwrap();
+        assert!(!recorder.is_recording(), "Should not be recording initially");
+        
+        recorder.toggle_recording();
+        assert!(recorder.is_recording(), "Should be recording after toggle");
+        
+        recorder.toggle_recording();
+        assert!(!recorder.is_recording(), "Should not be recording after second toggle");
+        
+        cleanup_test_dir(&test_dir);
+    }
 
-        // Give a small amount of time for the frame to be processed
-        std::thread::sleep(Duration::from_millis(1000));
-
+    #[test]
+    fn test_frame_capture() {
+        let (device, queue) = create_test_device();
+        let texture = create_test_texture(&device, 640, 480);
+        let test_dir = create_test_dir();
+        
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+        );
+        
+        recorder.toggle_recording();
+        
+        // Create and submit a test frame
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        recorder.capture_frame(&device, &mut encoder, &texture);
+        queue.submit(Some(encoder.finish()));
+        
+        // Wait for processing
+        std::thread::sleep(Duration::from_millis(100));
+        
         let (processed, total) = recorder.get_queue_status();
-        assert_eq!(total, 1, "Total frames should be 1");
-        assert!(processed <= total, "Processed frames should not exceed total frames");
+        assert!(total > 0, "Should have frames in queue");
+        assert!(processed <= total, "Processed frames should not exceed total");
         
         cleanup_test_dir(&test_dir);
     }
 
     #[test]
     fn test_queue_status_batch_processing() {
+        let (device, _) = create_test_device();
+        let texture = create_test_texture(&device, 100, 100);
         let test_dir = create_test_dir();
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
             100,
             OutputFormat::JPEG(85),
@@ -566,112 +649,127 @@ mod tests {
     }
 
     #[test]
-    fn test_pending_frames_accuracy() {
+    fn test_frame_limit() {
+        let (device, queue) = create_test_device();
+        let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
+        let frame_limit = 3;
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
-            100,
-            OutputFormat::JPEG(85)
+            frame_limit,
+            OutputFormat::JPEG(85),
         );
-
-        let frame_data = create_test_frame(100, 100);
-        for i in 0..5 {
-            recorder.send_frame_data((i, frame_data.clone(), 100, 100)).unwrap();
-            
-            // Check immediately after sending
-            let (processed, total) = recorder.get_queue_status();
-            assert!(total > processed, "Should have pending frames immediately after sending");
-            assert!(recorder.has_pending_frames(), "has_pending_frames should be true");
+        
+        recorder.toggle_recording();
+        
+        // Try to capture more frames than the limit
+        for _ in 0..frame_limit + 2 {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            recorder.capture_frame(&device, &mut encoder, &texture);
+            queue.submit(Some(encoder.finish()));
+            std::thread::sleep(Duration::from_millis(50));
         }
-
-        // Wait for processing to complete
-        std::thread::sleep(Duration::from_secs(1));
+        
+        // Wait for processing
+        std::thread::sleep(Duration::from_millis(200));
         
         let (processed, total) = recorder.get_queue_status();
-        assert_eq!(processed, total, "All frames should be processed after waiting");
-        assert!(!recorder.has_pending_frames(), "Should not have pending frames after processing");
+        assert!(total <= frame_limit as usize, "Should not exceed frame limit");
+        assert_eq!(processed, total, "All frames should be processed");
+        assert!(!recorder.is_recording(), "Recording should stop at frame limit");
         
         cleanup_test_dir(&test_dir);
     }
 
     #[test]
-    fn test_frame_counter_increment() {
+    fn test_frame_timing() {
+        let (device, queue) = create_test_device();
+        let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
             100,
             OutputFormat::JPEG(85),
         );
-
-        // Track counters before and after sending frames
-        let (_initial_processed, initial_total) = recorder.get_queue_status();
         
-        let frame_data = create_test_frame(100, 100);
-        for i in 0..3 {
-            recorder.send_frame_data((i, frame_data.clone(), 100, 100)).unwrap();
-            
-            // Check that total increases immediately
-            let (_, current_total) = recorder.get_queue_status();
-            assert_eq!(current_total, initial_total + (i as usize) + 1, 
-                      "Total count should increment by one for each frame");
-        }
+        recorder.toggle_recording();
         
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_processed_never_exceeds_total() {
-        let test_dir = create_test_dir();
-        let recorder = FrameRecorder::new(
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-        );
-
-        let frame_data = create_test_frame(100, 100);
-        for i in 0..10 {
-            recorder.send_frame_data((i, frame_data.clone(), 100, 100)).unwrap();
-            
-            let (processed, total) = recorder.get_queue_status();
-            assert!(processed <= total, 
-                   "Processed count should never exceed total count");
-        }
-
-        // Check multiple times during processing
+        // Try to capture frames faster than FPS limit
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let time_between_captures = Duration::from_millis(10); // Much faster than FPS allows
+        let start = std::time::Instant::now();
+        let mut captures = 0;
+        
         for _ in 0..5 {
-            std::thread::sleep(Duration::from_millis(100));
-            let (processed, total) = recorder.get_queue_status();
-            assert!(processed <= total, 
-                   "Processed count should never exceed total during processing");
+            recorder.capture_frame(&device, &mut encoder, &texture);
+            captures += 1;
+            queue.submit(Some(encoder.finish()));
+            std::thread::sleep(time_between_captures);
+            encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         }
+        
+        let elapsed = start.elapsed();
+        let theoretical_frames = (elapsed.as_secs_f64() * FPS as f64).floor() as u32;
+        
+        let (processed, total) = recorder.get_queue_status();
+        assert!(total <= theoretical_frames as usize, 
+                "Should not capture more frames than FPS limit allows");
         
         cleanup_test_dir(&test_dir);
     }
 
     #[test]
-    fn test_recording_toggle() {
+    fn test_output_files() {
+        let (device, queue) = create_test_device();
+        let texture = create_test_texture(&device, 320, 240);
         let test_dir = create_test_dir();
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
             100,
             OutputFormat::JPEG(85),
         );
-
-        assert!(!recorder.is_recording(), "Should not be recording initially");
         
         recorder.toggle_recording();
-        assert!(recorder.is_recording(), "Should be recording after toggle");
         
-        recorder.toggle_recording();
-        assert!(!recorder.is_recording(), "Should not be recording after second toggle");
+        // Capture a few frames
+        for _ in 0..3 {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            recorder.capture_frame(&device, &mut encoder, &texture);
+            queue.submit(Some(encoder.finish()));
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        
+        // Wait for processing to complete
+        std::thread::sleep(Duration::from_millis(500));
+        
+        // Check if output files exist and have reasonable sizes
+        for i in 1..=3 {
+            let file_path = format!("{}/frame{:05}.jpg", test_dir, i);
+            let metadata = fs::metadata(&file_path).expect("Output file should exist");
+            assert!(metadata.len() > 1000, "JPEG file should have reasonable size");
+        }
         
         cleanup_test_dir(&test_dir);
     }
 
     #[test]
     fn test_cleanup_after_recording() {
+        let (device, queue) = create_test_device();
+        let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
+        
         let recorder = FrameRecorder::new(
+            &device,
+            &texture,
             &test_dir,
             100,
             OutputFormat::JPEG(85),
@@ -679,16 +777,18 @@ mod tests {
 
         recorder.toggle_recording();
         
-        // Send some frames
-        let frame_data = create_test_frame(100, 100);
-        for i in 0..5 {
-            recorder.send_frame_data((i, frame_data.clone(), 100, 100)).unwrap();
+        // Capture some frames
+        for _ in 0..3 {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            recorder.capture_frame(&device, &mut encoder, &texture);
+            queue.submit(Some(encoder.finish()));
+            std::thread::sleep(Duration::from_millis(50));
         }
         
         recorder.toggle_recording();
         
         // Wait for processing to complete
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_millis(500));
         
         let (processed, total) = recorder.get_queue_status();
         assert_eq!(processed, total, "All frames should be processed after recording stops");
@@ -696,4 +796,3 @@ mod tests {
         cleanup_test_dir(&test_dir);
     }
 }
-    */

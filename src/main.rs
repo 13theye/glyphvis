@@ -140,6 +140,8 @@ fn model(app: &App) -> Model {
 
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
+        &device,
+        &texture,
         OUTPUT_DIR,
         FRAME_LIMIT,
         OUTPUT_FORMAT,
@@ -403,6 +405,7 @@ fn render_and_capture(app: &App, model: &mut Model) {
     }
 
     window.queue().submit(Some(encoder.finish()));
+    device.poll(wgpu::Maintain::Wait);
 }
 
 

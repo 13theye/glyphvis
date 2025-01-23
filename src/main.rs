@@ -1,16 +1,15 @@
 // src/main.rs
 use nannou::prelude::*;
+use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;
-use rand::Rng;
 
 use glyphvis::{
-    models:: Project,
-    views:: { GridInstance, DrawStyle, Transform2D },
-    controllers:: GlyphController,
-    services:: { FrameRecorder, OutputFormat },
+    controllers::GlyphController,
+    models::Project,
+    services::{FrameRecorder, OutputFormat},
     //effects::{ EffectsManager, init_effects },
-
+    views::{DrawStyle, GridInstance, Transform2D},
 };
 
 // APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
@@ -35,11 +34,10 @@ const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json"
 
 // const BPM: u32 = 120;
 
-
 struct Model {
     // Core components:
     project: Project,
-    grids: HashMap<String, GridInstance>,    //<grid_id : CachedGrid>
+    grids: HashMap<String, GridInstance>, //<grid_id : CachedGrid>
     glyphs: GlyphController,
 
     // Rendering components:
@@ -66,25 +64,21 @@ struct Model {
 }
 
 fn main() {
-    nannou::app(model)
-        .update(update)
-        .run();
+    nannou::app(model).update(update).run();
 }
 
 fn model(app: &App) -> Model {
-
     // size of captures
-    let texture_size= TEXTURE_SIZE;
+    let texture_size = TEXTURE_SIZE;
 
     // size of view window
-    let window_size= WINDOW_SIZE;
+    let window_size = WINDOW_SIZE;
 
     let texture_samples = TEXTURE_SAMPLES;
 
     // Load project
-    let project = Project::load(PROJECT_PATH)
-        .expect("Failed to load project file");
-    
+    let project = Project::load(PROJECT_PATH).expect("Failed to load project file");
+
     /*
     // Create grid from project
     let grid = CachedGrid::new(&project);
@@ -94,7 +88,8 @@ fn model(app: &App) -> Model {
     let glyphs = GlyphController::new(&project);
 
     // Create window
-    let window_id = app.new_window()
+    let window_id = app
+        .new_window()
         .size(window_size[0], window_size[1])
         .msaa_samples(1)
         .view(view)
@@ -110,7 +105,7 @@ fn model(app: &App) -> Model {
         .size(texture_size)
         // Our texture will be used as the RENDER_ATTACHMENT for our `Draw` render pass.
         // It will also be SAMPLED by the `TextureCapturer` and `TextureResizer`.
-        .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING )
+        .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING)
         // Use nannou's default multisampling sample count.
         .sample_count(texture_samples)
         // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing. Rgba16Float
@@ -121,7 +116,7 @@ fn model(app: &App) -> Model {
 
     // Set up rendering pipeline
     let draw_renderer = nannou::draw::RendererBuilder::new()
-    .build_from_texture_descriptor(device, texture.descriptor());
+        .build_from_texture_descriptor(device, texture.descriptor());
     let sample_count = window.msaa_samples();
 
     // Create the texture reshaper.
@@ -139,20 +134,14 @@ fn model(app: &App) -> Model {
     );
 
     // Create the frame recorder
-    let frame_recorder = FrameRecorder::new(
-        &device,
-        &texture,
-        OUTPUT_DIR,
-        FRAME_LIMIT,
-        OUTPUT_FORMAT,
-    );
+    let frame_recorder =
+        FrameRecorder::new(device, &texture, OUTPUT_DIR, FRAME_LIMIT, OUTPUT_FORMAT);
 
     // Create effects
-    
 
     Model {
         project,
-        grids: HashMap::new(),   //grid,
+        grids: HashMap::new(), //grid,
         glyphs,
 
         texture,
@@ -175,7 +164,6 @@ fn model(app: &App) -> Model {
         // FPS
         last_update: Instant::now(),
         fps: 0.0,
-
     }
 }
 
@@ -184,25 +172,25 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
         // show next glyph
         Key::Space => {
             model.needs_glyph_update = true;
-        },
+        }
         // Return grids to where they spawned
         Key::Backslash => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.reset_location();
             }
-        },
+        }
         // Init grids or hide/show them
         Key::G => {
             if model.grids.is_empty() {
                 make_three_grids(app, model);
             } else {
                 for (name, grid_instance) in model.grids.iter_mut() {
-                    if name != "Grid Center"{
+                    if name != "Grid Center" {
                         grid_instance.visible = !grid_instance.visible;
                     }
-                }  
+                }
             }
-        },
+        }
         Key::R => model.frame_recorder.toggle_recording(),
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {
@@ -212,7 +200,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 model.frame_recorder.toggle_recording();
             }
             model.exit_requested = true;
-        },
+        }
         // Move grids 10pts to the right
         Key::Right => {
             let position_delta = Transform2D {
@@ -223,7 +211,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.apply_transform(&position_delta);
             }
-        },
+        }
         // Move grids 10pts to the left
         Key::Left => {
             let position_delta = Transform2D {
@@ -234,19 +222,19 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.apply_transform(&position_delta);
             }
-        },
+        }
         // Rotate grids 90 degrees
         Key::Up => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.rotate_in_place(90.0)
             }
-        },
+        }
         // Rotate grids -90 degrees
         Key::Down => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.rotate_in_place(-90.0);
             }
-        },
+        }
         Key::P => {
             model.debug_flag = !model.debug_flag;
         }
@@ -255,17 +243,16 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
-
     // FPS calculation
     if model.debug_flag {
         let now = Instant::now();
         let duration = now - model.last_update;
         model.last_update = now;
-        model.fps = 1.0/duration.as_secs_f32();
+        model.fps = 1.0 / duration.as_secs_f32();
     }
 
     // Update the current model-wide glyph here -- solves timing issues
-    if model.needs_glyph_update{
+    if model.needs_glyph_update {
         update_glyph(app, model);
         model.needs_glyph_update = false;
     }
@@ -276,8 +263,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // frames processing progress bar:
     if model.exit_requested {
-        handle_exit_state(app, model);  
-        return;  // Important: return here to not continue with normal rendering
+        handle_exit_state(app, model);
+        return; // Important: return here to not continue with normal rendering
     }
 
     // Set background base style
@@ -286,7 +273,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
 
-    /* 
+    /*
     let glyph_style = DrawStyle {
         color: rgb(0.7, 0.1, 0.1),
         stroke_weight: 5.0,
@@ -297,7 +284,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Loop over each GridInstance and Draw
     for (_, grid_instance) in model.grids.iter() {
-        
         //let grid_start = std::time::Instant::now();
 
         let ready_segments = model.glyphs.get_renderable_segments(
@@ -307,12 +293,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             &bg_style,
             &grid_instance.effects_manager,
             app.time,
-            false,
         );
 
         // drawing operations
         if grid_instance.visible {
-            grid_instance.draw_segments(&draw, ready_segments);
+            grid_instance.draw_segments(draw, ready_segments);
         }
 
         //let grid_duration = grid_start.elapsed();
@@ -335,7 +320,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         draw.text(&format!("FPS: {:.1}", model.fps))
             .x_y(1100.0, 290.0)
             .color(RED);
-
     }
 
     // Rnder to texture and handle frame recording
@@ -343,41 +327,38 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     //let total_duration = start_time.elapsed();
     //println!("Total update time: {:?}", total_duration);
-
 }
 
 // Draw the state of Model into the given Frame
 fn view(_app: &App, model: &Model, frame: Frame) {
-
     //resize texture to screen
     let mut encoder = frame.command_encoder();
 
     model
         .texture_reshaper
-        .encode_render_pass(frame.texture_view(), &mut *encoder);
-
+        .encode_render_pass(frame.texture_view(), &mut encoder);
 }
 
 // ******************************* State-triggered functions *****************************
 
-
 fn update_glyph(app: &App, model: &mut Model) {
     let segment_ids = model.glyphs.next_glyph(&model.project);
-    let color_hsl = hsl (model.random.gen(), model.random.gen(), 0.3);
+    let color_hsl = hsl(model.random.gen(), model.random.gen(), 0.3);
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
         stroke_weight: 5.0,
     };
-    
+
     for (_, grid_instance) in model.grids.iter_mut() {
         for segment_id in &segment_ids {
-            grid_instance.effects_manager.activate_segment(&segment_id, "power_on", app.time);
+            grid_instance
+                .effects_manager
+                .activate_segment(segment_id, "power_on", app.time);
 
             model.effect_target_style = glyph_style.clone();
         }
     }
 }
-
 
 // ******************************* Rendering and Capture *****************************
 
@@ -385,29 +366,31 @@ fn render_and_capture(app: &App, model: &mut Model) {
     let window = app.main_window();
     let device = window.device();
     let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Texture renderer"),};
+        label: Some("Texture renderer"),
+    };
     let mut encoder = device.create_command_encoder(&ce_desc);
     let texture_view = model.texture.view().build();
 
     model.draw_renderer.encode_render_pass(
-        device, 
-        &mut encoder, 
-        &model.draw, 
-        2.0, 
-        model.texture.size(), 
-        &texture_view, 
-        None
+        device,
+        &mut encoder,
+        &model.draw,
+        2.0,
+        model.texture.size(),
+        &texture_view,
+        None,
     );
 
     // Capture the texture for FrameRecorder
     if model.frame_recorder.is_recording() {
-        model.frame_recorder.capture_frame(device, &mut encoder, &model.texture);
+        model
+            .frame_recorder
+            .capture_frame(device, &mut encoder, &model.texture);
     }
 
     window.queue().submit(Some(encoder.finish()));
     device.poll(wgpu::Maintain::Wait);
 }
-
 
 // ******************************* Exit State Handling *******************************
 
@@ -425,15 +408,12 @@ fn draw_progress_screen(app: &App, model: &mut Model) {
     let draw = &model.draw;
     draw.background().color(BLACK);
 
-    let (processed, total)  = model.frame_recorder.get_queue_status();
+    let (processed, total) = model.frame_recorder.get_queue_status();
 
     // Draw progress text
     let text = format!("{} / {}\nframes saved", processed, total);
-    draw.text(&text)
-        .color(WHITE)
-        .font_size(32)
-        .x_y(0.0, 50.0);
-        
+    draw.text(&text).color(WHITE).font_size(32).x_y(0.0, 50.0);
+
     // Draw progress bar
     let progress = processed as f32 / total as f32;
     draw_progress_bar(draw, progress);
@@ -448,48 +428,64 @@ fn draw_progress_bar(draw: &Draw, progress: f32) {
 
     // Background bar
     draw.rect()
-    .color(GRAY)
-    .w_h(bar_width, bar_height)
-    .x_y(0.0, -50.0);
-        
+        .color(GRAY)
+        .w_h(bar_width, bar_height)
+        .x_y(0.0, -50.0);
+
     // Progress bar
     draw.rect()
         .color(GREEN)
         .w_h(bar_width * progress, bar_height)
-        .x_y(-bar_width/2.0 + (bar_width * progress)/2.0, -50.0);
+        .x_y(-bar_width / 2.0 + (bar_width * progress) / 2.0, -50.0);
 }
 
 fn render_progress(app: &App, model: &mut Model) {
     let window = app.main_window();
     let device = window.device();
     let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Progress renderer"),};
+        label: Some("Progress renderer"),
+    };
     let mut encoder = device.create_command_encoder(&ce_desc);
     let texture_view = model.texture.view().build();
 
     model.draw_renderer.encode_render_pass(
-        device, 
-        &mut encoder, 
-        &model.draw, 
-        2.0, 
-        model.texture.size(), 
-        &texture_view, 
-        None
+        device,
+        &mut encoder,
+        &model.draw,
+        2.0,
+        model.texture.size(),
+        &texture_view,
+        None,
     );
-    window.queue().submit(Some(encoder.finish()));        
+    window.queue().submit(Some(encoder.finish()));
 }
-
-
 
 // ******************************* Debug stuff *******************************
 
 fn make_three_grids(app: &App, model: &mut Model) {
+    let grid_1 = GridInstance::new(
+        app,
+        &model.project,
+        "Grid Left".to_string(),
+        pt2(-600.0, 0.0),
+        90.0,
+    );
+    let grid_2 = GridInstance::new(
+        app,
+        &model.project,
+        "Grid Center".to_string(),
+        pt2(0.0, 0.0),
+        0.0,
+    );
+    let grid_3 = GridInstance::new(
+        app,
+        &model.project,
+        "Grid Right".to_string(),
+        pt2(600.0, 0.0),
+        -90.0,
+    );
 
-    let grid_1 = GridInstance::new(app, &model.project, "Grid Left".to_string(), pt2(-600.0, 0.0), 90.0);
-    let grid_2 = GridInstance::new(app, &model.project, "Grid Center".to_string(), pt2(0.0, 0.0), 0.0);
-    let grid_3 = GridInstance::new(app, &model.project, "Grid Right".to_string(), pt2(600.0, 0.0), -90.0);
-
-    model.grids.insert(grid_1.id.clone(),grid_1);
+    model.grids.insert(grid_1.id.clone(), grid_1);
     model.grids.insert(grid_2.id.clone(), grid_2);
     model.grids.insert(grid_3.id.clone(), grid_3);
 

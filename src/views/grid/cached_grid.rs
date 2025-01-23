@@ -303,7 +303,7 @@ impl CachedGrid {
         Self {
             dimensions: (project.grid_x, project.grid_y),
             segments,
-            viewbox: viewbox,
+            viewbox,
             transform: Transform2D::default(),
         }
     }
@@ -363,7 +363,7 @@ impl CachedGrid {
                                 neighbor_y,
                             );
 
-                            if check_segment_alignment(segment, *neighbor, direction) {
+                            if check_segment_alignment(segment, neighbor, direction) {
                                 should_keep = false;
                                 break;
                             }

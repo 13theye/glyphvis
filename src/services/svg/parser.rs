@@ -1,7 +1,6 @@
-
 // src/services/svg/parser.rs
-use std::str::FromStr;
 use crate::models::PathElement;
+use std::str::FromStr;
 
 pub struct SVGElement {
     pub id: String,
@@ -32,7 +31,6 @@ fn parse_id(element: &str) -> Option<String> {
     None
 }
 
-
 // supported SVG elements: path & circle
 fn parse_element(element: &str) -> Option<PathElement> {
     println!("Parsing SVG element: '{}'", element);
@@ -41,12 +39,7 @@ fn parse_element(element: &str) -> Option<PathElement> {
     }
 
     if let Some((_, second_part)) = element.split_once("id=") {
-        let d = second_part
-            .split("d=\"")
-            .nth(1)?
-            .split('"')
-            .next()?
-            .trim();
+        let d = second_part.split("d=\"").nth(1)?.split('"').next()?.trim();
 
         if d.contains('A') {
             parse_arc(d)
@@ -60,9 +53,10 @@ fn parse_element(element: &str) -> Option<PathElement> {
 
 // Move the existing parsing functions from path_service.rs
 fn parse_line(d: &str) -> Option<PathElement> {
-    let re = regex::Regex::new(r"M\s*([\d.-]+)[\s,]+([\d.-]+)\s*L\s*([\d.-]+)[\s,]+([\d.-]+)").ok()?;
+    let re =
+        regex::Regex::new(r"M\s*([\d.-]+)[\s,]+([\d.-]+)\s*L\s*([\d.-]+)[\s,]+([\d.-]+)").ok()?;
     let caps = re.captures(d)?;
-    
+
     Some(PathElement::Line {
         x1: f32::from_str(&caps[1]).ok()?,
         y1: f32::from_str(&caps[2]).ok()?,
@@ -76,9 +70,9 @@ fn parse_arc(d: &str) -> Option<PathElement> {
     let re = regex::Regex::new(
         r"^M\s*([\d.-]+),([\d.-]+)\s*A\s*([\d.-]+),([\d.-]+)\s*([\d.-]+)\s+(0|1),(0|1)\s*([\d.-]+),([\d.-]+)$"
     ).ok()?;
-    
+
     let caps = re.captures(d)?;
-    
+
     Some(PathElement::Arc {
         start_x: f32::from_str(&caps[1]).ok()?,
         start_y: f32::from_str(&caps[2]).ok()?,
@@ -96,7 +90,7 @@ fn parse_circle(element: &str) -> Option<PathElement> {
     println!("Trying to parse circle: '{}'", element);
     let re = regex::Regex::new(r#"cx="([\d.-]+)".*cy="([\d.-]+)".*r="([\d.-]+)""#).ok()?;
     let caps = re.captures(element)?;
-    
+
     Some(PathElement::Circle {
         cx: f32::from_str(&caps[1]).ok()?,
         cy: f32::from_str(&caps[2]).ok()?,
@@ -112,17 +106,17 @@ mod tests {
     fn test_parse_line() {
         let svg_data = r#"<path id="line1" d="M 0,0 L 100,100"/>"#;
         let elements = parse_svg(svg_data);
-        
+
         assert_eq!(elements.len(), 1);
         assert_eq!(elements[0].id, "line1");
-        
+
         match &elements[0].path {
             PathElement::Line { x1, y1, x2, y2 } => {
                 assert_eq!(*x1, 0.0);
                 assert_eq!(*y1, 0.0);
                 assert_eq!(*x2, 100.0);
                 assert_eq!(*y2, 100.0);
-            },
+            }
             _ => panic!("Expected Line"),
         }
     }
@@ -131,16 +125,16 @@ mod tests {
     fn test_parse_circle() {
         let svg_data = r#"<circle id="circle1" cx="50" cy="50" r="25"/>"#;
         let elements = parse_svg(svg_data);
-        
+
         assert_eq!(elements.len(), 1);
         assert_eq!(elements[0].id, "circle1");
-        
+
         match &elements[0].path {
             PathElement::Circle { cx, cy, r } => {
                 assert_eq!(*cx, 50.0);
                 assert_eq!(*cy, 50.0);
                 assert_eq!(*r, 25.0);
-            },
+            }
             _ => panic!("Expected Circle"),
         }
     }
@@ -149,15 +143,21 @@ mod tests {
     fn test_parse_arc() {
         let svg_data = r#"<path id="arc1" d="M50,0A50,50 0 0,0 100,50"/>"#;
         let elements = parse_svg(svg_data);
-        
+
         assert_eq!(elements.len(), 1);
         assert_eq!(elements[0].id, "arc1");
-        
+
         match &elements[0].path {
-            PathElement::Arc { 
-                start_x, start_y, rx, ry, 
-                x_axis_rotation, large_arc, sweep,
-                end_x, end_y 
+            PathElement::Arc {
+                start_x,
+                start_y,
+                rx,
+                ry,
+                x_axis_rotation,
+                large_arc,
+                sweep,
+                end_x,
+                end_y,
             } => {
                 assert_eq!(*start_x, 50.0);
                 assert_eq!(*start_y, 0.0);
@@ -168,7 +168,7 @@ mod tests {
                 assert!(!*sweep);
                 assert_eq!(*end_x, 100.0);
                 assert_eq!(*end_y, 50.0);
-            },
+            }
             _ => panic!("Expected Arc"),
         }
     }

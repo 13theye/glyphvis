@@ -45,6 +45,7 @@ struct EffectInstance {
     start_time: f32,
 }
 
+#[derive(Default)]
 pub struct EffectsManager {
     effects: HashMap<String, EffectInstance>,
 }

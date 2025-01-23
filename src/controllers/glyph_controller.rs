@@ -2,7 +2,6 @@
 /// GlyphController coordinates between the Project and the GridInstance
 /// Gets the Glyph's segment_ids from Project
 /// Uses that to build foreground and background RenderableSegments from GridInstance
-use nannou::prelude::*;
 use std::collections::HashSet;
 
 use crate::models::data_model::{Glyph, Project};
@@ -58,15 +57,11 @@ impl GlyphController {
         background_style: &DrawStyle,
         effect_manager: &EffectsManager,
         time: f32,
-        debug_flag: bool,
     ) -> Vec<RenderableSegment<'a>> {
         let mut return_segments = Vec::new();
         let active_segment_ids = self.get_active_segments(project);
         let grid = &grid_instance.grid;
         let (grid_x, grid_y) = grid.dimensions;
-
-        // debug color function
-        let debug_color = |x: u32, y: u32| -> f32 { ((x + y) as f32) / (grid_x + grid_y) as f32 };
 
         // iterate over tiles
         for y in 1..=grid_y {
@@ -75,15 +70,7 @@ impl GlyphController {
 
                 for segment in segments {
                     if active_segment_ids.contains(&segment.id) {
-                        let base_style = if debug_flag {
-                            let g = debug_color(x, y);
-                            DrawStyle {
-                                color: rgb(0.9, g, 0.0),
-                                stroke_weight: foreground_style.stroke_weight,
-                            }
-                        } else {
-                            foreground_style.clone()
-                        };
+                        let base_style = foreground_style.clone();
                         // Apply effect if one is provided
                         let final_style =
                             effect_manager.apply_segment_effects(&segment.id, base_style, time);
@@ -94,15 +81,7 @@ impl GlyphController {
                             layer: Layer::Foreground,
                         });
                     } else {
-                        let base_style = if debug_flag {
-                            let g = debug_color(x, y);
-                            DrawStyle {
-                                color: rgb(0.0, g, 1.0),
-                                stroke_weight: foreground_style.stroke_weight,
-                            }
-                        } else {
-                            background_style.clone()
-                        };
+                        let base_style = background_style.clone();
                         // Apply effect if one is provided
                         let final_style =
                             effect_manager.apply_grid_effects(&segment.id, base_style, time);

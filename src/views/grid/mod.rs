@@ -8,4 +8,6 @@ pub mod transform;
 pub use cached_grid::{
     CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, RenderableSegment,
 };
+pub use grid_instance::GridInstance;
+pub use segment_graph::SegmentGraph;
 pub use transform::Transform2D;

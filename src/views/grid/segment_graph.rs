@@ -5,6 +5,7 @@ use nannou::prelude::*;
 use std::collections::HashMap;
 
 const CONNECTION_THRESHOLD: f32 = 0.001; // Small threshold for floating point comparison
+const VERBOSE: bool = false;
 
 #[derive(Debug, Clone)]
 pub struct SegmentConnection {
@@ -78,7 +79,9 @@ impl SegmentGraph {
         // Create a list of all segment IDs
         let segment_ids: Vec<String> = self.nodes.keys().cloned().collect();
 
-        println!("\nBuilding connections:");
+        if VERBOSE {
+            println!("\nBuilding connections:");
+        }
 
         // For each pair of segments
         for i in 0..segment_ids.len() {
@@ -97,17 +100,23 @@ impl SegmentGraph {
                     continue;
                 };
 
-                println!("\nComparing {} and {}:", id1, id2);
-                println!("  Points 1: {:?}", endpoints1);
-                println!("  Points 2: {:?}", endpoints2);
+                if VERBOSE {
+                    println!("\nComparing {} and {}:", id1, id2);
+                    println!("  Points 1: {:?}", endpoints1);
+                    println!("  Points 2: {:?}", endpoints2);
+                }
 
                 // Check all endpoint pairs for connections
                 for p1 in &endpoints1 {
                     for p2 in &endpoints2 {
                         let distance = p1.distance(*p2);
-                        println!("    Distance between {:?} and {:?}: {}", p1, p2, distance);
+                        if VERBOSE {
+                            println!("    Distance between {:?} and {:?}: {}", p1, p2, distance);
+                        }
                         if distance <= CONNECTION_THRESHOLD {
-                            println!("    CONNECTION FOUND!");
+                            if VERBOSE {
+                                println!("    CONNECTION FOUND!");
+                            }
                             // Found a connection - add it to both segments
                             let connection_point = (*p1 + *p2) / 2.0; // Midpoint
 
@@ -133,12 +142,8 @@ impl SegmentGraph {
         }
 
         // Print final connections
-        println!("\nFinal connections:");
-        for (id, node) in &self.nodes {
-            println!("{} has {} connections:", id, node.connections.len());
-            for conn in &node.connections {
-                println!("  -> {} at {:?}", conn.segment_id, conn.connection_point);
-            }
+        if VERBOSE {
+            self.print_connections();
         }
     }
 

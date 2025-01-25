@@ -5,7 +5,7 @@ use nannou::prelude::*;
 use std::collections::HashMap;
 
 const CONNECTION_THRESHOLD: f32 = 0.001; // Small threshold for floating point comparison
-const VERBOSE: bool = false;
+const VERBOSE: bool = true;
 
 #[derive(Debug, Clone)]
 pub struct SegmentConnection {
@@ -16,6 +16,7 @@ pub struct SegmentConnection {
 #[derive(Debug)]
 pub struct SegmentNode {
     pub id: String,
+    pub tile_pos: (u32, u32),
     pub commands: Vec<DrawCommand>,
     pub connections: Vec<SegmentConnection>,
 }
@@ -63,6 +64,7 @@ impl SegmentGraph {
                 id.clone(),
                 SegmentNode {
                     id: id.clone(),
+                    tile_pos: segment.tile_pos,
                     commands: segment.draw_commands.clone(),
                     connections: Vec::new(),
                 },
@@ -76,6 +78,84 @@ impl SegmentGraph {
     }
 
     fn build_connections(&mut self) {
+        // Collect all SegmentNodes by tile position
+        let mut nodes_by_pos: HashMap<(u32, u32), Vec<String>> = HashMap::new();
+        for (id, node) in &self.nodes {
+            nodes_by_pos
+                .entry(node.tile_pos)
+                .or_default()
+                .push(id.clone());
+        }
+
+        let mut new_connections: HashMap<String, Vec<SegmentConnection>> = HashMap::new();
+
+        // For each segment
+        for (id1, segment1) in &self.nodes {
+            let (x, y) = segment1.tile_pos;
+            let endpoints1 = segment1.get_endpoints();
+
+            // get segments from current and neighboring tiles
+            let neighbor_positions = [
+                (x, y),                   // Self
+                (x.saturating_add(1), y), // Right
+                (x.saturating_sub(1), y), // Left
+                (x, y.saturating_add(1)), // Up
+                (x, y.saturating_sub(1)), // Down
+            ];
+
+            // Check each neighbor position
+            for pos in neighbor_positions {
+                if let Some(neighbor_segments) = nodes_by_pos.get(&pos) {
+                    for id2 in neighbor_segments {
+                        if *id1 == *id2 {
+                            continue;
+                        }
+                        if let Some(segment2) = self.nodes.get(id2) {
+                            let endpoints2 = segment2.get_endpoints();
+
+                            // Check all endpoint pairs for connections
+                            for p1 in &endpoints1 {
+                                for p2 in &endpoints2 {
+                                    let distance = p1.distance(*p2);
+                                    if distance <= CONNECTION_THRESHOLD {
+                                        // Found a connection - add it to both segments
+                                        let connection_point = (*p1 + *p2) / 2.0;
+
+                                        // Add connection both ways directly
+                                        new_connections.entry(id1.clone()).or_default().push(
+                                            SegmentConnection {
+                                                segment_id: id2.clone(),
+                                                connection_point,
+                                            },
+                                        );
+                                        /*
+                                        new_connections.entry(id2.clone()).or_default().push(
+                                            SegmentConnection {
+                                                segment_id: id1.clone(),
+                                                connection_point,
+                                            },
+                                        );*/
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Replace all connections at once
+        for node in self.nodes.values_mut() {
+            node.connections = new_connections.remove(&node.id).unwrap_or_default();
+        }
+
+        // Print final connections
+        if VERBOSE {
+            self.print_connections();
+        }
+    }
+    /*
+    fn build_connections_old(&mut self) {
         // Create a list of all segment IDs
         let segment_ids: Vec<String> = self.nodes.keys().cloned().collect();
 
@@ -146,6 +226,7 @@ impl SegmentGraph {
             self.print_connections();
         }
     }
+    */
 
     pub fn find_path(&self, start: &str, end: &str) -> Option<Vec<String>> {
         use std::collections::{HashSet, VecDeque};
@@ -243,6 +324,7 @@ mod tests {
             "A".to_string(),
             SegmentNode {
                 id: "A".to_string(),
+                tile_pos: (1, 1),
                 commands: commands_a,
                 connections: Vec::new(),
             },
@@ -252,6 +334,7 @@ mod tests {
             "B".to_string(),
             SegmentNode {
                 id: "B".to_string(),
+                tile_pos: (1, 1),
                 commands: commands_b,
                 connections: Vec::new(),
             },
@@ -261,6 +344,8 @@ mod tests {
             "C".to_string(),
             SegmentNode {
                 id: "C".to_string(),
+                tile_pos: (1, 1),
+
                 commands: commands_c,
                 connections: Vec::new(),
             },
@@ -315,6 +400,8 @@ mod tests {
             "H1".to_string(),
             SegmentNode {
                 id: "H1".to_string(),
+                tile_pos: (1, 1),
+
                 commands: commands_h1,
                 connections: Vec::new(),
             },
@@ -324,6 +411,8 @@ mod tests {
             "H2".to_string(),
             SegmentNode {
                 id: "H2".to_string(),
+                tile_pos: (1, 1),
+
                 commands: commands_h2,
                 connections: Vec::new(),
             },
@@ -333,6 +422,8 @@ mod tests {
             "V".to_string(),
             SegmentNode {
                 id: "V".to_string(),
+                tile_pos: (1, 1),
+
                 commands: commands_v,
                 connections: Vec::new(),
             },
@@ -342,6 +433,8 @@ mod tests {
             "A1".to_string(),
             SegmentNode {
                 id: "A1".to_string(),
+                tile_pos: (1, 1),
+
                 commands: commands_a1,
                 connections: Vec::new(),
             },

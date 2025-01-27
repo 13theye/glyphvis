@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use glyphvis::{
+    animation::{TransitionConfig, TransitionEngine},
     controllers::GlyphController,
     models::Project,
     services::{FrameRecorder, OutputFormat},
@@ -28,7 +29,7 @@ const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 // size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
 const WINDOW_SIZE: [u32; 2] = [1897, 480];
 // path to the project file
-const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
+const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/small-cir-d2.json";
 // grid scale factor
 //const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
 
@@ -46,6 +47,9 @@ struct Model {
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
+
+    // Segment Transitions
+    transition_engine: TransitionEngine,
 
     // Message
     needs_glyph_update: bool,
@@ -133,6 +137,13 @@ fn model(app: &App) -> Model {
         dst_format,
     );
 
+    let transition_config = TransitionConfig {
+        steps: 50,
+        frame_duration: 0.1,
+        wandering: 0.95,
+        density: 0.3,
+    };
+
     // Create the frame recorder
     let frame_recorder =
         FrameRecorder::new(device, &texture, OUTPUT_DIR, FRAME_LIMIT, OUTPUT_FORMAT);
@@ -158,6 +169,8 @@ fn model(app: &App) -> Model {
             stroke_weight: 5.0,
         },
 
+        transition_engine: TransitionEngine::new(transition_config),
+
         frame_recorder,
         exit_requested: false,
 
@@ -171,6 +184,14 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         // show next glyph
         Key::Space => {
+            for (_, grid_instance) in model.grids.iter_mut() {
+                model.glyphs.next_glyph(
+                    &model.project,
+                    grid_instance,
+                    &model.transition_engine,
+                    app.time,
+                );
+            }
             model.needs_glyph_update = true;
         }
         // Return grids to where they spawned
@@ -243,11 +264,11 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
+    let now = Instant::now();
+    let duration = now - model.last_update;
+    model.last_update = now;
     // FPS calculation
     if model.debug_flag {
-        let now = Instant::now();
-        let duration = now - model.last_update;
-        model.last_update = now;
         model.fps = 1.0 / duration.as_secs_f32();
     }
 
@@ -283,17 +304,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     //let start_time = std::time::Instant::now();
 
     // Loop over each GridInstance and Draw
-    for (_, grid_instance) in model.grids.iter() {
-        //let grid_start = std::time::Instant::now();
+    for (_, grid_instance) in model.grids.iter_mut() {
+        grid_instance.update(app.time, duration.as_secs_f32());
 
-        let ready_segments = model.glyphs.get_renderable_segments(
-            &model.project,
-            grid_instance,
-            &model.effect_target_style,
-            &bg_style,
-            &grid_instance.effects_manager,
-            app.time,
-        );
+        let ready_segments =
+            grid_instance.get_renderable_segments(app.time, &model.effect_target_style, &bg_style);
 
         // drawing operations
         if grid_instance.visible {
@@ -342,22 +357,25 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 // ******************************* State-triggered functions *****************************
 
 fn update_glyph(app: &App, model: &mut Model) {
-    let segment_ids = model.glyphs.next_glyph(&model.project);
     let color_hsl = hsl(model.random.gen(), model.random.gen(), 0.3);
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
         stroke_weight: 5.0,
     };
+    model.effect_target_style = glyph_style;
 
-    for (_, grid_instance) in model.grids.iter_mut() {
-        for segment_id in &segment_ids {
-            grid_instance
-                .effects_manager
-                .activate_segment(segment_id, "power_on", app.time);
+    model.glyphs.update_all_grids(
+        &mut model.grids,
+        &model.project,
+        &model.transition_engine,
+        app.time,
+    );
 
-            model.effect_target_style = glyph_style.clone();
-        }
-    }
+    /*
+    model
+        .glyphs
+        .update_all_grids(&mut model.grids, &model.project, app.time);
+    */
 }
 
 // ******************************* Rendering and Capture *****************************

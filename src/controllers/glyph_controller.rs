@@ -65,16 +65,12 @@ impl GlyphController {
                 self.get_active_segments(project, grid.current_glyph_index);
 
             grid.start_transition(segment_ids, transition_engine);
-            // Apply effects for new segments
-            for segment_id in &grid.current_active_segments {
-                grid.effects_manager
-                    .activate_segment(segment_id, "power_on", time);
-            }
         }
     }
     /*  Moving this to grid_instance
     /// Gets all segments that should be rendered for the current glyph
-    pub fn get_renderable_segments<'a>(
+    pub fn
+    _segments<'a>(
         &self,
         project: &Project,
         grid_instance: &'a GridInstance,

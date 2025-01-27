@@ -139,6 +139,11 @@ impl GridInstance {
                 // time to advance to next frame
                 if let Some(new_segments) = transition.advance() {
                     // update active segments
+                    let newly_active = new_segments.difference(&self.current_active_segments);
+                    for segment_id in newly_active {
+                        self.effects_manager
+                            .activate_segment(segment_id, "power_on", time);
+                    }
                     self.current_active_segments = new_segments.clone();
                 }
             }
@@ -197,11 +202,6 @@ impl GridInstance {
 
     pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
         self.grid.draw_segments(draw, &segments);
-    }
-
-    pub fn activate_segment_effect(&mut self, segment_id: &str, effect_name: &str, time: f32) {
-        self.effects_manager
-            .activate_segment(segment_id, effect_name, time);
     }
 
     pub fn print_grid_info(&self) {

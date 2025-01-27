@@ -138,10 +138,10 @@ fn model(app: &App) -> Model {
     );
 
     let transition_config = TransitionConfig {
-        steps: 50,
-        frame_duration: 0.1,
-        wandering: 0.95,
-        density: 0.3,
+        steps: 30,
+        frame_duration: 0.05,
+        wandering: 1.0,
+        density: 0.05,
     };
 
     // Create the frame recorder
@@ -357,7 +357,7 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 // ******************************* State-triggered functions *****************************
 
 fn update_glyph(app: &App, model: &mut Model) {
-    let color_hsl = hsl(model.random.gen(), model.random.gen(), 0.3);
+    let color_hsl = hsl(model.random.gen(), model.random.gen(), 0.4);
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
         stroke_weight: 5.0,
@@ -486,7 +486,7 @@ fn make_three_grids(app: &App, model: &mut Model) {
         &model.project,
         "Grid Left".to_string(),
         pt2(-600.0, 0.0),
-        90.0,
+        0.0,
     );
     let grid_2 = GridInstance::new(
         app,
@@ -500,7 +500,7 @@ fn make_three_grids(app: &App, model: &mut Model) {
         &model.project,
         "Grid Right".to_string(),
         pt2(600.0, 0.0),
-        -90.0,
+        0.0,
     );
 
     model.grids.insert(grid_1.id.clone(), grid_1);

@@ -2,7 +2,7 @@
 
 use crate::views::SegmentGraph;
 use rand::{thread_rng, Rng};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct TransitionConfig {
     pub steps: usize,        // Total number of frames to generate
@@ -78,14 +78,12 @@ impl TransitionEngine {
                 pending_changes.push((seg.clone(), nearest, false));
             }
         }
-
         // For segments that need to appear, find nearest active segment in start set
         for seg in target_segments.difference(start_segments) {
             if let Some(nearest) = self.find_nearest_connected(seg, start_segments, segment_graph) {
                 pending_changes.push((seg.clone(), nearest, true));
             }
         }
-
         // Distribute changes across frames based on density
         let changes_per_frame =
             (pending_changes.len() as f32 * self.config.density).ceil() as usize;
@@ -111,7 +109,6 @@ impl TransitionEngine {
                     }
                 }
             }
-
             frames.push(current);
         }
 

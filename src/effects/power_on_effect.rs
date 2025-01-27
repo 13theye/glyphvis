@@ -103,7 +103,7 @@ impl SegmentEffect for PowerOnEffect {
 }
 
 fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb<f32> {
-    let decay_rate = 5.0; // Steepness of curve
+    let decay_rate = 3.0; // Steepness of curve
     let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
     let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
     let hsl_end = Hsl::from(end);

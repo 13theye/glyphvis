@@ -80,6 +80,11 @@ impl GridInstance {
     ) -> Vec<RenderableSegment> {
         let mut return_segments = Vec::new();
         let (grid_x, grid_y) = self.grid.dimensions;
+        let background_style = self.effects_manager.apply_grid_effects(
+            "background", // Use a constant ID for background
+            background_style.clone(),
+            time,
+        );
 
         for y in 1..=grid_y {
             for x in 1..=grid_x {
@@ -100,16 +105,9 @@ impl GridInstance {
                             layer: Layer::Foreground,
                         });
                     } else {
-                        let base_style = background_style.clone();
-                        let final_style = self.effects_manager.apply_segment_effects(
-                            &segment.id,
-                            base_style,
-                            time,
-                        );
-
                         return_segments.push(RenderableSegment {
                             segment,
-                            style: final_style,
+                            style: background_style.clone(),
                             layer: Layer::Background,
                         });
                     }

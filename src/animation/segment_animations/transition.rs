@@ -82,6 +82,8 @@ impl TransitionEngine {
         for seg in target_segments.difference(start_segments) {
             if let Some(nearest) = self.find_nearest_connected(seg, start_segments, segment_graph) {
                 pending_changes.push((seg.clone(), nearest, true));
+            } else if start_segments.is_empty() {
+                pending_changes.push((seg.clone(), seg.clone(), true));
             }
         }
         // Distribute changes across frames based on density

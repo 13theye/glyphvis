@@ -138,10 +138,10 @@ fn model(app: &App) -> Model {
     );
 
     let transition_config = TransitionConfig {
-        steps: 30,
+        steps: 50,
         frame_duration: 0.05,
         wandering: 1.0,
-        density: 0.05,
+        density: 0.01,
     };
 
     // Create the frame recorder

@@ -1,6 +1,7 @@
 // src/views/grid_manager.rs
 
 use nannou::prelude::*;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use crate::animation::{Transition, TransitionEngine};
@@ -13,6 +14,7 @@ pub struct GridInstance {
     pub id: String,
     pub grid: CachedGrid,
     pub graph: SegmentGraph,
+    pub style_states: RefCell<HashMap<String, DrawStyle>>,
 
     // effects state
     pub effects_manager: EffectsManager,
@@ -49,6 +51,8 @@ impl GridInstance {
             grid,
             graph,
 
+            style_states: RefCell::new(HashMap::new()),
+
             current_active_segments: HashSet::new(),
             current_glyph_index: 0,
 
@@ -75,16 +79,14 @@ impl GridInstance {
     pub fn get_renderable_segments(
         &self,
         time: f32,
-        foreground_style: &DrawStyle,
-        background_style: &DrawStyle,
+        fg_style: &DrawStyle,
+        bg_style: &DrawStyle,
     ) -> Vec<RenderableSegment> {
         let mut return_segments = Vec::new();
         let (grid_x, grid_y) = self.grid.dimensions;
-        let background_style = self.effects_manager.apply_grid_effects(
-            "background", // Use a constant ID for background
-            background_style.clone(),
-            time,
-        );
+        let background_style = self
+            .effects_manager
+            .apply_grid_effects(bg_style.clone(), time);
 
         for y in 1..=grid_y {
             for x in 1..=grid_x {
@@ -92,12 +94,21 @@ impl GridInstance {
 
                 for segment in segments {
                     if self.current_active_segments.contains(&segment.id) {
-                        let base_style = foreground_style.clone();
+                        let base_style = self
+                            .style_states
+                            .borrow()
+                            .get(&segment.id)
+                            .cloned()
+                            .unwrap_or_else(|| fg_style.clone());
                         let final_style = self.effects_manager.apply_segment_effects(
                             &segment.id,
                             base_style,
+                            fg_style.clone(),
                             time,
                         );
+                        self.style_states
+                            .borrow_mut()
+                            .insert(segment.id.clone(), final_style.clone());
 
                         return_segments.push(RenderableSegment {
                             segment,

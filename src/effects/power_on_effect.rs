@@ -46,24 +46,23 @@ impl SegmentEffect for PowerOnEffect {
     fn apply_to_segment(
         &self,
         segment_id: &str,
+        _base_style: &DrawStyle,
         target_style: &DrawStyle,
         current_time: f32,
     ) -> DrawStyle {
         let mut states = self.segment_states.borrow_mut();
         if let Some(state) = states.get(segment_id) {
             let elapsed_time = current_time - state.activation_time;
-
+            let flash_color = rgb(1.0, 0.96, 0.79);
             // Calculate color based on animation phase
             let color = if elapsed_time <= self.flash_duration {
                 // Initial white flash phase
                 let _flash_progress = elapsed_time / self.flash_duration;
-                let brightness = 1.0; // Full white
-                rgb(brightness, brightness, brightness)
+                flash_color
             } else if elapsed_time <= self.flash_duration + self.fade_duration {
                 // Fade to target color
                 let fade_progress = (elapsed_time - self.flash_duration) / self.fade_duration;
-                let white = rgb(1.0, 1.0, 1.0);
-                exp_flash(white, target_style.color, fade_progress)
+                exp_flash(flash_color, target_style.color, fade_progress)
             } else {
                 // Animation complete
                 states.remove(segment_id);

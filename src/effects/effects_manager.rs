@@ -19,6 +19,7 @@ pub trait SegmentEffect: Effect {
         &self,
         segment_id: &str,
         base_style: &DrawStyle,
+        target_style: &DrawStyle,
         current_time: f32,
     ) -> DrawStyle;
     fn activate_segment(&mut self, segment_id: &str, time: f32);
@@ -92,6 +93,7 @@ impl EffectsManager {
         &self,
         segment_id: &str,
         base_style: DrawStyle,
+        target_style: DrawStyle,
         time: f32,
     ) -> DrawStyle {
         if self.effects.is_empty() {
@@ -112,7 +114,8 @@ impl EffectsManager {
                 }
                 EffectType::Segment(effect) => {
                     if effect.is_segment_active(segment_id) {
-                        current_style = effect.apply_to_segment(segment_id, &base_style, time);
+                        current_style =
+                            effect.apply_to_segment(segment_id, &base_style, &target_style, time);
                     }
                 }
             }
@@ -122,17 +125,12 @@ impl EffectsManager {
     }
 
     // Apply all active effects
-    pub fn apply_grid_effects(
-        &self,
-        segment_id: &str,
-        base_style: DrawStyle,
-        time: f32,
-    ) -> DrawStyle {
+    pub fn apply_grid_effects(&self, base_style: DrawStyle, time: f32) -> DrawStyle {
         if self.effects.is_empty() {
             return base_style;
         }
 
-        let mut current_style = base_style.clone();
+        let mut current_style = base_style;
 
         for instance in self.effects.values() {
             if !instance.is_active {
@@ -141,13 +139,10 @@ impl EffectsManager {
 
             match &instance.effect {
                 EffectType::Grid(effect) => {
-                    current_style = effect.apply(&base_style, time);
+                    current_style = effect.apply(&current_style, time);
                 }
-                EffectType::Segment(effect) => {
-                    if effect.is_segment_active(segment_id) {
-                        //current_style = effect.apply_to_segment(segment_id, &base_style, time);
-                        continue;
-                    }
+                EffectType::Segment(_effect) => {
+                    continue;
                 }
             }
         }

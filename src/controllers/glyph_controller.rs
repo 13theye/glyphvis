@@ -27,7 +27,7 @@ impl GlyphController {
         project: &Project,
         grid_instance: &mut GridInstance,
         transition_engine: &TransitionEngine,
-        current_time: f32,
+        _current_time: f32,
     ) {
         grid_instance.current_glyph_index =
             (grid_instance.current_glyph_index + 1) % self.glyph_names.len();
@@ -58,7 +58,7 @@ impl GlyphController {
         grids: &mut HashMap<String, GridInstance>,
         project: &Project,
         transition_engine: &TransitionEngine,
-        time: f32,
+        _time: f32,
     ) {
         for grid in grids.values_mut() {
             let segment_ids: HashSet<String> =

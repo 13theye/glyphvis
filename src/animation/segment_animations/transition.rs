@@ -2,7 +2,7 @@
 
 use crate::views::SegmentGraph;
 use rand::{thread_rng, Rng};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
 pub struct TransitionConfig {
     pub steps: usize,        // Total number of frames to generate
@@ -91,7 +91,7 @@ impl TransitionEngine {
         let changes_per_frame =
             (pending_changes.len() as f32 * self.config.density).ceil() as usize;
 
-        for frame in 1..self.config.steps - 1 {
+        for _frame in 1..self.config.steps - 1 {
             let mut current = frames.last().unwrap().clone();
 
             // Select random subset of changes for this frame
@@ -113,28 +113,8 @@ impl TransitionEngine {
                     }
                 }
             }
-
-            // If we're running out of frames, start including remaining targets
-            let frames_left = self.config.steps - frame - 1;
-            let targets_per_remaining_frame =
-                (remaining_targets.len() as f32 / frames_left as f32).ceil() as usize;
-
-            // Take some remaining targets and add them to current frame
-            for _ in 0..targets_per_remaining_frame {
-                if let Some(seg) = remaining_targets.iter().next().cloned() {
-                    current.insert(seg.clone());
-                    remaining_targets.remove(&seg);
-                }
-            }
             frames.push(current);
         }
-        let mut final_frame = frames.last().unwrap().clone();
-        for seg in remaining_targets.iter() {
-            println!("Remaining segment: {}", seg);
-            final_frame.insert(seg.clone());
-        }
-
-        frames.push(final_frame);
 
         frames
     }

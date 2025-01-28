@@ -107,11 +107,29 @@ pub struct RenderableSegment<'a> {
     pub layer: Layer,
 }
 
+#[derive(Debug, Clone)]
+pub enum SegmentAction {
+    On,
+    Off,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateMsg {
+    pub action: Option<SegmentAction>,
+    pub target_style: Option<DrawStyle>,
+}
+
 // A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     pub id: String,
     pub tile_pos: (u32, u32),
+
+    // style states
+    current_style: DrawStyle,
+    target_style: Option<DrawStyle>,
+    pub is_ready: bool,
+
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
@@ -136,12 +154,45 @@ impl CachedSegment {
         Self {
             id: element_id,
             tile_pos: position,
+            current_style: DrawStyle::default(),
+            target_style: None,
+            is_ready: true,
             draw_commands,
             original_path: path.clone(),
             edge_type,
             //transform: Transform2D::default(),
         }
     }
+
+    /**************************  Style functions *************************************** */
+    pub fn process_update_message(&mut self, msg: &UpdateMsg) {
+        if let Some(style) = &msg.target_style {
+            self.target_style = Some(style.clone());
+        }
+        if let Some(action) = &msg.action {
+            match action {
+                SegmentAction::On => {
+                    // apply the effect
+                    self.current_style = self.target_style.clone().unwrap_or_default();
+                }
+                SegmentAction::Off => {
+                    // apply the effect
+                    self.current_style = self.target_style.clone().unwrap_or_default();
+                }
+            }
+        }
+    }
+
+    /**************************  Transform functions *************************************** */
+
+    pub fn apply_transform(&mut self, transform: &Transform2D) {
+        //self.transform = transform.clone();
+        for command in &mut self.draw_commands {
+            command.apply_transform(transform);
+        }
+    }
+
+    /**************************  Initialization functions *************************************** */
 
     fn generate_draw_commands(
         path: &PathElement,
@@ -239,13 +290,6 @@ impl CachedSegment {
             translation: pt2(tile_center_x, tile_center_y),
             scale: 1.0,
             rotation: 0.0,
-        }
-    }
-
-    pub fn apply_transform(&mut self, transform: &Transform2D) {
-        //self.transform = transform.clone();
-        for command in &mut self.draw_commands {
-            command.apply_transform(transform);
         }
     }
 }

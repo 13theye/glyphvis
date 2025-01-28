@@ -100,6 +100,7 @@ impl GridInstance {
                             .get(&segment.id)
                             .cloned()
                             .unwrap_or_else(|| fg_style.clone());
+
                         let final_style = self.effects_manager.apply_segment_effects(
                             &segment.id,
                             base_style,

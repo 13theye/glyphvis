@@ -8,6 +8,7 @@
 
 use nannou::prelude::*;
 use std::collections::HashMap;
+use std::time::Instant;
 
 use crate::models::{EdgeType, PathElement, Project, ViewBox};
 use crate::services::grid::*;
@@ -15,6 +16,8 @@ use crate::services::svg::{detect_edge_type, parse_svg};
 use crate::views::Transform2D;
 
 const ARC_RESOLUTION: usize = 25;
+const FLASH_DURATION: f32 = 0.1;
+const FADE_DURATION: f32 = 0.4;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data
@@ -128,6 +131,7 @@ pub struct CachedSegment {
     // style states
     current_style: DrawStyle,
     target_style: Option<DrawStyle>,
+    activation_time: f32,
     pub is_ready: bool,
 
     pub draw_commands: Vec<DrawCommand>,
@@ -156,6 +160,7 @@ impl CachedSegment {
             tile_pos: position,
             current_style: DrawStyle::default(),
             target_style: None,
+            activation_time: 0.0,
             is_ready: true,
             draw_commands,
             original_path: path.clone(),
@@ -166,21 +171,99 @@ impl CachedSegment {
 
     /**************************  Style functions *************************************** */
     pub fn process_update_message(&mut self, msg: &UpdateMsg) {
-        if let Some(style) = &msg.target_style {
-            self.target_style = Some(style.clone());
-        }
         if let Some(action) = &msg.action {
             match action {
                 SegmentAction::On => {
-                    // apply the effect
-                    self.current_style = self.target_style.clone().unwrap_or_default();
+                    if let Some(target_style) = &msg.target_style {
+                        self.target_style = Some(target_style.clone());
+                        let current_style = self.current_style.clone();
+                        // apply the effect
+                        self.is_ready = false;
+                        self.activation_time = Instant::now().elapsed().as_secs_f32();
+                        self.apply_power_on_effect(&current_style, target_style);
+                    }
                 }
                 SegmentAction::Off => {
                     // apply the effect
-                    self.current_style = self.target_style.clone().unwrap_or_default();
+                    if let Some(target_style) = &msg.target_style {
+                        self.target_style = Some(target_style.clone());
+                        let current_style = self.current_style.clone();
+                        // apply the effect
+                        self.is_ready = false;
+                        self.activation_time = Instant::now().elapsed().as_secs_f32();
+                        self.apply_power_off_effect(&current_style, target_style);
+                    }
                 }
             }
         }
+    }
+
+    fn apply_power_on_effect(&mut self, base_style: &DrawStyle, target_style: &DrawStyle) {
+        let current_time = Instant::now().elapsed().as_secs_f32();
+        let elapsed_time = current_time - self.activation_time;
+
+        let flash_color = rgb(1.0, 0.96, 0.79);
+        // Calculate color based on animation phase
+        let color = if elapsed_time <= FLASH_DURATION {
+            flash_color
+        } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
+            // Fade to target color
+            let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
+            Self::ease_lightness(
+                fade_progress,
+                flash_color,
+                target_style.color,
+                FADE_DURATION,
+            )
+        } else {
+            // Animation complete
+            self.is_ready = true;
+            target_style.color
+        };
+
+        self.current_style = DrawStyle {
+            color,
+            stroke_weight: target_style.stroke_weight,
+        }
+    }
+
+    fn apply_power_off_effect(&mut self, base_style: &DrawStyle, target_style: &DrawStyle) {
+        let current_time = Instant::now().elapsed().as_secs_f32();
+        let elapsed_time = current_time - self.activation_time;
+
+        // Calculate color based on animation phase
+        let color = if elapsed_time <= FADE_DURATION {
+            // Fade to target color
+            let fade_progress = elapsed_time / FADE_DURATION;
+            Self::ease_lightness(
+                fade_progress,
+                base_style.color,
+                target_style.color,
+                FADE_DURATION,
+            )
+        } else {
+            // Animation complete
+            self.is_ready = true;
+            target_style.color
+        };
+
+        self.current_style = DrawStyle {
+            color,
+            stroke_weight: target_style.stroke_weight,
+        }
+    }
+
+    fn ease_lightness(progress: f32, start: Rgb<f32>, end: Rgb<f32>, duration: f32) -> Rgb<f32> {
+        let start_hsl = Hsl::from(start);
+        let end_hsl = Hsl::from(end);
+        let new_lightness = nannou::ease::quint::ease_out(
+            progress,
+            start_hsl.lightness,
+            end_hsl.lightness,
+            duration,
+        );
+        let result = Hsl::new(end_hsl.hue, end_hsl.saturation, new_lightness);
+        Rgb::from(result)
     }
 
     /**************************  Transform functions *************************************** */

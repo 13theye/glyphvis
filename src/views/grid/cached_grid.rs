@@ -194,10 +194,12 @@ impl CachedSegment {
                 SegmentAction::Off => {
                     // apply the effect
                     if let Some(target_style) = &msg.target_style {
+                        if self.before_style.is_none() {
+                            self.before_style = Some(self.current_style.clone());
+                        }
                         self.target_style = Some(target_style.clone());
                         // set up the effect
                         self.layer = Layer::Background;
-                        self.before_style = Some(self.current_style.clone());
                         self.current_action = Some(SegmentAction::Off);
                         self.activation_time = Instant::now().elapsed().as_secs_f32();
                         return;

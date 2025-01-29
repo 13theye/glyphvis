@@ -322,7 +322,18 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
     */
 
-    for (_, grid_instance) in model.grids.iter_mut() {}
+    for (_, grid_instance) in model.grids.iter_mut() {
+        grid_instance.update(
+            &model.effect_target_style,
+            &bg_style,
+            app.time,
+            duration.as_secs_f32(),
+        );
+
+        grid_instance.update_background_segments();
+
+        grid_instance.trigger_screen_update(draw);
+    }
 
     if model.debug_flag {
         // Draw (+,+) axes

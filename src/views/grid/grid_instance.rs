@@ -83,7 +83,7 @@ impl GridInstance {
 
     /************************** New Update System ***************************** */
 
-    pub fn turn_on_segments(&mut self, segments: HashSet<String>, target_style: DrawStyle) {
+    pub fn turn_on_segments(&mut self, segments: HashSet<String>, target_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -95,7 +95,7 @@ impl GridInstance {
         }
     }
 
-    pub fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: DrawStyle) {
+    pub fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -129,12 +129,42 @@ impl GridInstance {
         }
     }
 
+    pub fn update(&mut self, target_style: &DrawStyle, bg_style: &DrawStyle, _time: f32, dt: f32) {
+        // First, get transition updates if any exist
+        let transition_updates = if let Some(transition) = &mut self.active_transition {
+            if transition.update(dt) {
+                // Get updates and check completion
+                let updates = transition.advance();
+                if transition.is_complete() {
+                    self.active_transition = None;
+                }
+                updates
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Then apply any transition updates we collected
+        if let Some(updates) = transition_updates {
+            // Convert frame difference into on/off messages
+            if !updates.segments_on.is_empty() {
+                self.turn_on_segments(updates.segments_on, target_style);
+            }
+            if !updates.segments_off.is_empty() {
+                self.turn_off_segments(updates.segments_off, bg_style);
+            }
+        }
+    }
+
     pub fn clear_update_batch(&mut self) {
         self.update_batch.clear();
     }
 
     pub fn trigger_screen_update(&mut self, draw: &Draw) {
         self.grid.trigger_screen_update(draw, &self.update_batch);
+        self.clear_update_batch();
     }
 
     /************************* Old update system ******************************/
@@ -209,7 +239,7 @@ impl GridInstance {
 
         self.active_transition = Some(Transition::new(frames, engine.config.frame_duration));
     }
-
+    /*
     pub fn update(&mut self, time: f32, dt: f32) {
         if let Some(transition) = &mut self.active_transition {
             if transition.update(dt) {
@@ -229,6 +259,7 @@ impl GridInstance {
             }
         }
     }
+    */
 
     /***************** Grid movement *****************/
 

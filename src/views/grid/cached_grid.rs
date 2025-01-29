@@ -188,6 +188,7 @@ impl CachedSegment {
                         self.layer = Layer::Foreground;
                         self.current_action = Some(SegmentAction::On);
                         self.activation_time = Instant::now().elapsed().as_secs_f32();
+                        return;
                     }
                 }
                 SegmentAction::Off => {
@@ -199,8 +200,14 @@ impl CachedSegment {
                         self.before_style = Some(self.current_style.clone());
                         self.current_action = Some(SegmentAction::Off);
                         self.activation_time = Instant::now().elapsed().as_secs_f32();
+                        return;
                     }
                 }
+            }
+            if let Some(target_style) = &msg.target_style {
+                self.before_style = Some(self.current_style.clone());
+                self.current_style = target_style.clone();
+                self.target_style = None;
             }
         }
     }
@@ -217,12 +224,13 @@ impl CachedSegment {
             } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
                 // Fade to target color
                 let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
-                Self::ease_lightness(
+                /*Self::ease_lightness(
                     fade_progress,
                     flash_color,
                     target_style.color,
                     FADE_DURATION,
-                )
+                )*/
+                Self::exp_flash(flash_color, target_style.color, fade_progress)
             } else {
                 // Animation complete
                 self.current_action = None;
@@ -245,15 +253,17 @@ impl CachedSegment {
                 let color = if elapsed_time <= FADE_DURATION {
                     // Fade to target color
                     let fade_progress = elapsed_time / FADE_DURATION;
-                    Self::ease_lightness(
+                    /*Self::ease_lightness(
                         fade_progress,
                         before_style.color,
                         target_style.color,
                         FADE_DURATION,
-                    )
+                    )*/
+                    Self::exp_flash(before_style.color, target_style.color, fade_progress)
                 } else {
                     // Animation complete
                     self.current_action = None;
+                    self.before_style = None;
                     target_style.color
                 };
 
@@ -275,6 +285,22 @@ impl CachedSegment {
             duration,
         );
         let result = Hsl::new(end_hsl.hue, end_hsl.saturation, new_lightness);
+        Rgb::from(result)
+    }
+
+    fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb<f32> {
+        let decay_rate = 3.0; // Steepness of curve
+        let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
+        let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
+        let hsl_end = Hsl::from(end);
+
+        let result = Hsl::new(
+            hsl_end.hue,
+            hsl_end.saturation,
+            hsl_start.lightness
+                + (hsl_end.lightness - hsl_start.lightness)
+                    * (1.0 - (-adjusted_time * decay_rate).exp()),
+        );
         Rgb::from(result)
     }
 
@@ -451,6 +477,93 @@ impl CachedGrid {
         }
     }
 
+    /************************ Rendering methods ****************************/
+    pub fn trigger_screen_update(
+        &mut self,
+        draw: &Draw,
+        update_batch: &HashMap<String, StyleUpdateMsg>,
+    ) {
+        let mut foreground_segments = Vec::new();
+        for segment in self.segments.values_mut() {
+            if let Some(msg) = update_batch.get(&segment.id) {
+                segment.process_style_update_msg(msg);
+            }
+
+            if let Some(action) = &segment.current_action {
+                match action {
+                    SegmentAction::On => {
+                        segment.apply_power_on_effect();
+                    }
+                    SegmentAction::Off => {
+                        segment.apply_power_off_effect();
+                    }
+                }
+            }
+
+            if segment.layer == Layer::Background {
+                for command in &segment.draw_commands {
+                    command.draw(draw, &segment.current_style);
+                }
+            } else {
+                foreground_segments.push(segment);
+            }
+        }
+
+        for segment in foreground_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
+            }
+        }
+    }
+
+    pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
+        // Process and draw background segments
+        segments
+            .iter()
+            .filter(|segment| segment.layer == Layer::Background)
+            .for_each(|segment| {
+                for command in &segment.segment.draw_commands {
+                    command.draw(draw, &segment.style);
+                }
+            });
+
+        // Process and draw foreground segments
+        segments
+            .iter()
+            .filter(|segment| segment.layer == Layer::Foreground)
+            .for_each(|segment| {
+                for command in &segment.segment.draw_commands {
+                    command.draw(draw, &segment.style);
+                }
+            });
+    }
+
+    /*
+        pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
+            self.segments
+                .values()
+                .filter(| segment | self.active_segments.contains(&segment.id))
+                .flat_map(| segment | &segment.draw_commands)
+                .for_each(| command | command.draw(draw, style));
+        }
+
+        pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
+            self.segments
+                .values()
+                .filter(| segment | !self.active_segments.contains(&segment.id))
+                .flat_map(| segment | &segment.draw_commands)
+                .for_each(| command | command.draw(draw, style));
+        }
+    */
+    pub fn apply_transform(&mut self, transform: &Transform2D) {
+        //self.transform = transform.clone();
+        for segment in self.segments.values_mut() {
+            segment.apply_transform(transform);
+        }
+    }
+
+    /************************ Init methods ****************************/
+
     // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
     // in Glyphvis we decide on whether to draw an element at the beginning.
     fn eliminate_overlaps(
@@ -536,91 +649,6 @@ impl CachedGrid {
         }
         // return:
         final_segments
-    }
-
-    /************************ Rendering methods ****************************/
-    pub fn trigger_screen_update(
-        &mut self,
-        draw: &Draw,
-        update_batch: &HashMap<String, StyleUpdateMsg>,
-    ) {
-        let mut foreground_segments = Vec::new();
-        for segment in self.segments.values_mut() {
-            if let Some(msg) = update_batch.get(&segment.id) {
-                segment.process_style_update_msg(msg);
-            }
-
-            if let Some(action) = &segment.current_action {
-                match action {
-                    SegmentAction::On => {
-                        segment.apply_power_on_effect();
-                    }
-                    SegmentAction::Off => {
-                        segment.apply_power_off_effect();
-                    }
-                }
-            }
-
-            if segment.layer == Layer::Background {
-                for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style);
-                }
-            } else {
-                foreground_segments.push(segment);
-            }
-        }
-
-        for segment in foreground_segments {
-            for command in &segment.draw_commands {
-                command.draw(draw, &segment.current_style);
-            }
-        }
-    }
-
-    pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
-        // Process and draw background segments
-        segments
-            .iter()
-            .filter(|segment| segment.layer == Layer::Background)
-            .for_each(|segment| {
-                for command in &segment.segment.draw_commands {
-                    command.draw(draw, &segment.style);
-                }
-            });
-
-        // Process and draw foreground segments
-        segments
-            .iter()
-            .filter(|segment| segment.layer == Layer::Foreground)
-            .for_each(|segment| {
-                for command in &segment.segment.draw_commands {
-                    command.draw(draw, &segment.style);
-                }
-            });
-    }
-
-    /*
-        pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
-            self.segments
-                .values()
-                .filter(| segment | self.active_segments.contains(&segment.id))
-                .flat_map(| segment | &segment.draw_commands)
-                .for_each(| command | command.draw(draw, style));
-        }
-
-        pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
-            self.segments
-                .values()
-                .filter(| segment | !self.active_segments.contains(&segment.id))
-                .flat_map(| segment | &segment.draw_commands)
-                .for_each(| command | command.draw(draw, style));
-        }
-    */
-    pub fn apply_transform(&mut self, transform: &Transform2D) {
-        //self.transform = transform.clone();
-        for segment in self.segments.values_mut() {
-            segment.apply_transform(transform);
-        }
     }
 
     // Utility methods

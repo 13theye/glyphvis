@@ -11,6 +11,11 @@ pub struct TransitionConfig {
     pub density: f32,        // How many segments can change per frame (0.0-1.0)
 }
 
+pub struct TransitionUpdate {
+    pub segments_on: HashSet<String>,
+    pub segments_off: HashSet<String>,
+}
+
 pub struct Transition {
     frames: Vec<HashSet<String>>,
     current_frame: usize,
@@ -38,12 +43,40 @@ impl Transition {
         }
     }
 
-    pub fn advance(&mut self) -> Option<&HashSet<String>> {
+    pub fn advance(&mut self) -> Option<TransitionUpdate> {
         if self.current_frame < self.frames.len() {
-            self.current_frame += 1;
-            Some(&self.frames[self.current_frame - 1])
+            let current_segments = &self.frames[self.current_frame];
+            let next_frame = self.current_frame + 1;
+
+            // If this isn't the last frame, calculate the changes
+            if next_frame < self.frames.len() {
+                let next_segments = &self.frames[next_frame];
+
+                // Calculate segments to turn on (in next but not in current)
+                let segments_to_on: HashSet<_> = next_segments
+                    .difference(current_segments)
+                    .cloned()
+                    .collect();
+
+                // Calculate segments to turn off (in current but not in next)
+                let segments_to_off: HashSet<_> = current_segments
+                    .difference(next_segments)
+                    .cloned()
+                    .collect();
+
+                self.current_frame = next_frame;
+
+                Some(TransitionUpdate {
+                    segments_on: segments_to_on,
+                    segments_off: segments_to_off,
+                })
+            } else {
+                // On last frame, no more changes
+                self.current_frame = next_frame;
+                None
+            }
         } else {
-            None // Transition is complete
+            None
         }
     }
 
@@ -61,6 +94,7 @@ impl TransitionEngine {
         Self { config }
     }
 
+    // Generate a series of frames to transition between two sets of segments
     pub fn generate_frames(
         &self,
         start_segments: &HashSet<String>,

@@ -3,18 +3,36 @@
 // The SVG grid data structures are converted to draw commands and
 // cached in the structures in this module.
 //
-// Types in this module:
-// DrawCommand, CachedSegment, and CachedGrid
+// The structures are like the "hardware" of the visualisation.
+//
+// The CachedGrid holds the entire grid of CachedSegments, provides
+// general methods for instantiating a grid from the Project file, and
+// general methods for drawing and transforming the grid.
+//
+// CachedSegments hold the pre-processed draw commands for a single
+// segment. Also representing a segment's "hardware", it is responsible
+// for updating its style and drawing itself.
+//
+// Main Types in this module:
+// DrawCommand, DrawStyle, CachedSegment, and CachedGrid
+//
+// Suppporting Types:
+// Layer, SegmentAction, StyleUpdateMsg
 
 use nannou::prelude::*;
 use std::collections::HashMap;
+use std::time::Instant;
 
-use crate::models::{EdgeType, PathElement, Project, ViewBox};
-use crate::services::grid::*;
-use crate::services::svg::{detect_edge_type, parse_svg};
-use crate::views::Transform2D;
+use crate::{
+    models::{EdgeType, PathElement, Project, ViewBox},
+    services::grid::*,
+    services::svg::{detect_edge_type, parse_svg},
+    views::Transform2D,
+};
 
 const ARC_RESOLUTION: usize = 25;
+const FLASH_DURATION: f32 = 0.1;
+const FADE_DURATION: f32 = 0.4;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data
@@ -97,21 +115,38 @@ impl Default for DrawStyle {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Layer {
     Background,
+    Middle,
     Foreground,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum SegmentAction {
+    On,
+    Off,
+}
+
 #[derive(Debug, Clone)]
-pub struct RenderableSegment<'a> {
-    pub segment: &'a CachedSegment,
-    pub style: DrawStyle,
-    pub layer: Layer,
+pub struct StyleUpdateMsg {
+    pub action: Option<SegmentAction>,
+    pub target_style: Option<DrawStyle>,
 }
 
 // A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
+    // metadata
     pub id: String,
     pub tile_pos: (u32, u32),
+
+    // style states
+    before_style: Option<DrawStyle>,
+    current_style: DrawStyle,
+    target_style: Option<DrawStyle>,
+    pub layer: Layer,
+    pub current_action: Option<SegmentAction>,
+    activation_time: Option<Instant>,
+
+    // draw commands cache
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
@@ -136,12 +171,156 @@ impl CachedSegment {
         Self {
             id: element_id,
             tile_pos: position,
+
+            before_style: None,
+            current_style: DrawStyle::default(),
+            target_style: None,
+            layer: Layer::Background,
+            current_action: None,
+
+            activation_time: None,
             draw_commands,
             original_path: path.clone(),
             edge_type,
             //transform: Transform2D::default(),
         }
     }
+
+    /**************************  Style functions *************************************** */
+
+    pub fn process_style_update_msg(&mut self, msg: &StyleUpdateMsg) {
+        match (&msg.action, &msg.target_style) {
+            (Some(action), Some(target_style)) => {
+                match action {
+                    SegmentAction::On => {
+                        // Always update the style for active segments
+                        self.target_style = Some(target_style.clone());
+                        self.layer = Layer::Foreground;
+                        self.current_action = Some(SegmentAction::On);
+                        self.activation_time = Some(Instant::now());
+                    }
+                    SegmentAction::Off => {
+                        if self.before_style.is_none() {
+                            self.before_style = Some(self.current_style.clone());
+                        }
+                        self.target_style = Some(target_style.clone());
+                        self.layer = Layer::Middle;
+                        self.current_action = Some(SegmentAction::Off);
+                        self.activation_time = Some(Instant::now());
+                    }
+                }
+            }
+            (None, Some(target_style)) => {
+                // Direct style update without action
+                self.before_style = Some(self.current_style.clone());
+                self.current_style = target_style.clone();
+                self.target_style = None;
+            }
+            _ => {}
+        }
+    }
+
+    /**************************  Physical modeling effect functions *************************************** */
+
+    fn apply_power_on_effect(&mut self) {
+        if let (Some(target_style), Some(start_time)) = (&self.target_style, &self.activation_time)
+        {
+            let elapsed_time = start_time.elapsed().as_secs_f32();
+
+            let flash_color = rgb(1.0, 0.82, 0.16);
+            // Calculate color based on animation phase
+            let color = if elapsed_time <= FLASH_DURATION {
+                flash_color
+            } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
+                // Fade to target color
+                let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
+                Self::exp_ease(flash_color, target_style.color, fade_progress, 3.0)
+            } else {
+                // Animation complete
+                self.current_action = None;
+                self.activation_time = None;
+                target_style.color
+            };
+            self.current_style = DrawStyle {
+                color,
+                stroke_weight: target_style.stroke_weight,
+            }
+        }
+    }
+
+    fn apply_power_off_effect(&mut self) {
+        if let (Some(before_style), Some(target_style), Some(start_time)) = (
+            &self.before_style,
+            &self.target_style,
+            &self.activation_time,
+        ) {
+            let elapsed_time = start_time.elapsed().as_secs_f32();
+
+            // Calculate color based on animation phase
+            let color = if elapsed_time <= FADE_DURATION {
+                // Fade to target color
+                let fade_progress = elapsed_time / FADE_DURATION;
+                Self::log_ease(before_style.color, target_style.color, fade_progress, 5.0)
+            } else {
+                // Animation complete
+                self.current_action = None;
+                self.layer = Layer::Background;
+                self.activation_time = None;
+                self.before_style = None;
+                target_style.color
+            };
+
+            self.current_style = DrawStyle {
+                color,
+                stroke_weight: target_style.stroke_weight,
+            }
+        }
+    }
+
+    fn exp_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, decay_rate: f32) -> Rgb<f32> {
+        let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
+        let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
+        let hsl_end = Hsl::from(end);
+
+        let result = Hsl::new(
+            hsl_end.hue,
+            hsl_end.saturation,
+            hsl_start.lightness
+                + (hsl_end.lightness - hsl_start.lightness)
+                    * (1.0 - (-adjusted_time * decay_rate).exp()),
+        );
+        Rgb::from(result)
+    }
+
+    fn log_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, curve_strength: f32) -> Rgb<f32> {
+        let adjusted_time = (time * curve_strength + 1.0).ln() / (curve_strength + 1.0).ln(); // Logarithmic curve adjustment
+
+        let hsl_start = Hsl::from(start);
+        let hsl_end = Hsl::from(end);
+
+        let result = Hsl::new(
+            hsl_end.hue,
+            hsl_end.saturation,
+            hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * adjusted_time,
+        );
+
+        Rgb::from(result)
+    }
+
+    pub fn get_current_style(&self) -> DrawStyle {
+        self.current_style.clone()
+    }
+
+    /**************************  Transform functions *************************************** */
+
+    pub fn apply_transform(&mut self, transform: &Transform2D) {
+        //self.transform = transform.clone();
+        for command in &mut self.draw_commands {
+            command.apply_transform(transform);
+        }
+    }
+
+    /**************************  Initialization functions *************************************** */
 
     fn generate_draw_commands(
         path: &PathElement,
@@ -241,13 +420,6 @@ impl CachedSegment {
             rotation: 0.0,
         }
     }
-
-    pub fn apply_transform(&mut self, transform: &Transform2D) {
-        //self.transform = transform.clone();
-        for command in &mut self.draw_commands {
-            command.apply_transform(transform);
-        }
-    }
 }
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
@@ -307,6 +479,74 @@ impl CachedGrid {
             transform: Transform2D::default(),
         }
     }
+
+    /************************ Rendering methods ****************************/
+    pub fn trigger_screen_update(
+        &mut self,
+        draw: &Draw,
+        update_batch: &HashMap<String, StyleUpdateMsg>,
+        visible: bool,
+    ) {
+        let mut foreground_segments = Vec::new();
+        let mut middle_segments = Vec::new();
+
+        for segment in self.segments.values_mut() {
+            if let Some(msg) = update_batch.get(&segment.id) {
+                segment.process_style_update_msg(msg);
+            }
+
+            if let Some(action) = &segment.current_action {
+                match action {
+                    SegmentAction::On => {
+                        segment.apply_power_on_effect();
+                    }
+                    SegmentAction::Off => {
+                        segment.apply_power_off_effect();
+                    }
+                }
+            }
+
+            // draw background layer first, or prepare other layers
+            if visible {
+                match segment.layer {
+                    Layer::Background => {
+                        for command in &segment.draw_commands {
+                            command.draw(draw, &segment.current_style);
+                        }
+                    }
+                    Layer::Middle => {
+                        middle_segments.push(segment.clone());
+                    }
+                    Layer::Foreground => {
+                        foreground_segments.push(segment.clone());
+                    }
+                }
+            }
+        }
+
+        if visible {
+            for segment in middle_segments {
+                for command in &segment.draw_commands {
+                    command.draw(draw, &segment.current_style);
+                }
+            }
+
+            for segment in foreground_segments {
+                for command in &segment.draw_commands {
+                    command.draw(draw, &segment.current_style);
+                }
+            }
+        }
+    }
+
+    pub fn apply_transform(&mut self, transform: &Transform2D) {
+        //self.transform = transform.clone();
+        for segment in self.segments.values_mut() {
+            segment.apply_transform(transform);
+        }
+    }
+
+    /************************ Init methods ****************************/
 
     // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
     // in Glyphvis we decide on whether to draw an element at the beginning.
@@ -393,53 +633,6 @@ impl CachedGrid {
         }
         // return:
         final_segments
-    }
-
-    // Rendering methods
-    pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
-        // Process and draw background segments
-        segments
-            .iter()
-            .filter(|segment| segment.layer == Layer::Background)
-            .for_each(|segment| {
-                for command in &segment.segment.draw_commands {
-                    command.draw(draw, &segment.style);
-                }
-            });
-
-        // Process and draw foreground segments
-        segments
-            .iter()
-            .filter(|segment| segment.layer == Layer::Foreground)
-            .for_each(|segment| {
-                for command in &segment.segment.draw_commands {
-                    command.draw(draw, &segment.style);
-                }
-            });
-    }
-
-    /*
-        pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
-            self.segments
-                .values()
-                .filter(| segment | self.active_segments.contains(&segment.id))
-                .flat_map(| segment | &segment.draw_commands)
-                .for_each(| command | command.draw(draw, style));
-        }
-
-        pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
-            self.segments
-                .values()
-                .filter(| segment | !self.active_segments.contains(&segment.id))
-                .flat_map(| segment | &segment.draw_commands)
-                .for_each(| command | command.draw(draw, style));
-        }
-    */
-    pub fn apply_transform(&mut self, transform: &Transform2D) {
-        //self.transform = transform.clone();
-        for segment in self.segments.values_mut() {
-            segment.apply_transform(transform);
-        }
     }
 
     // Utility methods

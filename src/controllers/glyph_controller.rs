@@ -4,10 +4,11 @@
 /// Uses that to build foreground and background RenderableSegments from GridInstance
 use std::collections::{HashMap, HashSet};
 
-use crate::animation::TransitionEngine;
-//use crate::effects::EffectsManager;
-use crate::models::data_model::{Glyph, Project};
-use crate::views::GridInstance;
+use crate::{
+    animation::TransitionEngine,
+    models::data_model::{Glyph, Project},
+    views::GridInstance,
+};
 
 pub struct GlyphController {
     glyph_names: Vec<String>,

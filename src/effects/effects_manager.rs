@@ -43,7 +43,6 @@ impl<T: SegmentEffect> Effect for T {
 struct EffectInstance {
     effect: EffectType,
     is_active: bool,
-    start_time: f32,
 }
 
 #[derive(Default)]
@@ -59,13 +58,12 @@ impl EffectsManager {
     }
 
     // Add a new effect
-    pub fn add(&mut self, name: String, effect: EffectType, time: f32) {
+    pub fn add(&mut self, name: String, effect: EffectType) {
         self.effects.insert(
             name,
             EffectInstance {
                 effect,
                 is_active: true,
-                start_time: time,
             },
         );
     }

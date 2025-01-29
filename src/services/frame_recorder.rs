@@ -1,6 +1,8 @@
 // src/services/frame_recorder.rs
-// FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk
-// Its own thread is used to process frames in batches to avoid blocking the main thread
+// FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk.
+// Its gets its own thread to avoid blocking the main thread.
+// Saving is done in batches and in parallel for maximum speed.
+// I'm very happy with its performance.
 
 use nannou::image::RgbaImage;
 use nannou::wgpu;

@@ -1,4 +1,6 @@
 // src/views/grid/segment_graph.rs
+//
+// SegmentGraph holds all the relationships between segment endpoints in a Grid.
 
 use super::cached_grid::{CachedGrid, DrawCommand};
 use nannou::prelude::*;
@@ -39,7 +41,7 @@ impl SegmentNode {
                         points.push(*last);
                     }
                 }
-                DrawCommand::Circle { center, radius } => {
+                DrawCommand::Circle { center, radius: _ } => {
                     points.push(*center);
                 }
             }

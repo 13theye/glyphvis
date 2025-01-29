@@ -290,7 +290,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Set background base style
     let bg_style = DrawStyle {
-        color: rgb(0.2, 0.2, 0.2),
+        color: rgb(0.1, 0.1, 0.1),
         stroke_weight: 5.0,
     };
 
@@ -305,6 +305,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
         grid_instance.update_background_segments(&bg_style, app.time);
 
+        // Send update messages to grid & draw
         grid_instance.trigger_screen_update(draw);
     }
 

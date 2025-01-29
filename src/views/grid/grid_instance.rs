@@ -7,8 +7,7 @@ use crate::animation::{Transition, TransitionEngine};
 use crate::effects::{init_effects, EffectsManager};
 use crate::models::Project;
 use crate::views::{
-    CachedGrid, DrawStyle, Layer, RenderableSegment, SegmentAction, SegmentGraph, StyleUpdateMsg,
-    Transform2D,
+    CachedGrid, DrawStyle, Layer, SegmentAction, SegmentGraph, StyleUpdateMsg, Transform2D,
 };
 
 pub struct GridInstance {
@@ -103,9 +102,10 @@ impl GridInstance {
     }
 
     pub fn update_background_segments(&mut self, bg_style: &DrawStyle, time: f32) {
-        for (segment_id, _) in self.grid.segments.iter() {
+        for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].layer == Layer::Background
+                && segment.current_action.is_none()
             {
                 self.update_batch.insert(
                     segment_id.clone(),
@@ -231,10 +231,6 @@ impl GridInstance {
 
         // Update location's rotation (but not position)
         self.current_rotation += angle;
-    }
-
-    pub fn draw_segments(&self, draw: &Draw, segments: Vec<RenderableSegment>) {
-        self.grid.draw_segments(draw, &segments);
     }
 
     pub fn print_grid_info(&self) {

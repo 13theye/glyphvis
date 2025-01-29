@@ -100,14 +100,8 @@ impl Default for DrawStyle {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Layer {
     Background,
+    Middle,
     Foreground,
-}
-
-#[derive(Debug, Clone)]
-pub struct RenderableSegment<'a> {
-    pub segment: &'a CachedSegment,
-    pub style: DrawStyle,
-    pub layer: Layer,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -178,6 +172,7 @@ impl CachedSegment {
     }
 
     /**************************  Style functions *************************************** */
+
     pub fn process_style_update_msg(&mut self, msg: &StyleUpdateMsg) {
         match (&msg.action, &msg.target_style) {
             (Some(action), Some(target_style)) => {
@@ -194,7 +189,7 @@ impl CachedSegment {
                             self.before_style = Some(self.current_style.clone());
                         }
                         self.target_style = Some(target_style.clone());
-                        self.layer = Layer::Background;
+                        self.layer = Layer::Middle;
                         self.current_action = Some(SegmentAction::Off);
                         self.activation_time = Some(Instant::now());
                     }
@@ -209,6 +204,8 @@ impl CachedSegment {
             _ => {}
         }
     }
+
+    /**************************  Physical modeling effect functions *************************************** */
 
     fn apply_power_on_effect(&mut self) {
         if let (Some(target_style), Some(start_time)) = (&self.target_style, &self.activation_time)
@@ -248,10 +245,11 @@ impl CachedSegment {
             let color = if elapsed_time <= FADE_DURATION {
                 // Fade to target color
                 let fade_progress = elapsed_time / FADE_DURATION;
-                Self::exp_ease(before_style.color, target_style.color, fade_progress, 10.5)
+                Self::log_ease(before_style.color, target_style.color, fade_progress, 5.0)
             } else {
                 // Animation complete
                 self.current_action = None;
+                self.layer = Layer::Background;
                 self.activation_time = None;
                 self.before_style = None;
                 target_style.color
@@ -276,6 +274,21 @@ impl CachedSegment {
                 + (hsl_end.lightness - hsl_start.lightness)
                     * (1.0 - (-adjusted_time * decay_rate).exp()),
         );
+        Rgb::from(result)
+    }
+
+    fn log_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, curve_strength: f32) -> Rgb<f32> {
+        let adjusted_time = (time * curve_strength + 1.0).ln() / (curve_strength + 1.0).ln(); // Logarithmic curve adjustment
+
+        let hsl_start = Hsl::from(start);
+        let hsl_end = Hsl::from(end);
+
+        let result = Hsl::new(
+            hsl_end.hue,
+            hsl_end.saturation,
+            hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * adjusted_time,
+        );
+
         Rgb::from(result)
     }
 
@@ -459,6 +472,8 @@ impl CachedGrid {
         update_batch: &HashMap<String, StyleUpdateMsg>,
     ) {
         let mut foreground_segments = Vec::new();
+        let mut middle_segments = Vec::new();
+
         for segment in self.segments.values_mut() {
             if let Some(msg) = update_batch.get(&segment.id) {
                 segment.process_style_update_msg(msg);
@@ -475,12 +490,24 @@ impl CachedGrid {
                 }
             }
 
-            if segment.layer == Layer::Background {
-                for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style);
+            match segment.layer {
+                Layer::Background => {
+                    for command in &segment.draw_commands {
+                        command.draw(draw, &segment.current_style);
+                    }
                 }
-            } else {
-                foreground_segments.push(segment);
+                Layer::Middle => {
+                    middle_segments.push(segment.clone());
+                }
+                Layer::Foreground => {
+                    foreground_segments.push(segment.clone());
+                }
+            }
+        }
+
+        for segment in middle_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
             }
         }
 
@@ -489,28 +516,6 @@ impl CachedGrid {
                 command.draw(draw, &segment.current_style);
             }
         }
-    }
-
-    pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
-        // Process and draw background segments
-        segments
-            .iter()
-            .filter(|segment| segment.layer == Layer::Background)
-            .for_each(|segment| {
-                for command in &segment.segment.draw_commands {
-                    command.draw(draw, &segment.style);
-                }
-            });
-
-        // Process and draw foreground segments
-        segments
-            .iter()
-            .filter(|segment| segment.layer == Layer::Foreground)
-            .for_each(|segment| {
-                for command in &segment.segment.draw_commands {
-                    command.draw(draw, &segment.style);
-                }
-            });
     }
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {

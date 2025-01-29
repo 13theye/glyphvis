@@ -3,23 +3,10 @@
 
 use super::effects_manager::*;
 use super::grid_effects::{ColorCycleEffect, PulseEffect};
-use super::power_on_effect::PowerOnEffect;
 use nannou::prelude::*;
 
 pub fn init_effects(app: &App) -> EffectsManager {
     let mut effects_manager = EffectsManager::new();
-
-    let power_on_effect = PowerOnEffect::new(
-        rgb(1.0, 0.0, 0.0), // currently not used
-        0.1,
-        0.4,
-    );
-
-    effects_manager.add(
-        "power_on".to_string(),
-        EffectType::Segment(Box::new(power_on_effect)),
-        app.time,
-    );
 
     effects_manager.add(
         "pulse".to_string(),

@@ -179,50 +179,34 @@ impl CachedSegment {
 
     /**************************  Style functions *************************************** */
     pub fn process_style_update_msg(&mut self, msg: &StyleUpdateMsg) {
-        if let (Some(current_action), Some(start_time)) =
-            (&self.current_action, &self.activation_time)
-        {
-            println!("Segment {} is already animating. Ignoring msg", self.id);
-            println!("Current action: {:?}", current_action);
-            println!(
-                "Time since action started {}",
-                start_time.elapsed().as_secs_f32()
-            );
-            return;
-        }
-
-        if let Some(action) = &msg.action {
-            match action {
-                SegmentAction::On => {
-                    if let Some(target_style) = &msg.target_style {
+        match (&msg.action, &msg.target_style) {
+            (Some(action), Some(target_style)) => {
+                match action {
+                    SegmentAction::On => {
+                        // Always update the style for active segments
                         self.target_style = Some(target_style.clone());
-                        // set up the effect
                         self.layer = Layer::Foreground;
                         self.current_action = Some(SegmentAction::On);
                         self.activation_time = Some(Instant::now());
-                        return;
                     }
-                }
-                SegmentAction::Off => {
-                    // apply the effect
-                    if let Some(target_style) = &msg.target_style {
+                    SegmentAction::Off => {
                         if self.before_style.is_none() {
                             self.before_style = Some(self.current_style.clone());
                         }
                         self.target_style = Some(target_style.clone());
-                        // set up the effect
                         self.layer = Layer::Background;
                         self.current_action = Some(SegmentAction::Off);
                         self.activation_time = Some(Instant::now());
-                        return;
                     }
                 }
             }
-            if let Some(target_style) = &msg.target_style {
+            (None, Some(target_style)) => {
+                // Direct style update without action
                 self.before_style = Some(self.current_style.clone());
                 self.current_style = target_style.clone();
                 self.target_style = None;
             }
+            _ => {}
         }
     }
 
@@ -238,16 +222,11 @@ impl CachedSegment {
             } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
                 // Fade to target color
                 let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
-                /*Self::ease_lightness(
-                    fade_progress,
-                    flash_color,
-                    target_style.color,
-                    FADE_DURATION,
-                )*/
-                Self::exp_flash(flash_color, target_style.color, fade_progress)
+                Self::exp_ease(flash_color, target_style.color, fade_progress, 3.0)
             } else {
                 // Animation complete
                 self.current_action = None;
+                self.activation_time = None;
                 target_style.color
             };
             self.current_style = DrawStyle {
@@ -269,16 +248,11 @@ impl CachedSegment {
             let color = if elapsed_time <= FADE_DURATION {
                 // Fade to target color
                 let fade_progress = elapsed_time / FADE_DURATION;
-                /*Self::ease_lightness(
-                    fade_progress,
-                    before_style.color,
-                    target_style.color,
-                    FADE_DURATION,
-                )*/
-                Self::exp_flash(before_style.color, target_style.color, fade_progress)
+                Self::exp_ease(before_style.color, target_style.color, fade_progress, 10.5)
             } else {
                 // Animation complete
                 self.current_action = None;
+                self.activation_time = None;
                 self.before_style = None;
                 target_style.color
             };
@@ -290,21 +264,7 @@ impl CachedSegment {
         }
     }
 
-    fn ease_lightness(progress: f32, start: Rgb<f32>, end: Rgb<f32>, duration: f32) -> Rgb<f32> {
-        let start_hsl = Hsl::from(start);
-        let end_hsl = Hsl::from(end);
-        let new_lightness = nannou::ease::quint::ease_out(
-            progress,
-            start_hsl.lightness,
-            end_hsl.lightness,
-            duration,
-        );
-        let result = Hsl::new(end_hsl.hue, end_hsl.saturation, new_lightness);
-        Rgb::from(result)
-    }
-
-    fn exp_flash(start: Rgb<f32>, end: Rgb<f32>, time: f32) -> Rgb<f32> {
-        let decay_rate = 3.0; // Steepness of curve
+    fn exp_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, decay_rate: f32) -> Rgb<f32> {
         let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
         let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
         let hsl_end = Hsl::from(end);

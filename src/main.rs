@@ -139,9 +139,9 @@ fn model(app: &App) -> Model {
 
     let transition_config = TransitionConfig {
         steps: 50,
-        frame_duration: 0.05,
+        frame_duration: 0.025,
         wandering: 1.0,
-        density: 0.01,
+        density: 0.02,
     };
 
     // Create the frame recorder
@@ -330,7 +330,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             duration.as_secs_f32(),
         );
 
-        grid_instance.update_background_segments();
+        grid_instance.update_background_segments(app.time);
 
         grid_instance.trigger_screen_update(draw);
     }

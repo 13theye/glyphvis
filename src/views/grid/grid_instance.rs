@@ -107,7 +107,7 @@ impl GridInstance {
         }
     }
 
-    pub fn update_background_segments(&mut self) {
+    pub fn update_background_segments(&mut self, time: f32) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if let Some(segment_action) = &segment.current_action {
                 if !self.update_batch.contains_key(segment_id)
@@ -120,7 +120,7 @@ impl GridInstance {
                             action: None,
                             target_style: Some(self.effects_manager.apply_grid_effects(
                                 self.grid.segments[segment_id].get_current_style(),
-                                Instant::now().elapsed().as_secs_f32(),
+                                time,
                             )),
                         },
                     );
@@ -148,10 +148,26 @@ impl GridInstance {
 
         // Then apply any transition updates we collected
         if let Some(updates) = transition_updates {
+            for segment_id in &updates.segments_on {
+                self.current_active_segments.insert(segment_id.clone());
+            }
+            for segment_id in &updates.segments_off {
+                self.current_active_segments.remove(segment_id);
+            }
+
             // Convert frame difference into on/off messages
+
             if !updates.segments_on.is_empty() {
                 self.turn_on_segments(updates.segments_on, target_style);
             }
+            /*
+            // Process ALL active segments to ensure proper color updates
+            let all_active = self.current_active_segments.clone();
+            if !all_active.is_empty() {
+                self.turn_on_segments(all_active, target_style);
+            }
+            */
+
             if !updates.segments_off.is_empty() {
                 self.turn_off_segments(updates.segments_off, bg_style);
             }
@@ -163,7 +179,6 @@ impl GridInstance {
     }
 
     pub fn trigger_screen_update(&mut self, draw: &Draw) {
-        println!("Update batch: {:?}", self.update_batch);
         self.grid.trigger_screen_update(draw, &self.update_batch);
         self.clear_update_batch();
     }
@@ -235,10 +250,10 @@ impl GridInstance {
         target_segments: HashSet<String>,
         engine: &TransitionEngine,
     ) {
-        let frames =
-            engine.generate_frames(&self.current_active_segments, &target_segments, &self.graph);
+        let changes =
+            engine.generate_changes(&self.current_active_segments, &target_segments, &self.graph);
 
-        self.active_transition = Some(Transition::new(frames, engine.config.frame_duration));
+        self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));
     }
     /*
     pub fn update(&mut self, time: f32, dt: f32) {

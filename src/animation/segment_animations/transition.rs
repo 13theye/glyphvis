@@ -100,6 +100,7 @@ impl TransitionEngine {
         start_segments: &HashSet<String>,
         target_segments: &HashSet<String>,
         segment_graph: &SegmentGraph,
+        immediate: bool, // when true, all segments change at once
     ) -> Vec<Vec<SegmentChange>> {
         let mut rng = thread_rng();
         let mut changes_by_step: Vec<Vec<SegmentChange>> =
@@ -111,6 +112,8 @@ impl TransitionEngine {
             if let Some(nearest) = self.find_nearest_connected(seg, target_segments, segment_graph)
             {
                 pending_changes.push((seg.clone(), nearest, false));
+            } else if target_segments.is_empty() {
+                pending_changes.push((seg.clone(), seg.clone(), false));
             }
         }
 
@@ -121,6 +124,17 @@ impl TransitionEngine {
             } else if start_segments.is_empty() {
                 pending_changes.push((seg.clone(), seg.clone(), true));
             }
+        }
+
+        if immediate {
+            let mut single_step = Vec::new();
+            for (seg, _, is_add) in pending_changes {
+                single_step.push(SegmentChange {
+                    segment_id: seg,
+                    turn_on: is_add,
+                });
+            }
+            return vec![single_step];
         }
 
         // Calculate changes per step based on density
@@ -177,7 +191,6 @@ impl TransitionEngine {
         while let Some(true) = changes_by_step.last().map(|step| step.is_empty()) {
             changes_by_step.pop();
         }
-
         changes_by_step
     }
 

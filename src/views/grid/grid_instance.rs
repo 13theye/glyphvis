@@ -34,7 +34,6 @@ pub struct GridInstance {
 
     // inside-grid state
     pub current_active_segments: HashSet<String>,
-    pub current_glyph_index: usize, // temporary way to access glyphs while testing
 
     // overall grid state
     pub spawn_location: Point2,
@@ -61,7 +60,6 @@ impl GridInstance {
             graph,
 
             current_active_segments: HashSet::new(),
-            current_glyph_index: 0,
 
             /* will add this when timeline is implemented
             target_active_segments: None,
@@ -184,11 +182,16 @@ impl GridInstance {
 
     pub fn start_transition(
         &mut self,
-        target_segments: HashSet<String>,
+        target_segments: &HashSet<String>,
         engine: &TransitionEngine,
+        immediate: bool, // when true, all segments change at once
     ) {
-        let changes =
-            engine.generate_changes(&self.current_active_segments, &target_segments, &self.graph);
+        let changes = engine.generate_changes(
+            &self.current_active_segments,
+            target_segments,
+            &self.graph,
+            immediate,
+        );
 
         self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));
     }

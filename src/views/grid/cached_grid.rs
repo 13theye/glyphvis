@@ -31,8 +31,9 @@ use crate::{
 };
 
 const ARC_RESOLUTION: usize = 25;
-const FLASH_DURATION: f32 = 0.1;
-const FADE_DURATION: f32 = 0.4;
+const FLASH_DURATION: f32 = 0.035;
+const FADE_DURATION: f32 = 0.3;
+const FLASH_FADE_DURATION: f32 = 0.15;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data
@@ -227,14 +228,14 @@ impl CachedSegment {
         {
             let elapsed_time = start_time.elapsed().as_secs_f32();
 
-            let flash_color = rgb(1.0, 0.82, 0.16);
+            let flash_color = rgb(1.0, 1.0, 0.8);
             // Calculate color based on animation phase
             let color = if elapsed_time <= FLASH_DURATION {
                 flash_color
-            } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
+            } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
                 // Fade to target color
-                let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
-                Self::exp_ease(flash_color, target_style.color, fade_progress, 3.0)
+                let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
+                Self::exp_ease(flash_color, target_style.color, fade_progress, 1.5)
             } else {
                 // Animation complete
                 self.current_action = None;
@@ -260,7 +261,7 @@ impl CachedSegment {
             let color = if elapsed_time <= FADE_DURATION {
                 // Fade to target color
                 let fade_progress = elapsed_time / FADE_DURATION;
-                Self::log_ease(before_style.color, target_style.color, fade_progress, 5.0)
+                Self::exp_ease(before_style.color, target_style.color, fade_progress, 1.0)
             } else {
                 // Animation complete
                 self.current_action = None;
@@ -283,8 +284,10 @@ impl CachedSegment {
         let hsl_end = Hsl::from(end);
 
         let result = Hsl::new(
-            hsl_end.hue,
-            hsl_end.saturation,
+            hsl_start.hue,
+            hsl_start.saturation
+                + (hsl_end.saturation - hsl_start.saturation)
+                    * (1.0 - (-adjusted_time * decay_rate).exp()),
             hsl_start.lightness
                 + (hsl_end.lightness - hsl_start.lightness)
                     * (1.0 - (-adjusted_time * decay_rate).exp()),
@@ -292,15 +295,15 @@ impl CachedSegment {
         Rgb::from(result)
     }
 
-    fn log_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, curve_strength: f32) -> Rgb<f32> {
+    fn _log_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, curve_strength: f32) -> Rgb<f32> {
         let adjusted_time = (time * curve_strength + 1.0).ln() / (curve_strength + 1.0).ln(); // Logarithmic curve adjustment
 
         let hsl_start = Hsl::from(start);
         let hsl_end = Hsl::from(end);
 
         let result = Hsl::new(
-            hsl_end.hue,
-            hsl_end.saturation,
+            hsl_start.hue,
+            hsl_start.saturation + (hsl_end.saturation - hsl_start.saturation) * adjusted_time,
             hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * adjusted_time,
         );
 

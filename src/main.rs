@@ -1,7 +1,7 @@
 // src/main.rs
 use nannou::prelude::*;
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use glyphvis::{
@@ -51,7 +51,8 @@ struct Model {
     transition_engine: TransitionEngine,
 
     // Message
-    needs_glyph_update: bool,
+    target_segments: Option<HashSet<String>>,
+    immediately_change: bool, // when true, change glyphs w/o transition
     debug_flag: bool,
 
     // Style
@@ -160,7 +161,8 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         random: rand::thread_rng(),
 
-        needs_glyph_update: false,
+        target_segments: None,
+        immediately_change: false,
         debug_flag: false,
 
         effect_target_style: DrawStyle {
@@ -183,21 +185,26 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         // show next glyph
         Key::Space => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                model.glyphs.next_glyph(
-                    &model.project,
-                    grid_instance,
-                    &model.transition_engine,
-                    app.time,
-                );
-            }
-            model.needs_glyph_update = true;
+            model.target_segments = Some(model.glyphs.next_glyph(&model.project));
+            model.immediately_change = false;
+        }
+        Key::N => {
+            model.target_segments = Some(model.glyphs.next_glyph(&model.project));
+            model.immediately_change = true;
         }
         // Return grids to where they spawned
         Key::Backslash => {
             for (_, grid_instance) in model.grids.iter_mut() {
                 grid_instance.reset_location();
             }
+        }
+        Key::C => {
+            model.target_segments = Some(model.glyphs.no_glyph());
+            model.immediately_change = true;
+        }
+        Key::X => {
+            model.target_segments = Some(model.glyphs.no_glyph());
+            model.immediately_change = false;
         }
         // Init grids or hide/show them
         Key::G => {
@@ -272,9 +279,9 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
 
     // Update the current model-wide glyph here -- solves timing issues
-    if model.needs_glyph_update {
+
+    if model.target_segments.is_some() {
         update_glyph(app, model);
-        model.needs_glyph_update = false;
     }
 
     // Clear the window
@@ -345,7 +352,7 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 // ******************************* State-triggered functions *****************************
 
-fn update_glyph(app: &App, model: &mut Model) {
+fn update_glyph(_app: &App, model: &mut Model) {
     let color_hsl = hsl(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
@@ -357,12 +364,17 @@ fn update_glyph(app: &App, model: &mut Model) {
     };
     model.effect_target_style = glyph_style;
 
-    model.glyphs.update_all_grids(
-        &mut model.grids,
-        &model.project,
-        &model.transition_engine,
-        app.time,
-    );
+    if let Some(target_segments) = &model.target_segments {
+        for grid_instance in model.grids.values_mut() {
+            grid_instance.start_transition(
+                target_segments,
+                &model.transition_engine,
+                model.immediately_change,
+            );
+        }
+    }
+
+    model.target_segments = None;
 }
 
 // ******************************* Rendering and Capture *****************************

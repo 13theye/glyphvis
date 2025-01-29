@@ -322,6 +322,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
     */
 
+    for (_, grid_instance) in model.grids.iter_mut() {}
+
     if model.debug_flag {
         // Draw (+,+) axes
         let draw = &model.draw;

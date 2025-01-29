@@ -110,7 +110,7 @@ pub struct RenderableSegment<'a> {
     pub layer: Layer,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SegmentAction {
     On,
     Off,

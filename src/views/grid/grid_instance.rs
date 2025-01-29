@@ -26,7 +26,6 @@ pub struct GridInstance {
 
     // new update system
     pub update_batch: HashMap<String, StyleUpdateMsg>,
-    pub non_updating_segments: HashSet<String>, // segments that are not in the update batch
 
     // inside-grid state
     pub current_active_segments: HashSet<String>,
@@ -73,7 +72,6 @@ impl GridInstance {
             active_transition: None,
 
             update_batch: HashMap::new(),
-            non_updating_segments: HashSet::new(),
 
             spawn_location: position,
             spawn_rotation: rotation,
@@ -94,7 +92,6 @@ impl GridInstance {
                     target_style: Some(target_style.clone()),
                 },
             );
-            self.non_updating_segments.remove(&segment_id);
         }
     }
 
@@ -107,37 +104,33 @@ impl GridInstance {
                     target_style: Some(bg_style.clone()),
                 },
             );
-            self.non_updating_segments.remove(&segment_id);
         }
     }
 
     pub fn update_background_segments(&mut self) {
-        for (segment_id, _) in self.grid.segments.iter() {
-            if self.non_updating_segments.contains(segment_id)
-                && self.grid.segments[segment_id].layer == Layer::Background
-            {
-                self.update_batch.insert(
-                    segment_id.clone(),
-                    StyleUpdateMsg {
-                        action: None,
-                        target_style: Some(self.effects_manager.apply_grid_effects(
-                            self.grid.segments[segment_id].get_current_style(),
-                            Instant::now().elapsed().as_secs_f32(),
-                        )),
-                    },
-                );
-                self.non_updating_segments.remove(segment_id);
+        for (segment_id, segment) in self.grid.segments.iter() {
+            if let Some(segment_action) = &segment.current_action {
+                if !self.update_batch.contains_key(segment_id)
+                    && self.grid.segments[segment_id].layer == Layer::Background
+                    && *segment_action != SegmentAction::Off
+                {
+                    self.update_batch.insert(
+                        segment_id.clone(),
+                        StyleUpdateMsg {
+                            action: None,
+                            target_style: Some(self.effects_manager.apply_grid_effects(
+                                self.grid.segments[segment_id].get_current_style(),
+                                Instant::now().elapsed().as_secs_f32(),
+                            )),
+                        },
+                    );
+                }
             }
         }
     }
 
     pub fn clear_update_batch(&mut self) {
         self.update_batch.clear();
-    }
-
-    pub fn reset_non_updating_segments(&mut self) {
-        self.non_updating_segments.clear();
-        self.non_updating_segments = self.grid.segments.keys().cloned().collect();
     }
 
     pub fn trigger_screen_update(&mut self, draw: &Draw) {

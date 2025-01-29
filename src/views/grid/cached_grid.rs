@@ -117,7 +117,7 @@ pub enum SegmentAction {
 }
 
 #[derive(Debug, Clone)]
-pub struct UpdateMsg {
+pub struct StyleUpdateMsg {
     pub action: Option<SegmentAction>,
     pub target_style: Option<DrawStyle>,
 }
@@ -125,15 +125,19 @@ pub struct UpdateMsg {
 // A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
+    // metadata
     pub id: String,
     pub tile_pos: (u32, u32),
 
     // style states
+    before_style: Option<DrawStyle>,
     current_style: DrawStyle,
     target_style: Option<DrawStyle>,
+    pub layer: Layer,
+    pub current_action: Option<SegmentAction>,
     activation_time: f32,
-    pub is_ready: bool,
 
+    // draw commands
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
@@ -158,10 +162,14 @@ impl CachedSegment {
         Self {
             id: element_id,
             tile_pos: position,
+
+            before_style: None,
             current_style: DrawStyle::default(),
             target_style: None,
+            layer: Layer::Background,
+            current_action: None,
+
             activation_time: 0.0,
-            is_ready: true,
             draw_commands,
             original_path: path.clone(),
             edge_type,
@@ -170,86 +178,90 @@ impl CachedSegment {
     }
 
     /**************************  Style functions *************************************** */
-    pub fn process_update_message(&mut self, msg: &UpdateMsg) {
+    pub fn process_style_update_msg(&mut self, msg: &StyleUpdateMsg) {
         if let Some(action) = &msg.action {
             match action {
                 SegmentAction::On => {
                     if let Some(target_style) = &msg.target_style {
                         self.target_style = Some(target_style.clone());
-                        let current_style = self.current_style.clone();
-                        // apply the effect
-                        self.is_ready = false;
+                        // set up the effect
+                        self.layer = Layer::Foreground;
+                        self.current_action = Some(SegmentAction::On);
                         self.activation_time = Instant::now().elapsed().as_secs_f32();
-                        self.apply_power_on_effect(&current_style, target_style);
                     }
                 }
                 SegmentAction::Off => {
                     // apply the effect
                     if let Some(target_style) = &msg.target_style {
                         self.target_style = Some(target_style.clone());
-                        let current_style = self.current_style.clone();
-                        // apply the effect
-                        self.is_ready = false;
+                        // set up the effect
+                        self.layer = Layer::Background;
+                        self.before_style = Some(self.current_style.clone());
+                        self.current_action = Some(SegmentAction::Off);
                         self.activation_time = Instant::now().elapsed().as_secs_f32();
-                        self.apply_power_off_effect(&current_style, target_style);
                     }
                 }
             }
         }
     }
 
-    fn apply_power_on_effect(&mut self, base_style: &DrawStyle, target_style: &DrawStyle) {
-        let current_time = Instant::now().elapsed().as_secs_f32();
-        let elapsed_time = current_time - self.activation_time;
+    fn apply_power_on_effect(&mut self) {
+        if let Some(target_style) = &self.target_style {
+            let current_time = Instant::now().elapsed().as_secs_f32();
+            let elapsed_time = current_time - self.activation_time;
 
-        let flash_color = rgb(1.0, 0.96, 0.79);
-        // Calculate color based on animation phase
-        let color = if elapsed_time <= FLASH_DURATION {
-            flash_color
-        } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
-            // Fade to target color
-            let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
-            Self::ease_lightness(
-                fade_progress,
-                flash_color,
-                target_style.color,
-                FADE_DURATION,
-            )
-        } else {
-            // Animation complete
-            self.is_ready = true;
-            target_style.color
-        };
-
-        self.current_style = DrawStyle {
-            color,
-            stroke_weight: target_style.stroke_weight,
+            let flash_color = rgb(1.0, 0.96, 0.79);
+            // Calculate color based on animation phase
+            let color = if elapsed_time <= FLASH_DURATION {
+                flash_color
+            } else if elapsed_time <= FLASH_DURATION + FADE_DURATION {
+                // Fade to target color
+                let fade_progress = (elapsed_time - FLASH_DURATION) / FADE_DURATION;
+                Self::ease_lightness(
+                    fade_progress,
+                    flash_color,
+                    target_style.color,
+                    FADE_DURATION,
+                )
+            } else {
+                // Animation complete
+                self.current_action = None;
+                target_style.color
+            };
+            self.current_style = DrawStyle {
+                color,
+                stroke_weight: target_style.stroke_weight,
+            }
         }
     }
 
-    fn apply_power_off_effect(&mut self, base_style: &DrawStyle, target_style: &DrawStyle) {
-        let current_time = Instant::now().elapsed().as_secs_f32();
-        let elapsed_time = current_time - self.activation_time;
+    fn apply_power_off_effect(&mut self) {
+        if let Some(before_style) = &self.before_style {
+            if let Some(target_style) = &self.target_style {
+                let current_time = Instant::now().elapsed().as_secs_f32();
+                let elapsed_time = current_time - self.activation_time;
 
-        // Calculate color based on animation phase
-        let color = if elapsed_time <= FADE_DURATION {
-            // Fade to target color
-            let fade_progress = elapsed_time / FADE_DURATION;
-            Self::ease_lightness(
-                fade_progress,
-                base_style.color,
-                target_style.color,
-                FADE_DURATION,
-            )
-        } else {
-            // Animation complete
-            self.is_ready = true;
-            target_style.color
-        };
+                // Calculate color based on animation phase
+                let color = if elapsed_time <= FADE_DURATION {
+                    // Fade to target color
+                    let fade_progress = elapsed_time / FADE_DURATION;
+                    Self::ease_lightness(
+                        fade_progress,
+                        before_style.color,
+                        target_style.color,
+                        FADE_DURATION,
+                    )
+                } else {
+                    // Animation complete
+                    self.current_action = None;
+                    target_style.color
+                };
 
-        self.current_style = DrawStyle {
-            color,
-            stroke_weight: target_style.stroke_weight,
+                self.current_style = DrawStyle {
+                    color,
+                    stroke_weight: target_style.stroke_weight,
+                }
+            }
         }
     }
 
@@ -264,6 +276,10 @@ impl CachedSegment {
         );
         let result = Hsl::new(end_hsl.hue, end_hsl.saturation, new_lightness);
         Rgb::from(result)
+    }
+
+    pub fn get_current_style(&self) -> DrawStyle {
+        self.current_style.clone()
     }
 
     /**************************  Transform functions *************************************** */
@@ -522,7 +538,45 @@ impl CachedGrid {
         final_segments
     }
 
-    // Rendering methods
+    /************************ Rendering methods ****************************/
+    pub fn trigger_screen_update(
+        &mut self,
+        draw: &Draw,
+        update_batch: &HashMap<String, StyleUpdateMsg>,
+    ) {
+        let mut foreground_segments = Vec::new();
+        for segment in self.segments.values_mut() {
+            if let Some(msg) = update_batch.get(&segment.id) {
+                segment.process_style_update_msg(msg);
+            }
+
+            if let Some(action) = &segment.current_action {
+                match action {
+                    SegmentAction::On => {
+                        segment.apply_power_on_effect();
+                    }
+                    SegmentAction::Off => {
+                        segment.apply_power_off_effect();
+                    }
+                }
+            }
+
+            if segment.layer == Layer::Background {
+                for command in &segment.draw_commands {
+                    command.draw(draw, &segment.current_style);
+                }
+            } else {
+                foreground_segments.push(segment);
+            }
+        }
+
+        for segment in foreground_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
+            }
+        }
+    }
+
     pub fn draw_segments(&self, draw: &Draw, segments: &[RenderableSegment]) {
         // Process and draw background segments
         segments

@@ -304,6 +304,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     //let start_time = std::time::Instant::now();
 
     // Loop over each GridInstance and Draw
+
+    /*
     for (_, grid_instance) in model.grids.iter_mut() {
         grid_instance.update(app.time, duration.as_secs_f32());
 
@@ -318,6 +320,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         //let grid_duration = grid_start.elapsed();
         //println!("Grid {} update time: {:?}", name, grid_duration);
     }
+    */
 
     if model.debug_flag {
         // Draw (+,+) axes

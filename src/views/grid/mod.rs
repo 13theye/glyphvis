@@ -6,7 +6,8 @@ pub mod segment_graph;
 pub mod transform;
 
 pub use cached_grid::{
-    CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, RenderableSegment,
+    CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, RenderableSegment, SegmentAction,
+    StyleUpdateMsg,
 };
 pub use grid_instance::GridInstance;
 pub use segment_graph::SegmentGraph;

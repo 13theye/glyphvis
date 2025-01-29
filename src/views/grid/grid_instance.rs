@@ -3,11 +3,15 @@
 use nannou::prelude::*;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use crate::animation::{Transition, TransitionEngine};
 use crate::effects::{init_effects, EffectsManager};
 use crate::models::Project;
-use crate::views::{CachedGrid, DrawStyle, Layer, RenderableSegment, SegmentGraph, Transform2D};
+use crate::views::{
+    CachedGrid, DrawStyle, Layer, RenderableSegment, SegmentAction, SegmentGraph, StyleUpdateMsg,
+    Transform2D,
+};
 
 pub struct GridInstance {
     // grid data
@@ -19,6 +23,10 @@ pub struct GridInstance {
     // effects state
     pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
+
+    // new update system
+    pub update_batch: HashMap<String, StyleUpdateMsg>,
+    pub non_updating_segments: HashSet<String>, // segments that are not in the update batch
 
     // inside-grid state
     pub current_active_segments: HashSet<String>,
@@ -64,6 +72,9 @@ impl GridInstance {
             effects_manager: init_effects::init_effects(app),
             active_transition: None,
 
+            update_batch: HashMap::new(),
+            non_updating_segments: HashSet::new(),
+
             spawn_location: position,
             spawn_rotation: rotation,
             current_location: position,
@@ -71,6 +82,69 @@ impl GridInstance {
             visible: true,
         }
     }
+
+    /************************** New Update System ***************************** */
+
+    pub fn turn_on_segments(&mut self, segments: HashSet<String>, target_style: DrawStyle) {
+        for segment_id in segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg {
+                    action: Some(SegmentAction::On),
+                    target_style: Some(target_style.clone()),
+                },
+            );
+            self.non_updating_segments.remove(&segment_id);
+        }
+    }
+
+    pub fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: DrawStyle) {
+        for segment_id in segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg {
+                    action: Some(SegmentAction::Off),
+                    target_style: Some(bg_style.clone()),
+                },
+            );
+            self.non_updating_segments.remove(&segment_id);
+        }
+    }
+
+    pub fn update_background_segments(&mut self) {
+        for (segment_id, _) in self.grid.segments.iter() {
+            if self.non_updating_segments.contains(segment_id)
+                && self.grid.segments[segment_id].layer == Layer::Background
+            {
+                self.update_batch.insert(
+                    segment_id.clone(),
+                    StyleUpdateMsg {
+                        action: None,
+                        target_style: Some(self.effects_manager.apply_grid_effects(
+                            self.grid.segments[segment_id].get_current_style(),
+                            Instant::now().elapsed().as_secs_f32(),
+                        )),
+                    },
+                );
+                self.non_updating_segments.remove(segment_id);
+            }
+        }
+    }
+
+    pub fn clear_update_batch(&mut self) {
+        self.update_batch.clear();
+    }
+
+    pub fn reset_non_updating_segments(&mut self) {
+        self.non_updating_segments.clear();
+        self.non_updating_segments = self.grid.segments.keys().cloned().collect();
+    }
+
+    pub fn trigger_screen_update(&mut self, draw: &Draw) {
+        self.grid.trigger_screen_update(draw, &self.update_batch);
+    }
+
+    /************************* Old update system ******************************/
 
     pub fn set_active_segments(&mut self, segments: HashSet<String>) {
         self.current_active_segments = segments;

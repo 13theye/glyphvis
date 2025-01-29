@@ -30,15 +30,14 @@ const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
 const WINDOW_SIZE: [u32; 2] = [1897, 480];
 // path to the project file
 const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/small-cir-d2.json";
-// grid scale factor
-//const GRID_SCALE_FACTOR: f32 = 0.95; //  won't need this eventually when we define Grid size when drawing
+//const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
 
 // const BPM: u32 = 120;
 
 struct Model {
     // Core components:
     project: Project,
-    grids: HashMap<String, GridInstance>, //<grid_id : CachedGrid>
+    grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
     glyphs: GlyphController,
 
     // Rendering components:

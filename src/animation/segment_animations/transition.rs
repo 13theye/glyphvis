@@ -1,4 +1,9 @@
 // src/animation/segment_animations/transition.rs
+//
+// A Transition a timeline of on/off msgs that makes the Grid
+// tranistion from one Glyph to another.
+// It doesn't need to finish to smoothly start transitioning to
+// the next glyph.
 
 use crate::views::SegmentGraph;
 use rand::{thread_rng, Rng};
@@ -84,6 +89,7 @@ pub struct TransitionEngine {
     pub config: TransitionConfig,
 }
 
+// The thing that generates the Transition
 impl TransitionEngine {
     pub fn new(config: TransitionConfig) -> Self {
         Self { config }
@@ -121,11 +127,10 @@ impl TransitionEngine {
         let changes_per_step = (pending_changes.len() as f32 * self.config.density).ceil() as usize;
 
         // Distribute changes across steps, keeping neighbor groups together
-        for step in 0..self.config.steps {
+        for step_changes in changes_by_step.iter_mut().take(self.config.steps) {
             let available_changes = pending_changes.len().min(changes_per_step);
-
-            // Process up to changes_per_step changes
             let mut changes_this_step = 0;
+
             while changes_this_step < available_changes && !pending_changes.is_empty() {
                 if rng.gen::<f32>() < self.config.wandering {
                     // Find a random change and its neighbors
@@ -133,26 +138,25 @@ impl TransitionEngine {
                     let (seg, nearest, is_add) = pending_changes.remove(idx);
 
                     // Add the change
-                    changes_by_step[step].push(SegmentChange {
+                    step_changes.push(SegmentChange {
                         segment_id: seg.clone(),
                         turn_on: is_add,
                     });
                     changes_this_step += 1;
 
                     // Try to add its neighbors in the same step
-                    let mut i = 0;
-                    while i < pending_changes.len() && changes_this_step < available_changes {
-                        if pending_changes[i].1 == nearest {
-                            let (neighbor_seg, _, neighbor_is_add) = pending_changes.remove(i);
-                            changes_by_step[step].push(SegmentChange {
-                                segment_id: neighbor_seg,
-                                turn_on: neighbor_is_add,
+                    pending_changes.retain(|(neighbor_seg, neighbor_nearest, neighbor_is_add)| {
+                        if *neighbor_nearest == nearest && changes_this_step < available_changes {
+                            step_changes.push(SegmentChange {
+                                segment_id: neighbor_seg.clone(),
+                                turn_on: *neighbor_is_add,
                             });
                             changes_this_step += 1;
+                            false // Remove from pending_changes
                         } else {
-                            i += 1;
+                            true // Keep in pending_changes
                         }
-                    }
+                    });
                 }
             }
         }

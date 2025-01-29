@@ -1,5 +1,5 @@
 // src/models/geometry.rs
-
+// Some types for working with segment geometry
 
 #[derive(Debug, Clone)]
 pub struct ViewBox {
@@ -10,8 +10,12 @@ pub struct ViewBox {
 }
 
 impl ViewBox {
-    pub fn max_x(&self) -> f32 { self.min_x + self.width }
-    pub fn max_y(&self) -> f32 { self.min_y + self.height }
+    pub fn max_x(&self) -> f32 {
+        self.min_x + self.width
+    }
+    pub fn max_y(&self) -> f32 {
+        self.min_y + self.height
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,7 +28,7 @@ pub enum EdgeType {
     Northeast,
     Southwest,
     Southeast,
-    None
+    None,
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +54,7 @@ pub enum PathElement {
         cx: f32,
         cy: f32,
         r: f32,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +80,7 @@ mod tests {
                 width: 100.0,
                 height: 200.0,
             };
-            
+
             assert_eq!(viewbox.max_x(), 110.0);
             assert_eq!(viewbox.max_y(), 220.0);
         }
@@ -118,7 +122,7 @@ mod tests {
                     assert_eq!(y1, 0.0);
                     assert_eq!(x2, 10.0);
                     assert_eq!(y2, 10.0);
-                },
+                }
                 _ => panic!("Wrong variant"),
             }
 
@@ -127,7 +131,7 @@ mod tests {
                     assert_eq!(cx, 5.0);
                     assert_eq!(cy, 5.0);
                     assert_eq!(r, 2.0);
-                },
+                }
                 _ => panic!("Wrong variant"),
             }
         }

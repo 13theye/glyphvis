@@ -3,17 +3,32 @@
 // The SVG grid data structures are converted to draw commands and
 // cached in the structures in this module.
 //
-// Types in this module:
-// DrawCommand, CachedSegment, and CachedGrid
+// The structures are like the "hardware" of the visualisation.
+//
+// The CachedGrid holds the entire grid of CachedSegments, provides
+// general methods for instantiating a grid from the Project file, and
+// general methods for drawing and transforming the grid.
+//
+// CachedSegments hold the pre-processed draw commands for a single
+// segment. Also representing a segment's "hardware", it is responsible
+// for updating its style and drawing itself.
+//
+// Main Types in this module:
+// DrawCommand, DrawStyle, CachedSegment, and CachedGrid
+//
+// Suppporting Types:
+// Layer, SegmentAction, StyleUpdateMsg
 
 use nannou::prelude::*;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::models::{EdgeType, PathElement, Project, ViewBox};
-use crate::services::grid::*;
-use crate::services::svg::{detect_edge_type, parse_svg};
-use crate::views::Transform2D;
+use crate::{
+    models::{EdgeType, PathElement, Project, ViewBox},
+    services::grid::*,
+    services::svg::{detect_edge_type, parse_svg},
+    views::Transform2D,
+};
 
 const ARC_RESOLUTION: usize = 25;
 const FLASH_DURATION: f32 = 0.1;
@@ -131,7 +146,7 @@ pub struct CachedSegment {
     pub current_action: Option<SegmentAction>,
     activation_time: Option<Instant>,
 
-    // draw commands
+    // draw commands cache
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
@@ -470,6 +485,7 @@ impl CachedGrid {
         &mut self,
         draw: &Draw,
         update_batch: &HashMap<String, StyleUpdateMsg>,
+        visible: bool,
     ) {
         let mut foreground_segments = Vec::new();
         let mut middle_segments = Vec::new();
@@ -490,30 +506,35 @@ impl CachedGrid {
                 }
             }
 
-            match segment.layer {
-                Layer::Background => {
-                    for command in &segment.draw_commands {
-                        command.draw(draw, &segment.current_style);
+            // draw background layer first, or prepare other layers
+            if visible {
+                match segment.layer {
+                    Layer::Background => {
+                        for command in &segment.draw_commands {
+                            command.draw(draw, &segment.current_style);
+                        }
+                    }
+                    Layer::Middle => {
+                        middle_segments.push(segment.clone());
+                    }
+                    Layer::Foreground => {
+                        foreground_segments.push(segment.clone());
                     }
                 }
-                Layer::Middle => {
-                    middle_segments.push(segment.clone());
-                }
-                Layer::Foreground => {
-                    foreground_segments.push(segment.clone());
-                }
             }
         }
 
-        for segment in middle_segments {
-            for command in &segment.draw_commands {
-                command.draw(draw, &segment.current_style);
+        if visible {
+            for segment in middle_segments {
+                for command in &segment.draw_commands {
+                    command.draw(draw, &segment.current_style);
+                }
             }
-        }
 
-        for segment in foreground_segments {
-            for command in &segment.draw_commands {
-                command.draw(draw, &segment.current_style);
+            for segment in foreground_segments {
+                for command in &segment.draw_commands {
+                    command.draw(draw, &segment.current_style);
+                }
             }
         }
     }

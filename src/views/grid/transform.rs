@@ -1,3 +1,7 @@
+// src/views/grid/transform.rs
+//
+// This module contains the Transform2D struct and associated methods.
+
 use nannou::prelude::*;
 use std::f32::consts::PI;
 
@@ -47,12 +51,11 @@ impl Transform2D {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::f32::consts::PI;
-    
+
     #[test]
     fn test_default_transform() {
         let transform = Transform2D::default();

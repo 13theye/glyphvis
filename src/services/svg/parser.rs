@@ -1,4 +1,6 @@
 // src/services/svg/parser.rs
+// Parse SVG elements
+
 use crate::models::PathElement;
 use std::str::FromStr;
 

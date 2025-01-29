@@ -2,10 +2,9 @@
 // The Effects Initializer
 
 use super::effects_manager::*;
-use super::grid_effects::{ColorCycleEffect, PulseEffect};
-use nannou::prelude::*;
+use super::grid_effects::PulseEffect;
 
-pub fn init_effects(app: &App) -> EffectsManager {
+pub fn init_effects() -> EffectsManager {
     let mut effects_manager = EffectsManager::new();
 
     effects_manager.add(
@@ -15,7 +14,6 @@ pub fn init_effects(app: &App) -> EffectsManager {
             min_brightness: 0.2,
             max_brightness: 0.6,
         })),
-        app.time,
     );
 
     /*
@@ -26,8 +24,6 @@ pub fn init_effects(app: &App) -> EffectsManager {
             saturation: 0.5,
             brightness: 0.5,
         })),
-        app.time,
-
     ); */
 
     effects_manager

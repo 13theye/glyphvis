@@ -1,13 +1,22 @@
 // src/views/grid_manager.rs
+//
+// The GridInstance main updating entity in the visualisation.
+//
+// Its holds the state information that makes a a grid instance unique,
+// and provides methods for updating that state.
+// It is also the interface between the Grid "hardware" and the rest of
+// the system.
 
 use nannou::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-use crate::animation::{Transition, TransitionEngine};
-use crate::effects::{init_effects, EffectsManager};
-use crate::models::Project;
-use crate::views::{
-    CachedGrid, DrawStyle, Layer, SegmentAction, SegmentGraph, StyleUpdateMsg, Transform2D,
+use crate::{
+    animation::{Transition, TransitionEngine},
+    effects::{init_effects, EffectsManager},
+    models::Project,
+    views::{
+        CachedGrid, DrawStyle, Layer, SegmentAction, SegmentGraph, StyleUpdateMsg, Transform2D,
+    },
 };
 
 pub struct GridInstance {
@@ -20,16 +29,13 @@ pub struct GridInstance {
     pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
 
-    // new update system
+    // update messages for an update frame
     pub update_batch: HashMap<String, StyleUpdateMsg>,
 
     // inside-grid state
     pub current_active_segments: HashSet<String>,
     pub current_glyph_index: usize, // temporary way to access glyphs while testing
-    /*
-    transition_timeline: Option<SegmentTimeline>,
-    transition_start_time: Option<f32>,
-     */
+
     // overall grid state
     pub spawn_location: Point2,
     pub spawn_rotation: f32,
@@ -39,7 +45,7 @@ pub struct GridInstance {
 }
 
 impl GridInstance {
-    pub fn new(app: &App, project: &Project, id: String, position: Point2, rotation: f32) -> Self {
+    pub fn new(_app: &App, project: &Project, id: String, position: Point2, rotation: f32) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {
@@ -62,7 +68,7 @@ impl GridInstance {
             transition_timeline: None,
             transition_start_time: None,
              */
-            effects_manager: init_effects::init_effects(app),
+            effects_manager: init_effects::init_effects(),
             active_transition: None,
 
             update_batch: HashMap::new(),
@@ -163,7 +169,8 @@ impl GridInstance {
     }
 
     pub fn trigger_screen_update(&mut self, draw: &Draw) {
-        self.grid.trigger_screen_update(draw, &self.update_batch);
+        self.grid
+            .trigger_screen_update(draw, &self.update_batch, self.visible);
         self.clear_update_batch();
     }
 
@@ -173,7 +180,7 @@ impl GridInstance {
         self.current_active_segments = segments;
     }
 
-    /***************** Segment Transitions  *****************/
+    /*********************** Segment Transitions  *****************************/
 
     pub fn start_transition(
         &mut self,

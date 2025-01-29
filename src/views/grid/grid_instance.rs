@@ -1,9 +1,7 @@
 // src/views/grid_manager.rs
 
 use nannou::prelude::*;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 
 use crate::animation::{Transition, TransitionEngine};
 use crate::effects::{init_effects, EffectsManager};
@@ -18,7 +16,6 @@ pub struct GridInstance {
     pub id: String,
     pub grid: CachedGrid,
     pub graph: SegmentGraph,
-    pub style_states: RefCell<HashMap<String, DrawStyle>>,
 
     // effects state
     pub effects_manager: EffectsManager,
@@ -57,8 +54,6 @@ impl GridInstance {
             id,
             grid,
             graph,
-
-            style_states: RefCell::new(HashMap::new()),
 
             current_active_segments: HashSet::new(),
             current_glyph_index: 0,
@@ -107,24 +102,21 @@ impl GridInstance {
         }
     }
 
-    pub fn update_background_segments(&mut self, time: f32) {
-        for (segment_id, segment) in self.grid.segments.iter() {
-            if let Some(segment_action) = &segment.current_action {
-                if !self.update_batch.contains_key(segment_id)
-                    && self.grid.segments[segment_id].layer == Layer::Background
-                    && *segment_action != SegmentAction::Off
-                {
-                    self.update_batch.insert(
-                        segment_id.clone(),
-                        StyleUpdateMsg {
-                            action: None,
-                            target_style: Some(self.effects_manager.apply_grid_effects(
-                                self.grid.segments[segment_id].get_current_style(),
-                                time,
-                            )),
-                        },
-                    );
-                }
+    pub fn update_background_segments(&mut self, bg_style: &DrawStyle, time: f32) {
+        for (segment_id, _) in self.grid.segments.iter() {
+            if !self.update_batch.contains_key(segment_id)
+                && self.grid.segments[segment_id].layer == Layer::Background
+            {
+                self.update_batch.insert(
+                    segment_id.clone(),
+                    StyleUpdateMsg {
+                        action: None,
+                        target_style: Some(
+                            self.effects_manager
+                                .apply_grid_effects(bg_style.clone(), time),
+                        ),
+                    },
+                );
             }
         }
     }
@@ -156,17 +148,9 @@ impl GridInstance {
             }
 
             // Convert frame difference into on/off messages
-
             if !updates.segments_on.is_empty() {
                 self.turn_on_segments(updates.segments_on, target_style);
             }
-            /*
-            // Process ALL active segments to ensure proper color updates
-            let all_active = self.current_active_segments.clone();
-            if !all_active.is_empty() {
-                self.turn_on_segments(all_active, target_style);
-            }
-            */
 
             if !updates.segments_off.is_empty() {
                 self.turn_off_segments(updates.segments_off, bg_style);
@@ -189,60 +173,6 @@ impl GridInstance {
         self.current_active_segments = segments;
     }
 
-    pub fn get_renderable_segments(
-        &self,
-        time: f32,
-        fg_style: &DrawStyle,
-        bg_style: &DrawStyle,
-    ) -> Vec<RenderableSegment> {
-        let mut return_segments = Vec::new();
-        let (grid_x, grid_y) = self.grid.dimensions;
-        let background_style = self
-            .effects_manager
-            .apply_grid_effects(bg_style.clone(), time);
-
-        for y in 1..=grid_y {
-            for x in 1..=grid_x {
-                let segments = self.grid.get_segments_at(x, y);
-
-                for segment in segments {
-                    if self.current_active_segments.contains(&segment.id) {
-                        let base_style = self
-                            .style_states
-                            .borrow()
-                            .get(&segment.id)
-                            .cloned()
-                            .unwrap_or_else(|| fg_style.clone());
-
-                        let final_style = self.effects_manager.apply_segment_effects(
-                            &segment.id,
-                            base_style,
-                            fg_style.clone(),
-                            time,
-                        );
-                        self.style_states
-                            .borrow_mut()
-                            .insert(segment.id.clone(), final_style.clone());
-
-                        return_segments.push(RenderableSegment {
-                            segment,
-                            style: final_style,
-                            layer: Layer::Foreground,
-                        });
-                    } else {
-                        return_segments.push(RenderableSegment {
-                            segment,
-                            style: background_style.clone(),
-                            layer: Layer::Background,
-                        });
-                    }
-                }
-            }
-        }
-
-        return_segments
-    }
-
     /***************** Segment Transitions  *****************/
 
     pub fn start_transition(
@@ -255,27 +185,6 @@ impl GridInstance {
 
         self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));
     }
-    /*
-    pub fn update(&mut self, time: f32, dt: f32) {
-        if let Some(transition) = &mut self.active_transition {
-            if transition.update(dt) {
-                // time to advance to next frame
-                if let Some(new_segments) = transition.advance() {
-                    // update active segments
-                    let newly_active = new_segments.difference(&self.current_active_segments);
-                    for segment_id in newly_active {
-                        self.effects_manager
-                            .activate_segment(segment_id, "power_on", time);
-                    }
-                    self.current_active_segments = new_segments.clone();
-                }
-            }
-            if transition.is_complete() {
-                self.active_transition = None;
-            }
-        }
-    }
-    */
 
     /***************** Grid movement *****************/
 

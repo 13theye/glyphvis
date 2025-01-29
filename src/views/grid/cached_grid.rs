@@ -215,7 +215,7 @@ impl CachedSegment {
         {
             let elapsed_time = start_time.elapsed().as_secs_f32();
 
-            let flash_color = rgb(1.0, 0.96, 0.79);
+            let flash_color = rgb(1.0, 0.82, 0.16);
             // Calculate color based on animation phase
             let color = if elapsed_time <= FLASH_DURATION {
                 flash_color
@@ -513,23 +513,6 @@ impl CachedGrid {
             });
     }
 
-    /*
-        pub fn draw_active_segments(&self, draw: &Draw, style: &DrawStyle) {
-            self.segments
-                .values()
-                .filter(| segment | self.active_segments.contains(&segment.id))
-                .flat_map(| segment | &segment.draw_commands)
-                .for_each(| command | command.draw(draw, style));
-        }
-
-        pub fn draw_background_grid(&self, draw: &Draw, style: &DrawStyle) {
-            self.segments
-                .values()
-                .filter(| segment | !self.active_segments.contains(&segment.id))
-                .flat_map(| segment | &segment.draw_commands)
-                .for_each(| command | command.draw(draw, style));
-        }
-    */
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         //self.transform = transform.clone();
         for segment in self.segments.values_mut() {

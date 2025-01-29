@@ -294,34 +294,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         stroke_weight: 5.0,
     };
 
-    /*
-    let glyph_style = DrawStyle {
-        color: rgb(0.7, 0.1, 0.1),
-        stroke_weight: 5.0,
-    };
-    */
-
-    //let start_time = std::time::Instant::now();
-
-    // Loop over each GridInstance and Draw
-
-    /*
-    for (_, grid_instance) in model.grids.iter_mut() {
-        grid_instance.update(app.time, duration.as_secs_f32());
-
-        let ready_segments =
-            grid_instance.get_renderable_segments(app.time, &model.effect_target_style, &bg_style);
-
-        // drawing operations
-        if grid_instance.visible {
-            grid_instance.draw_segments(draw, ready_segments);
-        }
-
-        //let grid_duration = grid_start.elapsed();
-        //println!("Grid {} update time: {:?}", name, grid_duration);
-    }
-    */
-
+    // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
         grid_instance.update(
             &model.effect_target_style,
@@ -330,7 +303,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             duration.as_secs_f32(),
         );
 
-        grid_instance.update_background_segments(app.time);
+        grid_instance.update_background_segments(&bg_style, app.time);
 
         grid_instance.trigger_screen_update(draw);
     }
@@ -373,7 +346,11 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 // ******************************* State-triggered functions *****************************
 
 fn update_glyph(app: &App, model: &mut Model) {
-    let color_hsl = hsl(model.random.gen(), model.random.gen(), 0.4);
+    let color_hsl = hsl(
+        model.random.gen_range(0.0..=1.0),
+        model.random.gen_range(0.2..=1.0),
+        0.4,
+    );
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
         stroke_weight: 5.0,
@@ -386,12 +363,6 @@ fn update_glyph(app: &App, model: &mut Model) {
         &model.transition_engine,
         app.time,
     );
-
-    /*
-    model
-        .glyphs
-        .update_all_grids(&mut model.grids, &model.project, app.time);
-    */
 }
 
 // ******************************* Rendering and Capture *****************************

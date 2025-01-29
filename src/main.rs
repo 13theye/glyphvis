@@ -167,7 +167,7 @@ fn model(app: &App) -> Model {
 
         effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
-            stroke_weight: 5.0,
+            stroke_weight: 5.2,
         },
 
         transition_engine: TransitionEngine::new(transition_config),
@@ -297,7 +297,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Set background base style
     let bg_style = DrawStyle {
         color: rgb(0.1, 0.1, 0.1),
-        stroke_weight: 5.0,
+        stroke_weight: 5.2,
     };
 
     // Main update loop for grids
@@ -360,7 +360,7 @@ fn update_glyph(_app: &App, model: &mut Model) {
     );
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
-        stroke_weight: 5.0,
+        stroke_weight: 5.2,
     };
     model.effect_target_style = glyph_style;
 

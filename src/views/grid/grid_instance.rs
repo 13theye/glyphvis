@@ -163,6 +163,7 @@ impl GridInstance {
     }
 
     pub fn trigger_screen_update(&mut self, draw: &Draw) {
+        println!("Update batch: {:?}", self.update_batch);
         self.grid.trigger_screen_update(draw, &self.update_batch);
         self.clear_update_batch();
     }

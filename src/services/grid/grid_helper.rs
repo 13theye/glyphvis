@@ -7,8 +7,11 @@
 // 2. Arc calculations
 // 3. Neighbor checking
 
-use crate::models::{EdgeType, PathElement, ViewBox};
-use crate::views::grid::cached_grid::CachedSegment;
+use crate::{
+    models::{EdgeType, PathElement, ViewBox},
+    views::CachedSegment,
+};
+
 use nannou::prelude::*;
 use std::f32::consts::PI;
 

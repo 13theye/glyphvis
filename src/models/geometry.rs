@@ -1,5 +1,8 @@
 // src/models/geometry.rs
-// Some types for working with segment geometry
+// Some types for working with segment geometry:
+// ViewBox: A rectangle that defines the viewable area of a tile (from SVG)
+// EdgeType: An enum representing the viewbox edges a segment can be
+// PathElement: An enum representing the different types of SVG path element instructions
 
 #[derive(Debug, Clone)]
 pub struct ViewBox {
@@ -55,14 +58,6 @@ pub enum PathElement {
         cy: f32,
         r: f32,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct GridElement {
-    pub id: String,
-    pub position: (u32, u32),
-    pub path: PathElement,
-    pub edge_type: EdgeType,
 }
 
 #[cfg(test)]

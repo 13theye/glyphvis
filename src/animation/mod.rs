@@ -1,3 +1,3 @@
-pub mod segment_animations;
+pub mod transition;
 
-pub use segment_animations::transition::{Transition, TransitionConfig, TransitionEngine};
+pub use transition::{Transition, TransitionConfig, TransitionEngine};

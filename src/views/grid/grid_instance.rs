@@ -12,11 +12,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{Transition, TransitionEngine},
-    effects::{init_effects, EffectsManager},
+    effects::{fx_initialize, EffectsManager},
     models::Project,
-    views::{
-        CachedGrid, DrawStyle, Layer, SegmentAction, SegmentGraph, StyleUpdateMsg, Transform2D,
-    },
+    services::SegmentGraph,
+    views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
 };
 
 pub struct GridInstance {
@@ -66,7 +65,7 @@ impl GridInstance {
             transition_timeline: None,
             transition_start_time: None,
              */
-            effects_manager: init_effects::init_effects(),
+            effects_manager: fx_initialize(),
             active_transition: None,
 
             update_batch: HashMap::new(),

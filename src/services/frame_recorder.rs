@@ -4,15 +4,18 @@
 // Saving is done in batches and in parallel for maximum speed.
 // I'm very happy with its performance.
 
-use nannou::image::RgbaImage;
-use nannou::wgpu;
+use nannou::{image::RgbaImage, wgpu};
 use rayon::prelude::*;
-use std::collections::VecDeque;
-use std::fs::{create_dir_all, File};
-use std::io::BufWriter;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::VecDeque,
+    fs::{create_dir_all, File},
+    io::BufWriter,
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        mpsc::{channel, Sender},
+        Arc, Mutex,
+    },
+};
 
 const BATCH_SIZE: usize = 10; // Process n frames at a time
 const FPS: u64 = 30;

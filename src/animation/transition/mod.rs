@@ -1,11 +1,11 @@
-// src/animation/segment_animations/transition.rs
+// src/animation/transition/mod.rs
 //
 // A Transition a timeline of on/off msgs that makes the Grid
 // tranistion from one Glyph to another.
 // It doesn't need to finish to smoothly start transitioning to
 // the next glyph.
 
-use crate::views::SegmentGraph;
+use crate::services::SegmentGraph;
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
 

@@ -2,7 +2,7 @@
 //
 // SegmentGraph holds all the relationships between segment endpoints in a Grid.
 
-use super::cached_grid::{CachedGrid, DrawCommand};
+use crate::views::{CachedGrid, DrawCommand};
 use nannou::prelude::*;
 use std::collections::HashMap;
 

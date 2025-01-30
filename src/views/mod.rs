@@ -9,4 +9,3 @@ pub use grid::cached_grid::{
 };
 pub use grid::grid_instance::GridInstance;
 pub use grid::transform::Transform2D;
-pub use grid::SegmentGraph;

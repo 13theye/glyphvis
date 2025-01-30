@@ -1,0 +1,31 @@
+# config.toml
+
+[paths]
+#relative paths from executable directory
+project_file = "projects/small-cir-d2.json"
+output_directory = "frames"
+
+[rendering]
+texture_width = 4742
+texture_height = 1200
+texture_samples = 4
+arc_resolution = 25
+
+[window]
+width = 1897
+height = 480
+
+[output]
+frame_limit = 30000
+jpeg_quality = 85
+
+[style]
+default_stroke_weight = 5.1
+
+[speed]
+bpm = 120
+
+[animation]
+power_on_flash_duration = 0.035
+power_on_fade_duration = 0.15
+power_off_fade_duration = 0.3

@@ -6,32 +6,13 @@ use std::time::Instant;
 
 use glyphvis::{
     animation::{TransitionConfig, TransitionEngine},
+    config::Config,
     controllers::GlyphController,
     models::Project,
     services::{FrameRecorder, OutputFormat},
     //effects::{ EffectsManager, init_effects },
     views::{DrawStyle, GridInstance, Transform2D},
 };
-
-// APP CONSTANTS TO EVENTUALLY BE MOVED TO CONFIG FILE
-const DEFAULT_STROKE_WEIGHT: f32 = 5.1;
-
-// size of the render and capture
-const TEXTURE_SIZE: [u32; 2] = [4742, 1200];
-// number of samples for the texture
-const TEXTURE_SAMPLES: u32 = 4;
-// path to the output frames
-const OUTPUT_DIR: &str = "./frames/";
-// capture frame limit
-const FRAME_LIMIT: u32 = 30000;
-// output format
-const OUTPUT_FORMAT: OutputFormat = OutputFormat::JPEG(85);
-
-// size of the window monitor: nice when aspect ratio is same as texture size aspect ratio
-const WINDOW_SIZE: [u32; 2] = [1897, 480];
-// path to the project file
-const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/small-cir-d2.json";
-//const PROJECT_PATH: &str = "/Users/jeanhank/Code/glyphmaker/projects/ulsan.json";
 
 // const BPM: u32 = 120;
 
@@ -57,6 +38,7 @@ struct Model {
     debug_flag: bool,
 
     // Style
+    default_stroke_weight: f32,
     effect_target_style: DrawStyle, // for testing
 
     // Frame recording:
@@ -73,16 +55,12 @@ fn main() {
 }
 
 fn model(app: &App) -> Model {
-    // size of captures
-    let texture_size = TEXTURE_SIZE;
+    // Load config
+    let config = Config::load().expect("Failed to load config file");
 
-    // size of view window
-    let window_size = WINDOW_SIZE;
-
-    let texture_samples = TEXTURE_SAMPLES;
-
-    // Load project
-    let project = Project::load(PROJECT_PATH).expect("Failed to load project file");
+    // Load project & config
+    let project_path = config.resolve_project_path();
+    let project = Project::load(project_path).expect("Failed to load project file");
 
     /*
     // Create grid from project
@@ -95,7 +73,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .size(window_size[0], window_size[1])
+        .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
         .key_pressed(key_pressed)
@@ -107,12 +85,15 @@ fn model(app: &App) -> Model {
     let device = window.device();
     let draw = nannou::Draw::new();
     let texture = wgpu::TextureBuilder::new()
-        .size(texture_size)
+        .size([
+            config.rendering.texture_width,
+            config.rendering.texture_height,
+        ])
         // Our texture will be used as the RENDER_ATTACHMENT for our `Draw` render pass.
         // It will also be SAMPLED by the `TextureCapturer` and `TextureResizer`.
         .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING)
         // Use nannou's default multisampling sample count.
-        .sample_count(texture_samples)
+        .sample_count(config.rendering.texture_samples)
         // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing. Rgba16Float
         // Use 8-bit for standard quality and better perforamnce. Rgba8Unorm Rgb10a2Unorm
         .format(wgpu::TextureFormat::Rgba16Float)
@@ -145,9 +126,16 @@ fn model(app: &App) -> Model {
         density: 0.02,
     };
 
+    let output_format = OutputFormat::JPEG(config.output.jpeg_quality);
+
     // Create the frame recorder
-    let frame_recorder =
-        FrameRecorder::new(device, &texture, OUTPUT_DIR, FRAME_LIMIT, OUTPUT_FORMAT);
+    let frame_recorder = FrameRecorder::new(
+        device,
+        &texture,
+        &config.resolve_output_dir_as_str(),
+        config.output.frame_limit,
+        output_format,
+    );
 
     // Create effects
 
@@ -166,9 +154,10 @@ fn model(app: &App) -> Model {
         immediately_change: false,
         debug_flag: false,
 
+        default_stroke_weight: config.style.default_stroke_weight,
         effect_target_style: DrawStyle {
             color: rgb(1.0, 0.0, 0.0),
-            stroke_weight: DEFAULT_STROKE_WEIGHT,
+            stroke_weight: config.style.default_stroke_weight,
         },
 
         transition_engine: TransitionEngine::new(transition_config),
@@ -298,7 +287,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Set background base style
     let bg_style = DrawStyle {
         color: rgb(0.1, 0.1, 0.1),
-        stroke_weight: DEFAULT_STROKE_WEIGHT,
+        stroke_weight: model.default_stroke_weight,
     };
 
     // Main update loop for grids
@@ -361,7 +350,7 @@ fn update_glyph(_app: &App, model: &mut Model) {
     );
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
-        stroke_weight: DEFAULT_STROKE_WEIGHT,
+        stroke_weight: model.default_stroke_weight,
     };
     model.effect_target_style = glyph_style;
 

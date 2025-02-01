@@ -189,12 +189,15 @@ impl GridInstance {
     pub fn start_transition(
         &mut self,
         target_segments: &HashSet<String>,
+        target_style: &DrawStyle,
         engine: &TransitionEngine,
         immediate: bool, // when true, all segments change at once
     ) {
         let changes = engine.generate_changes(
+            &self.grid,
             &self.current_active_segments,
             target_segments,
+            target_style,
             &self.graph,
             immediate,
         );

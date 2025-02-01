@@ -32,7 +32,7 @@ use crate::{
 
 const ARC_RESOLUTION: usize = 25;
 const FLASH_DURATION: f32 = 0.035;
-const FADE_DURATION: f32 = 0.3;
+const FADE_DURATION: f32 = 0.15;
 const FLASH_FADE_DURATION: f32 = 0.15;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
@@ -98,7 +98,7 @@ impl DrawCommand {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DrawStyle {
     pub color: Rgb<f32>,
     pub stroke_weight: f32,
@@ -140,7 +140,7 @@ pub struct CachedSegment {
     pub tile_pos: (u32, u32),
 
     // style states
-    before_style: Option<DrawStyle>,
+    previous_style: Option<DrawStyle>,
     current_style: DrawStyle,
     target_style: Option<DrawStyle>,
     pub layer: Layer,
@@ -173,7 +173,7 @@ impl CachedSegment {
             id: element_id,
             tile_pos: position,
 
-            before_style: None,
+            previous_style: None,
             current_style: DrawStyle::default(),
             target_style: None,
             layer: Layer::Background,
@@ -194,15 +194,15 @@ impl CachedSegment {
             (Some(action), Some(target_style)) => {
                 match action {
                     SegmentAction::On => {
-                        // Always update the style for active segments
+                        // Update the style for active segments
                         self.target_style = Some(target_style.clone());
                         self.layer = Layer::Foreground;
                         self.current_action = Some(SegmentAction::On);
                         self.activation_time = Some(Instant::now());
                     }
                     SegmentAction::Off => {
-                        if self.before_style.is_none() {
-                            self.before_style = Some(self.current_style.clone());
+                        if self.previous_style.is_none() {
+                            self.previous_style = Some(self.current_style.clone());
                         }
                         self.target_style = Some(target_style.clone());
                         self.layer = Layer::Middle;
@@ -213,7 +213,7 @@ impl CachedSegment {
             }
             (None, Some(target_style)) => {
                 // Direct style update without action
-                self.before_style = Some(self.current_style.clone());
+                self.previous_style = Some(self.current_style.clone());
                 self.current_style = target_style.clone();
                 self.target_style = None;
             }
@@ -235,7 +235,7 @@ impl CachedSegment {
             } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
                 // Fade to target color
                 let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
-                Self::exp_ease(flash_color, target_style.color, fade_progress, 1.5)
+                Self::exp_ease(flash_color, target_style.color, fade_progress, 6.0)
             } else {
                 // Animation complete
                 self.current_action = None;
@@ -245,13 +245,14 @@ impl CachedSegment {
             self.current_style = DrawStyle {
                 color,
                 stroke_weight: target_style.stroke_weight,
-            }
+            };
+            self.previous_style = Some(self.current_style.clone());
         }
     }
 
     fn apply_power_off_effect(&mut self) {
         if let (Some(before_style), Some(target_style), Some(start_time)) = (
-            &self.before_style,
+            &self.previous_style,
             &self.target_style,
             &self.activation_time,
         ) {
@@ -261,13 +262,13 @@ impl CachedSegment {
             let color = if elapsed_time <= FADE_DURATION {
                 // Fade to target color
                 let fade_progress = elapsed_time / FADE_DURATION;
-                Self::exp_ease(before_style.color, target_style.color, fade_progress, 1.0)
+                Self::exp_ease(before_style.color, target_style.color, fade_progress, 6.0)
             } else {
                 // Animation complete
                 self.current_action = None;
                 self.layer = Layer::Background;
                 self.activation_time = None;
-                self.before_style = None;
+                self.previous_style = None;
                 target_style.color
             };
 

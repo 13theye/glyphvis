@@ -2,7 +2,7 @@
 
 [paths]
 #relative paths from executable directory
-project_file = "projects/small-cir-d2.json"
+project_file = "projects/ulsan.json"
 output_directory = "frames"
 
 [rendering]
@@ -26,10 +26,11 @@ jpeg_quality = 85
 default_stroke_weight = 5.1
 
 [speed]
+# Not yet implemented
 bpm = 120
 
 [animation]
-# Animation and effects default parameters
+# Default values for animation and effects parameters
     [animation.power_on]
     flash_duration = 0.035
     fade_duration = 0.15

@@ -5,7 +5,11 @@
 // It doesn't need to finish to smoothly start transitioning to
 // the next glyph.
 
-use crate::{config::TransitionConfig, services::SegmentGraph};
+use crate::{
+    config::TransitionConfig,
+    services::SegmentGraph,
+    views::{CachedGrid, DrawStyle},
+};
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
 
@@ -90,8 +94,10 @@ impl TransitionEngine {
 
     pub fn generate_changes(
         &self,
+        grid: &CachedGrid,
         start_segments: &HashSet<String>,
         target_segments: &HashSet<String>,
+        target_style: &DrawStyle,
         segment_graph: &SegmentGraph,
         immediate: bool, // when true, all segments change at once
     ) -> Vec<Vec<SegmentChange>> {
@@ -102,17 +108,30 @@ impl TransitionEngine {
 
         // For segments that need to disappear
         for seg in start_segments.difference(target_segments) {
-            if let Some(nearest) = self.find_nearest_connected(seg, target_segments, segment_graph)
-            {
+            if let Some(nearest) = self.find_nearest_connected(seg, start_segments, segment_graph) {
                 pending_changes.push((seg.clone(), nearest, false));
             } else if target_segments.is_empty() {
                 pending_changes.push((seg.clone(), seg.clone(), false));
             }
         }
 
+        let mut filtered_segments = target_segments.clone();
+        // Filter out segments that are already in the target state and have the same style
+        if !immediate {
+            filtered_segments.retain(|seg| {
+                let current_style = grid.segments[seg].get_current_style();
+                if current_style == *target_style {
+                    false // Remove if styles match
+                } else {
+                    true // Keep if no previous style
+                }
+            });
+        }
+
         // For segments that need to appear
-        for seg in target_segments {
-            if let Some(nearest) = self.find_nearest_connected(seg, start_segments, segment_graph) {
+        for seg in filtered_segments {
+            if let Some(nearest) = self.find_nearest_connected(&seg, start_segments, segment_graph)
+            {
                 pending_changes.push((seg.clone(), nearest, true));
             } else if start_segments.is_empty() {
                 pending_changes.push((seg.clone(), seg.clone(), true));

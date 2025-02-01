@@ -2,6 +2,7 @@
 //
 // Config types for the app
 
+use crate::animation::EasingType;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -76,4 +77,10 @@ pub struct TransitionConfig {
     pub frame_duration: f32, // Time between frame changes
     pub wandering: f32,      // How much randomness in timing (0.0-1.0)
     pub density: f32,        // How many segments can change per frame (0.0-1.0)
+}
+
+#[derive(Debug, Clone)]
+pub struct MovementConfig {
+    pub duration: f32,
+    pub easing: EasingType,
 }

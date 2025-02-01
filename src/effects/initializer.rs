@@ -6,16 +6,16 @@ use super::grid_effects::PulseEffect;
 
 pub fn fx_initialize() -> EffectsManager {
     let mut effects_manager = EffectsManager::new();
-
-    effects_manager.add(
-        "pulse".to_string(),
-        EffectType::Grid(Box::new(PulseEffect {
-            frequency: 2.0,
-            min_brightness: 0.2,
-            max_brightness: 0.6,
-        })),
-    );
-
+    /*
+        effects_manager.add(
+            "pulse".to_string(),
+            EffectType::Grid(Box::new(PulseEffect {
+                frequency: 2.0,
+                min_brightness: 0.2,
+                max_brightness: 0.6,
+            })),
+        );
+    */
     /*
     effects_manager.add(
         "colorcycle".to_string(),

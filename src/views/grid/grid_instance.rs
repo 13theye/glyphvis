@@ -11,7 +11,7 @@ use nannou::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    animation::{Transition, TransitionEngine},
+    animation::{Movement, MovementEngine, Transition, TransitionEngine},
     effects::{fx_initialize, EffectsManager},
     models::Project,
     services::SegmentGraph,
@@ -39,6 +39,8 @@ pub struct GridInstance {
     pub spawn_rotation: f32,
     pub current_location: Point2,
     pub current_rotation: f32,
+    pub current_scale: f32,
+    pub active_movement: Option<Movement>,
     pub visible: bool,
 }
 
@@ -74,6 +76,8 @@ impl GridInstance {
             spawn_rotation: rotation,
             current_location: position,
             current_rotation: rotation,
+            current_scale: 1.0,
+            active_movement: None,
             visible: true,
         }
     }
@@ -125,7 +129,10 @@ impl GridInstance {
     }
 
     pub fn update(&mut self, target_style: &DrawStyle, bg_style: &DrawStyle, _time: f32, dt: f32) {
-        // First, get transition updates if any exist
+        // update movement animation if active
+        self.update_movement(dt);
+
+        // Get transition updates if any exist
         let transition_updates = if let Some(transition) = &mut self.active_transition {
             if transition.update(dt) {
                 // Get updates and check completion
@@ -195,10 +202,11 @@ impl GridInstance {
         self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));
     }
 
-    /***************** Grid movement *****************/
+    /**************************** Grid movement **********************************/
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         self.current_location += transform.translation;
+        self.current_scale = transform.scale;
         self.grid.apply_transform(transform);
     }
 
@@ -241,6 +249,57 @@ impl GridInstance {
         // Update location's rotation (but not position)
         self.current_rotation += angle;
     }
+
+    pub fn start_movement(
+        &mut self,
+        target_x: f32,
+        target_y: f32,
+        //target_scale: f32,
+        //target_rotation: f32,
+        engine: &MovementEngine,
+    ) {
+        let start_transform = Transform2D {
+            translation: self.current_location,
+            scale: self.current_scale,
+            rotation: self.current_rotation,
+        };
+
+        let end_transform = Transform2D {
+            translation: pt2(target_x, target_y),
+            scale: self.current_scale,
+            rotation: self.current_rotation,
+        };
+
+        let changes = engine.generate_movement(start_transform, end_transform);
+        self.active_movement = Some(Movement::new(changes, 1.0 / 60.0));
+    }
+
+    fn update_movement(&mut self, dt: f32) {
+        // First get the transform update if any exists
+        let transform_update = if let Some(movement) = &mut self.active_movement {
+            if movement.update(dt) {
+                let update = movement.advance();
+                println!("Current step: {}", movement.get_current_step());
+
+                if movement.is_complete() {
+                    self.active_movement = None;
+                }
+                update
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Then apply the transform if we got one
+        if let Some(update) = transform_update {
+            self.apply_transform(&update.transform);
+            println!("Moved to {:?}", self.current_location);
+        }
+    }
+
+    /*********************** Debug Helper ******************************* */
 
     pub fn print_grid_info(&self) {
         println!("<====== Grid Instance: {} ======>", self.id);

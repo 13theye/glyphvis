@@ -6,12 +6,11 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use glyphvis::{
-    animation::TransitionEngine,
+    animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
     controllers::GlyphController,
     models::Project,
     services::{FrameRecorder, OutputFormat},
-    //effects::{ EffectsManager, init_effects },
     views::{DrawStyle, GridInstance, Transform2D},
 };
 
@@ -30,6 +29,10 @@ struct Model {
     draw_renderer: nannou::draw::Renderer,
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
+
+    // Time:
+    bpm: u32,
+    quantize: bool,
 
     // Segment Transitions
     transition_engine: TransitionEngine,
@@ -50,6 +53,9 @@ struct Model {
     // FPS
     last_update: Instant,
     fps: f32,
+
+    // Config:
+    static_config: Config,
 }
 
 fn main() {
@@ -116,6 +122,9 @@ fn model(app: &App) -> Model {
         dst_format,
     );
 
+    // Set up BPM
+    let bpm = config.speed.bpm;
+
     let transition_config = TransitionConfig {
         steps: 50,
         frame_duration: 0.1,
@@ -149,6 +158,9 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         random: rand::thread_rng(),
 
+        bpm,
+        quantize: false,
+
         target_segments: None,
         immediately_change: false,
         debug_flag: false,
@@ -167,6 +179,9 @@ fn model(app: &App) -> Model {
         // FPS
         last_update: Instant::now(),
         fps: 0.0,
+
+        // Static config: as loaded from file
+        static_config: config,
     }
 }
 
@@ -184,7 +199,13 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
         // Return grids to where they spawned
         Key::Backslash => {
             for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.reset_location();
+                let movement_config = MovementConfig {
+                    duration: 0.0,
+                    easing: EasingType::EaseOut,
+                };
+                let movement_engine = MovementEngine::new(movement_config);
+
+                grid_instance.start_movement(0.0, 0.0, &movement_engine);
             }
         }
         Key::C => {
@@ -201,7 +222,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 make_three_grids(app, model);
             } else {
                 for (name, grid_instance) in model.grids.iter_mut() {
-                    if name != "Grid Center" {
+                    if name != "grid_2" {
                         grid_instance.visible = !grid_instance.visible;
                     }
                 }
@@ -217,26 +238,28 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
             model.exit_requested = true;
         }
-        // Move grids 10pts to the right
+        // Trigger grid3 animation
         Key::Right => {
-            let position_delta = Transform2D {
-                translation: pt2(10.0, 0.0),
-                scale: 1.0,
-                rotation: 0.0,
+            let movement_config = MovementConfig {
+                duration: 10.0,
+                easing: EasingType::Linear,
             };
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.apply_transform(&position_delta);
+            let movement_engine = MovementEngine::new(movement_config);
+
+            if let Some(grid) = model.grids.get_mut("grid_3") {
+                grid.start_movement(700.0, 0.0, &movement_engine);
             }
         }
         // Move grids 10pts to the left
         Key::Left => {
-            let position_delta = Transform2D {
-                translation: pt2(-10.0, 0.0),
-                scale: 1.0,
-                rotation: 0.0,
+            let movement_config = MovementConfig {
+                duration: 10.0,
+                easing: EasingType::Linear,
             };
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.apply_transform(&position_delta);
+            let movement_engine = MovementEngine::new(movement_config);
+
+            if let Some(grid) = model.grids.get_mut("grid_1") {
+                grid.start_movement(-700.0, 0.0, &movement_engine);
             }
         }
         // Rotate grids 90 degrees
@@ -283,7 +306,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return; // Important: return here to not continue with normal rendering
     }
 
-    // Set background base style
+    // Set grid background base style
     let bg_style = DrawStyle {
         color: rgb(0.1, 0.1, 0.1),
         stroke_weight: model.default_stroke_weight,
@@ -480,22 +503,22 @@ fn make_three_grids(app: &App, model: &mut Model) {
     let grid_1 = GridInstance::new(
         app,
         &model.project,
-        "Grid Left".to_string(),
-        pt2(-600.0, 0.0),
+        "grid_1".to_string(),
+        pt2(0.0, 0.0),
         0.0,
     );
     let grid_2 = GridInstance::new(
         app,
         &model.project,
-        "Grid Center".to_string(),
+        "grid_2".to_string(),
         pt2(0.0, 0.0),
         0.0,
     );
     let grid_3 = GridInstance::new(
         app,
         &model.project,
-        "Grid Right".to_string(),
-        pt2(600.0, 0.0),
+        "grid_3".to_string(),
+        pt2(0.0, 0.0),
         0.0,
     );
 

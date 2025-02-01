@@ -15,6 +15,9 @@ arc_resolution = 25
 width = 1897
 height = 480
 
+[osc]
+rx_port = 8000
+
 [output]
 frame_limit = 30000
 jpeg_quality = 85
@@ -26,6 +29,20 @@ default_stroke_weight = 5.1
 bpm = 120
 
 [animation]
-power_on_flash_duration = 0.035
-power_on_fade_duration = 0.15
-power_off_fade_duration = 0.3
+# Animation and effects default parameters
+    [animation.power_on]
+    flash_duration = 0.035
+    fade_duration = 0.15
+
+    [animation.power_off]
+    fade_duration = 0.3
+
+    [animation.background_flash]
+    flash_duration = 0.035
+    fade_duration = 0.15
+
+    [transition]
+    steps = 50
+    frame_duration = 0.1
+    wandering = 1.0
+    density = 0.00001

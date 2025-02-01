@@ -1,12 +1,13 @@
 // src/main.rs
 use nannou::prelude::*;
+use nannou_osc as osc;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use glyphvis::{
-    animation::{TransitionConfig, TransitionEngine},
-    config::Config,
+    animation::TransitionEngine,
+    config::*,
     controllers::GlyphController,
     models::Project,
     services::{FrameRecorder, OutputFormat},
@@ -21,6 +22,7 @@ struct Model {
     project: Project,
     grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
     glyphs: GlyphController,
+    receiver: osc::Receiver,
 
     // Rendering components:
     texture: wgpu::Texture,
@@ -62,17 +64,12 @@ fn model(app: &App) -> Model {
     let project_path = config.resolve_project_path();
     let project = Project::load(project_path).expect("Failed to load project file");
 
-    /*
-    // Create grid from project
-    let grid = CachedGrid::new(&project);
-    println!("Created grid with {} segments", grid.segments.len());
-    */
-
     let glyphs = GlyphController::new(&project);
 
     // Create window
     let window_id = app
         .new_window()
+        .title("glyphvis 0.1.0")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -121,9 +118,9 @@ fn model(app: &App) -> Model {
 
     let transition_config = TransitionConfig {
         steps: 50,
-        frame_duration: 0.025,
+        frame_duration: 0.1,
         wandering: 1.0,
-        density: 0.02,
+        density: 0.00001,
     };
 
     let output_format = OutputFormat::JPEG(config.output.jpeg_quality);
@@ -137,12 +134,14 @@ fn model(app: &App) -> Model {
         output_format,
     );
 
-    // Create effects
+    // Create Osc Receiver
+    let receiver = osc::receiver(config.osc.rx_port).expect("osc: Failed to bind to port");
 
     Model {
         project,
         grids: HashMap::new(), //grid,
         glyphs,
+        receiver,
 
         texture,
         draw,
@@ -343,13 +342,21 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 // ******************************* State-triggered functions *****************************
 
 fn update_glyph(_app: &App, model: &mut Model) {
-    let color_hsl = hsl(
+    /*let color_hsl = hsl(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
         0.4,
     );
+
+
     let glyph_style = DrawStyle {
         color: Rgb::from(color_hsl),
+        stroke_weight: model.default_stroke_weight,
+    };
+    */
+
+    let glyph_style = DrawStyle {
+        color: rgb(1.0, 0.0, 0.0),
         stroke_weight: model.default_stroke_weight,
     };
     model.effect_target_style = glyph_style;

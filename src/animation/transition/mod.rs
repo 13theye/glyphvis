@@ -5,16 +5,9 @@
 // It doesn't need to finish to smoothly start transitioning to
 // the next glyph.
 
-use crate::services::SegmentGraph;
+use crate::{config::TransitionConfig, services::SegmentGraph};
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
-
-pub struct TransitionConfig {
-    pub steps: usize,        // Total number of frames to generate
-    pub frame_duration: f32, // Time between frame changes
-    pub wandering: f32,      // How much randomness in timing (0.0-1.0)
-    pub density: f32,        // How many segments can change per frame (0.0-1.0)
-}
 
 pub struct TransitionUpdate {
     pub segments_on: HashSet<String>,

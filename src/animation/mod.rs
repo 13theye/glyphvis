@@ -1,3 +1,3 @@
 pub mod transition;
 
-pub use transition::{Transition, TransitionConfig, TransitionEngine};
+pub use transition::{Transition, TransitionEngine};

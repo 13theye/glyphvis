@@ -37,6 +37,13 @@ pub enum OscCommand {
         grid_name: String,
         immediate: bool,
     },
+    NoGlyph {
+        grid_name: String,
+        immediate: bool,
+    },
+    ToggleVisibility {
+        grid_name: String,
+    },
     UpdateTransitionConfig {
         steps: Option<usize>,
         frame_duration: Option<f32>,
@@ -130,6 +137,24 @@ impl OscController {
                             self.command_queue.push(OscCommand::NextGlyph {
                                 grid_name: name.clone(),
                                 immediate,
+                            });
+                        }
+                    }
+                    "/grid/noglyph" => {
+                        if let [osc::Type::String(name), osc::Type::Int(immediately)] =
+                            &message.args[..]
+                        {
+                            let immediate = *immediately != 0;
+                            self.command_queue.push(OscCommand::NoGlyph {
+                                grid_name: name.clone(),
+                                immediate,
+                            });
+                        }
+                    }
+                    "/grid/togglevisibility" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::ToggleVisibility {
+                                grid_name: name.clone(),
                             });
                         }
                     }
@@ -240,6 +265,24 @@ impl OscSender {
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(immediate),
         ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_no_glyph(&self, grid_name: &str, immediate: i32) {
+        let addr = "/grid/noglyph".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Int(immediate),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_toggle_visibility(&self, grid_name: &str) {
+        let addr = "/grid/togglevisibility".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

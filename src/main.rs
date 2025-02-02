@@ -277,13 +277,40 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         // show next glyph
         Key::Space => {
             // Send glyph change for each grid
-            for (name, _) in model.grids.iter() {
+            for name in model.grids.keys() {
                 model.osc_sender.send_next_glyph(name, 0);
             }
         }
+        Key::Backslash => {
+            // Send glyph change for each grid
+            for name in model.grids.keys() {
+                model.osc_sender.send_move_grid(name, 0.0, 0.0, 0.0)
+            }
+        }
+
         Key::N => {
             for (name, _) in model.grids.iter() {
                 model.osc_sender.send_next_glyph(name, 1);
+            }
+        }
+        Key::C => {
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_no_glyph(name, 1);
+            }
+        }
+        Key::X => {
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_no_glyph(name, 0);
+            }
+        }
+        Key::Key1 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_glyph(name, 1, 0);
+            }
+        }
+        Key::Key2 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_glyph(name, 2, 0);
             }
         }
         Key::G => {
@@ -300,30 +327,44 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                     .send_create_grid("grid_3", "heol", 0.0, 0.0, 0.0);
             } else {
                 // Toggle visibility (you might want to add an OSC command for this)
-                for (name, grid_instance) in model.grids.iter_mut() {
+                for name in model.grids.keys() {
                     if name != "grid_2" {
-                        grid_instance.visible = !grid_instance.visible;
+                        model.osc_sender.send_toggle_visibility(name);
                     }
                 }
             }
         }
         Key::Right => {
-            model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 10.0);
+            model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 3.0);
         }
         Key::Left => {
-            model.osc_sender.send_move_grid("grid_1", -700.0, 0.0, 10.0);
+            model.osc_sender.send_move_grid("grid_1", -700.0, 0.0, 3.0);
         }
         Key::Up => {
-            for (name, _) in model.grids.iter() {
+            for name in model.grids.keys() {
                 model.osc_sender.send_rotate_grid(name, 90.0);
             }
         }
         Key::Down => {
-            for (name, _) in model.grids.iter() {
+            for name in model.grids.keys() {
                 model.osc_sender.send_rotate_grid(name, -90.0);
             }
         }
-        // ... handle other keys ...
+
+        /***************** Below functions aren't implemented in OSC ****************** */
+        Key::P => {
+            model.debug_flag = !model.debug_flag;
+        }
+        Key::R => model.frame_recorder.toggle_recording(),
+        // Graceful quit that waits for frame queue to be processed
+        Key::Q => {
+            let (processed, total) = model.frame_recorder.get_queue_status();
+            println!("Processed {} frames out of {}", processed, total);
+            if model.frame_recorder.is_recording() {
+                model.frame_recorder.toggle_recording();
+            }
+            model.exit_requested = true;
+        }
         _ => (),
     }
 }
@@ -639,6 +680,20 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph_segments(&model.project);
                     model.immediately_change = immediate;
+                }
+            }
+            OscCommand::NoGlyph {
+                grid_name,
+                immediate,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.no_glyph();
+                    model.immediately_change = immediate;
+                }
+            }
+            OscCommand::ToggleVisibility { grid_name } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.visible = !grid.visible;
                 }
             }
             OscCommand::UpdateTransitionConfig {

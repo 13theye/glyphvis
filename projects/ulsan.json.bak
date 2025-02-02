@@ -297,32 +297,6 @@
           }
         }
       }
-    },
-    "grid_2": {
-      "name": "grid_2",
-      "metadata": {},
-      "showOrder": {
-        "1": {
-          "name": "없",
-          "type": "glyph",
-          "position": 1,
-          "metadata": {
-            "color": "#ff0008",
-            "dwell": 3,
-            "effect": "Solid"
-          }
-        },
-        "2": {
-          "name": "어",
-          "type": "glyph",
-          "position": 2,
-          "metadata": {
-            "color": "#ff0008",
-            "dwell": 3,
-            "effect": "Solid"
-          }
-        }
-      }
     }
   }
 }

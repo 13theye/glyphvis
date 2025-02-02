@@ -10,9 +10,9 @@ pub fn fx_initialize() -> EffectsManager {
     effects_manager.add(
         "pulse".to_string(),
         EffectType::Grid(Box::new(PulseEffect {
-            frequency: 1.0,
-            min_brightness: 0.22,
-            max_brightness: 0.22,
+            frequency: 0.5,
+            min_brightness: 0.31,
+            max_brightness: 0.33,
         })),
     );
     /*

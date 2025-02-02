@@ -32,6 +32,7 @@ pub struct GridInstance {
     // effects state
     pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
+    pub immediately_change: bool,
 
     // update messages for an update frame
     pub update_batch: HashMap<String, StyleUpdateMsg>,
@@ -88,6 +89,7 @@ impl GridInstance {
 
             effects_manager: fx_initialize(),
             active_transition: None,
+            immediately_change: false,
 
             update_batch: HashMap::new(),
 
@@ -253,11 +255,7 @@ impl GridInstance {
 
     /*********************** Segment Transitions  *****************************/
 
-    pub fn start_transition(
-        &mut self,
-        engine: &TransitionEngine,
-        immediate: bool, // when true, all segments change at once
-    ) {
+    pub fn start_transition(&mut self, engine: &TransitionEngine) {
         // Handle target segments
         let target_segments = {
             if let Some(segments) = &self.target_segments {
@@ -273,7 +271,7 @@ impl GridInstance {
             target_segments,
             &self.effect_target_style,
             &self.graph,
-            immediate,
+            self.immediately_change, // when true, all segments change at once
         );
 
         self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));

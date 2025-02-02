@@ -166,112 +166,6 @@ fn model(app: &App) -> Model {
     }
 }
 
-/*
-fn key_pressed(app: &App, model: &mut Model, key: Key) {
-    match key {
-        // show next glyph
-        Key::Space => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.stage_next_glyph_segments(&model.project);
-                model.immediately_change = false;
-            }
-        }
-        Key::N => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.stage_next_glyph_segments(&model.project);
-                model.immediately_change = true;
-            }
-        }
-        // Return grids to where they spawned
-        Key::Backslash => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                let movement_config = MovementConfig {
-                    duration: 0.0,
-                    easing: EasingType::EaseOut,
-                };
-                let movement_engine = MovementEngine::new(movement_config);
-
-                grid_instance.start_movement(0.0, 0.0, &movement_engine);
-            }
-        }
-        Key::C => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.no_glyph();
-                model.immediately_change = true;
-            }
-        }
-        Key::X => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.no_glyph();
-                model.immediately_change = false;
-            }
-        }
-
-        // Init grids or hide/show them
-        Key::G => {
-            if model.grids.is_empty() {
-                make_three_grids(app, model);
-            } else {
-                for (name, grid_instance) in model.grids.iter_mut() {
-                    if name != "grid_2" {
-                        grid_instance.visible = !grid_instance.visible;
-                    }
-                }
-            }
-        }
-        Key::R => model.frame_recorder.toggle_recording(),
-        // Graceful quit that waits for frame queue to be processed
-        Key::Q => {
-            let (processed, total) = model.frame_recorder.get_queue_status();
-            println!("Processed {} frames out of {}", processed, total);
-            if model.frame_recorder.is_recording() {
-                model.frame_recorder.toggle_recording();
-            }
-            model.exit_requested = true;
-        }
-        // Trigger grid3 animation
-        Key::Right => {
-            let movement_config = MovementConfig {
-                duration: 10.0,
-                easing: EasingType::Linear,
-            };
-            let movement_engine = MovementEngine::new(movement_config);
-
-            if let Some(grid) = model.grids.get_mut("grid_3") {
-                grid.start_movement(700.0, 0.0, &movement_engine);
-            }
-        }
-        // Move grids 10pts to the left
-        Key::Left => {
-            let movement_config = MovementConfig {
-                duration: 10.0,
-                easing: EasingType::Linear,
-            };
-            let movement_engine = MovementEngine::new(movement_config);
-
-            if let Some(grid) = model.grids.get_mut("grid_1") {
-                grid.start_movement(-700.0, 0.0, &movement_engine);
-            }
-        }
-        // Rotate grids 90 degrees
-        Key::Up => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.rotate_in_place(90.0)
-            }
-        }
-        // Rotate grids -90 degrees
-        Key::Down => {
-            for (_, grid_instance) in model.grids.iter_mut() {
-                grid_instance.rotate_in_place(-90.0);
-            }
-        }
-        Key::P => {
-            model.debug_flag = !model.debug_flag;
-        }
-        _ => (),
-    }
-}
-*/
 fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
         // show next glyph
@@ -470,7 +364,7 @@ fn update_glyph(_app: &App, model: &mut Model) {
     for grid_instance in model.grids.values_mut() {
         if grid_instance.target_segments.is_some() {
             grid_instance.set_effect_target_style(glyph_style.clone());
-            grid_instance.start_transition(&model.transition_engine, model.immediately_change);
+            grid_instance.start_transition(&model.transition_engine);
         }
     }
 }
@@ -670,7 +564,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_segments(&model.project, glyph_index);
-                    model.immediately_change = immediate;
+                    grid.immediately_change = immediate;
                 }
             }
             OscCommand::NextGlyph {
@@ -679,7 +573,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph_segments(&model.project);
-                    model.immediately_change = immediate;
+                    grid.immediately_change = immediate;
                 }
             }
             OscCommand::NoGlyph {
@@ -688,7 +582,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.no_glyph();
-                    model.immediately_change = immediate;
+                    grid.immediately_change = immediate;
                 }
             }
             OscCommand::ToggleVisibility { grid_name } => {

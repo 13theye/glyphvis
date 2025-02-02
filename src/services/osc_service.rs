@@ -1,5 +1,4 @@
 // src/services/osc_receiver.rs
-use nannou::prelude::*;
 use nannou_osc as osc;
 
 pub struct OscService {

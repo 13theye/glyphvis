@@ -1,6 +1,5 @@
 // src/main.rs
 use nannou::prelude::*;
-use nannou_osc as osc;
 use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -9,6 +8,7 @@ use glyphvis::{
     animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
+    effects::BackgroundFlash,
     models::Project,
     services::{FrameRecorder, OutputFormat},
     views::{DrawStyle, GridInstance},
@@ -28,8 +28,9 @@ struct Model {
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
 
-    // Segment Transitions
+    // Transitions & Animation
     transition_engine: TransitionEngine,
+    bg_flash: BackgroundFlash,
 
     // Message
     debug_flag: bool,
@@ -44,9 +45,6 @@ struct Model {
     // FPS
     last_update: Instant,
     fps: f32,
-
-    // Config:
-    static_config: Config,
 }
 
 fn main() {
@@ -116,11 +114,11 @@ fn model(app: &App) -> Model {
         dst_format,
     );
 
-    let transition_config = TransitionConfig {
-        steps: 50,
-        frame_duration: 0.1,
-        wandering: 1.0,
-        density: 0.00001,
+    let default_transition_config = TransitionConfig {
+        steps: config.animation.transition.steps,
+        frame_duration: config.animation.transition.frame_duration,
+        wandering: config.animation.transition.wandering,
+        density: config.animation.transition.density,
     };
 
     let output_format = OutputFormat::JPEG(config.frame_recorder.jpeg_quality);
@@ -150,7 +148,8 @@ fn model(app: &App) -> Model {
 
         default_stroke_weight: config.style.default_stroke_weight,
 
-        transition_engine: TransitionEngine::new(transition_config),
+        transition_engine: TransitionEngine::new(default_transition_config),
+        bg_flash: BackgroundFlash::new(),
 
         frame_recorder,
         exit_requested: false,
@@ -158,9 +157,6 @@ fn model(app: &App) -> Model {
         // FPS
         last_update: Instant::now(),
         fps: 0.0,
-
-        // Static config: as loaded from file
-        static_config: config,
     }
 }
 
@@ -242,6 +238,9 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 }
             }
         }
+        Key::B => {
+            model.osc_sender.send_background_flash(1.0, 1.0, 1.0, 0.1);
+        }
         Key::Right => {
             model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 3.0);
         }
@@ -295,7 +294,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Clear the window
     let draw = &model.draw;
-    draw.background().color(BLACK);
+
+    // Handle the background
+    let background_color = model.bg_flash.get_current_color(app.time);
+    draw.background().color(background_color);
 
     // frames processing progress bar:
     if model.exit_requested {
@@ -478,43 +480,6 @@ fn render_progress(app: &App, model: &mut Model) {
     window.queue().submit(Some(encoder.finish()));
 }
 
-// ******************************* Debug stuff *******************************
-
-fn make_three_grids(app: &App, model: &mut Model) {
-    let grid_1 = GridInstance::new(
-        app,
-        "grid_1".to_string(),
-        &model.project,
-        "heol",
-        pt2(0.0, 0.0),
-        0.0,
-    );
-    let grid_2 = GridInstance::new(
-        app,
-        "grid_2".to_string(),
-        &model.project,
-        "heol",
-        pt2(0.0, 0.0),
-        0.0,
-    );
-    let grid_3 = GridInstance::new(
-        app,
-        "grid_3".to_string(),
-        &model.project,
-        "heol",
-        pt2(0.0, 0.0),
-        0.0,
-    );
-
-    model.grids.insert(grid_1.id.clone(), grid_1);
-    model.grids.insert(grid_2.id.clone(), grid_2);
-    model.grids.insert(grid_3.id.clone(), grid_3);
-
-    for (_, grid) in model.grids.iter() {
-        grid.print_grid_info();
-    }
-}
-
 // ******************************* OSC Launcher *******************************
 
 fn launch_commands(app: &App, model: &mut Model) {
@@ -556,15 +521,8 @@ fn launch_commands(app: &App, model: &mut Model) {
                     grid.rotate_in_place(angle);
                 }
             }
-            OscCommand::FlashBackground {
-                r,
-                g,
-                b,
-                duration: _duration,
-            } => {
-                // TODO: Implement background flash
-                // You'll need to add this functionality
-                println!("Background flash not implemented: {},{},{}", r, g, b);
+            OscCommand::FlashBackground { r, g, b, duration } => {
+                model.bg_flash.start_flash(rgb(r, g, b), duration, app.time);
             }
             OscCommand::DisplayGlyph {
                 grid_name,
@@ -614,14 +572,21 @@ fn launch_commands(app: &App, model: &mut Model) {
                 }
             }
             OscCommand::UpdateTransitionConfig {
+                grid_name,
                 steps,
                 frame_duration,
                 wandering,
                 density,
             } => {
-                // TODO: Update transition config
-                // You'll need to implement this in your TransitionEngine
-                println!("Transition config update not implemented");
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.update_transition_config(
+                        steps,
+                        frame_duration,
+                        wandering,
+                        density,
+                        model.transition_engine.get_default_config(),
+                    );
+                }
             }
         }
     }

@@ -62,7 +62,7 @@ bpm = 120
     flash_duration = 0.035
     fade_duration = 0.15
 
-    [transition]
+    [animation.transition]
     steps = 50
     frame_duration = 0.1
     wandering = 1.0

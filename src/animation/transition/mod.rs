@@ -83,27 +83,39 @@ impl Transition {
 }
 
 pub struct TransitionEngine {
-    pub config: TransitionConfig,
+    pub default_config: TransitionConfig,
 }
 
 // The thing that generates the Transition
 impl TransitionEngine {
     pub fn new(config: TransitionConfig) -> Self {
-        Self { config }
+        Self {
+            default_config: config,
+        }
+    }
+
+    pub fn get_default_config(&self) -> &TransitionConfig {
+        &self.default_config
     }
 
     pub fn generate_changes(
         &self,
         grid: &CachedGrid,
+        optional_config: &Option<TransitionConfig>,
         start_segments: &HashSet<String>,
         target_segments: &HashSet<String>,
         target_style: &DrawStyle,
         segment_graph: &SegmentGraph,
         immediate: bool, // when true, all segments change at once
     ) -> Vec<Vec<SegmentChange>> {
+        let config = if let Some(config) = optional_config {
+            config
+        } else {
+            &self.default_config
+        };
         let mut rng = thread_rng();
         let mut changes_by_step: Vec<Vec<SegmentChange>> =
-            (0..self.config.steps).map(|_| Vec::new()).collect();
+            (0..config.steps).map(|_| Vec::new()).collect();
         let mut pending_changes = Vec::new();
 
         // For segments that need to disappear
@@ -150,15 +162,15 @@ impl TransitionEngine {
         }
 
         // Calculate changes per step based on density
-        let changes_per_step = (pending_changes.len() as f32 * self.config.density).ceil() as usize;
+        let changes_per_step = (pending_changes.len() as f32 * config.density).ceil() as usize;
 
         // Distribute changes across steps, keeping neighbor groups together
-        for step_changes in changes_by_step.iter_mut().take(self.config.steps) {
+        for step_changes in changes_by_step.iter_mut().take(config.steps) {
             let available_changes = pending_changes.len().min(changes_per_step);
             let mut changes_this_step = 0;
 
             while changes_this_step < available_changes && !pending_changes.is_empty() {
-                if rng.gen::<f32>() < self.config.wandering {
+                if rng.gen::<f32>() < config.wandering {
                     // Find a random change and its neighbors
                     let idx = rng.gen_range(0..pending_changes.len());
                     let (seg, nearest, is_add) = pending_changes.remove(idx);

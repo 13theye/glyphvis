@@ -52,6 +52,7 @@ pub struct AnimationConfig {
     pub power_on: PowerOnConfig,
     pub power_off: PowerOffConfig,
     pub background_flash: BackgroundFlashConfig,
+    pub transition: TransitionConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,7 +72,7 @@ pub struct BackgroundFlashConfig {
     pub fade_duration: f32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TransitionConfig {
     pub steps: usize,        // Total number of frames to generate
     pub frame_duration: f32, // Time between frame changes

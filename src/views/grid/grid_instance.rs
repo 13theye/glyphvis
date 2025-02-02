@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{Movement, MovementEngine, Transition, TransitionEngine},
+    config::TransitionConfig,
     effects::{fx_initialize, EffectsManager},
     models::Project,
     services::SegmentGraph,
@@ -32,6 +33,7 @@ pub struct GridInstance {
     // effects state
     pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
+    pub transition_config: Option<TransitionConfig>,
     pub immediately_change: bool,
 
     // update messages for an update frame
@@ -91,6 +93,7 @@ impl GridInstance {
 
             effects_manager: fx_initialize(),
             active_transition: None,
+            transition_config: None,
             immediately_change: false,
 
             update_batch: HashMap::new(),
@@ -269,6 +272,7 @@ impl GridInstance {
 
         let changes = engine.generate_changes(
             &self.grid,
+            &self.transition_config,
             &self.current_active_segments,
             target_segments,
             &self.effect_target_style,
@@ -276,10 +280,30 @@ impl GridInstance {
             self.immediately_change, // when true, all segments change at once
         );
 
-        self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));
+        self.active_transition = Some(Transition::new(
+            changes,
+            engine.default_config.frame_duration,
+        ));
 
         // reset target segments
         self.target_segments = None;
+    }
+
+    pub fn update_transition_config(
+        &mut self,
+        steps: Option<usize>,
+        frame_duration: Option<f32>,
+        wandering: Option<f32>,
+        density: Option<f32>,
+        default_config: &TransitionConfig,
+    ) {
+        let config = TransitionConfig {
+            steps: steps.unwrap_or(default_config.steps),
+            frame_duration: frame_duration.unwrap_or(default_config.frame_duration),
+            wandering: wandering.unwrap_or(default_config.wandering),
+            density: density.unwrap_or(default_config.density),
+        };
+        self.transition_config = Some(config);
     }
 
     /**************************** Grid movement **********************************/

@@ -54,6 +54,7 @@ pub enum OscCommand {
         grid_name: String,
     },
     UpdateTransitionConfig {
+        grid_name: String,
         steps: Option<usize>,
         frame_duration: Option<f32>,
         wandering: Option<f32>,
@@ -187,6 +188,7 @@ impl OscController {
                         }
                     }
                     "/transition/update" => {
+                        let mut grid_name = String::new();
                         let mut steps = None;
                         let mut frame_duration = None;
                         let mut wandering = None;
@@ -194,15 +196,17 @@ impl OscController {
 
                         for (i, arg) in message.args.iter().enumerate() {
                             match (i, arg) {
-                                (0, osc::Type::Int(s)) => steps = Some(*s as usize),
-                                (1, osc::Type::Float(f)) => frame_duration = Some(*f),
-                                (2, osc::Type::Float(w)) => wandering = Some(*w),
-                                (3, osc::Type::Float(d)) => density = Some(*d),
+                                (0, osc::Type::String(name)) => grid_name = name.clone(),
+                                (1, osc::Type::Int(s)) => steps = Some(*s as usize),
+                                (2, osc::Type::Float(f)) => frame_duration = Some(*f),
+                                (3, osc::Type::Float(w)) => wandering = Some(*w),
+                                (4, osc::Type::Float(d)) => density = Some(*d),
                                 _ => (),
                             }
                         }
 
                         self.command_queue.push(OscCommand::UpdateTransitionConfig {
+                            grid_name,
                             steps,
                             frame_duration,
                             wandering,
@@ -343,6 +347,35 @@ impl OscSender {
             osc::Type::Float(b),
             osc::Type::Float(duration),
         ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_update_transition_config(
+        &self,
+        grid_name: &str,
+        steps: Option<usize>,
+        frame_duration: Option<f32>,
+        wandering: Option<f32>,
+        density: Option<f32>,
+    ) {
+        let addr = "/transition/update".to_string();
+        let mut args = vec![osc::Type::String(grid_name.to_string())];
+
+        // Only add the values that are Some
+        if let Some(s) = steps {
+            args.push(osc::Type::Int(s as i32));
+        }
+        if let Some(f) = frame_duration {
+            args.push(osc::Type::Float(f));
+        }
+        if let Some(w) = wandering {
+            args.push(osc::Type::Float(w));
+        }
+        if let Some(d) = density {
+            args.push(osc::Type::Float(d));
+        }
+
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

@@ -8,18 +8,18 @@ use std::time::Instant;
 use glyphvis::{
     animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
+    controllers::{OscCommand, OscController, OscSender},
     models::Project,
     services::{FrameRecorder, OutputFormat},
     views::{DrawStyle, GridInstance},
 };
 
-// const BPM: u32 = 120;
-
 struct Model {
     // Core components:
     project: Project,
     grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
-    receiver: osc::Receiver,
+    osc_controller: OscController,
+    osc_sender: OscSender,
 
     // Rendering components:
     texture: wgpu::Texture,
@@ -61,6 +61,11 @@ fn model(app: &App) -> Model {
     // Load project & config
     let project_path = config.resolve_project_path();
     let project = Project::load(project_path).expect("Failed to load project file");
+
+    // Create OSC controller
+    let osc_controller =
+        OscController::new(config.osc.rx_port).expect("Failed to create OSC Controller");
+    let osc_sender = OscSender::new(config.osc.rx_port).expect("Failed to create OSC Sender");
 
     // Create window
     let window_id = app
@@ -130,13 +135,11 @@ fn model(app: &App) -> Model {
         output_format,
     );
 
-    // Create Osc Receiver
-    let receiver = osc::receiver(config.osc.rx_port).expect("osc: Failed to bind to port");
-
     Model {
         project,
         grids: HashMap::new(), //grid,
-        receiver,
+        osc_controller,
+        osc_sender,
 
         texture,
         draw,
@@ -163,6 +166,7 @@ fn model(app: &App) -> Model {
     }
 }
 
+/*
 fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         // show next glyph
@@ -267,6 +271,64 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
         _ => (),
     }
 }
+*/
+fn key_pressed(_app: &App, model: &mut Model, key: Key) {
+    match key {
+        // show next glyph
+        Key::Space => {
+            // Send glyph change for each grid
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_glyph(name, 1); // You'll need to track current index
+            }
+            model.immediately_change = false;
+        }
+        Key::N => {
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_glyph(name, 1);
+            }
+            model.immediately_change = true;
+        }
+        Key::G => {
+            if model.grids.is_empty() {
+                // Create three test grids via OSC
+                model
+                    .osc_sender
+                    .send_create_grid("grid_1", "heol", 0.0, 0.0, 0.0);
+                model
+                    .osc_sender
+                    .send_create_grid("grid_2", "heol", 0.0, 0.0, 0.0);
+                model
+                    .osc_sender
+                    .send_create_grid("grid_3", "heol", 0.0, 0.0, 0.0);
+            } else {
+                // Toggle visibility (you might want to add an OSC command for this)
+                for (name, grid_instance) in model.grids.iter_mut() {
+                    if name != "grid_2" {
+                        grid_instance.visible = !grid_instance.visible;
+                    }
+                }
+            }
+        }
+        Key::Right => {
+            model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 10.0);
+        }
+        Key::Left => {
+            model.osc_sender.send_move_grid("grid_1", -700.0, 0.0, 10.0);
+        }
+        Key::Up => {
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_rotate_grid(name, 90.0);
+            }
+        }
+        Key::Down => {
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_rotate_grid(name, -90.0);
+            }
+        }
+        // ... handle other keys ...
+        _ => (),
+    }
+}
 
 fn update(app: &App, model: &mut Model, _update: Update) {
     let now = Instant::now();
@@ -277,6 +339,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         model.fps = 1.0 / duration.as_secs_f32();
     }
 
+    // Process OSC messages
+    model.osc_controller.process_messages();
+    launch_commands(app, model);
+
+    // Glyph update
     update_glyph(app, model);
 
     // Clear the window
@@ -503,5 +570,80 @@ fn make_three_grids(app: &App, model: &mut Model) {
 
     for (_, grid) in model.grids.iter() {
         grid.print_grid_info();
+    }
+}
+
+// ******************************* OSC Launcher *******************************
+
+fn launch_commands(app: &App, model: &mut Model) {
+    for command in model.osc_controller.take_commands() {
+        match command {
+            OscCommand::CreateGrid {
+                name,
+                show,
+                position,
+                rotation,
+            } => {
+                let grid = GridInstance::new(
+                    app,
+                    name.clone(),
+                    &model.project,
+                    &show,
+                    pt2(position.0, position.1),
+                    rotation,
+                );
+                model.grids.insert(name, grid);
+            }
+            OscCommand::MoveGrid {
+                name,
+                x,
+                y,
+                duration,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&name) {
+                    let movement_config = MovementConfig {
+                        duration,
+                        easing: EasingType::Linear,
+                    };
+                    let movement_engine = MovementEngine::new(movement_config);
+                    grid.start_movement(x, y, &movement_engine);
+                }
+            }
+            OscCommand::RotateGrid { name, angle } => {
+                if let Some(grid) = model.grids.get_mut(&name) {
+                    grid.rotate_in_place(angle);
+                }
+            }
+            OscCommand::FlashBackground {
+                r,
+                g,
+                b,
+                duration: _duration,
+            } => {
+                // TODO: Implement background flash
+                // You'll need to add this functionality
+                println!("Background flash not implemented: {},{},{}", r, g, b);
+            }
+            OscCommand::DisplayGlyph {
+                grid_name,
+                glyph_index,
+                immediate,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.stage_glyph_segments(&model.project, glyph_index);
+                    model.immediately_change = immediate;
+                }
+            }
+            OscCommand::UpdateTransitionConfig {
+                steps,
+                frame_duration,
+                wandering,
+                density,
+            } => {
+                // TODO: Update transition config
+                // You'll need to implement this in your TransitionEngine
+                println!("Transition config update not implemented");
+            }
+        }
     }
 }

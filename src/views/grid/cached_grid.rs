@@ -31,9 +31,9 @@ use crate::{
 };
 
 const ARC_RESOLUTION: usize = 25;
-const FLASH_DURATION: f32 = 0.035;
+const FLASH_DURATION: f32 = 0.07;
 const FADE_DURATION: f32 = 0.15;
-const FLASH_FADE_DURATION: f32 = 0.15;
+const FLASH_FADE_DURATION: f32 = 0.12;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data

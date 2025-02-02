@@ -379,7 +379,7 @@ fn update_glyph(_app: &App, model: &mut Model) {
     */
 
     let glyph_style = DrawStyle {
-        color: rgb(0.82, 0.1, 0.0),
+        color: rgb(0.82, 0.0, 0.14),
         stroke_weight: model.default_stroke_weight,
     };
     model.effect_target_style = glyph_style;

@@ -1,5 +1,5 @@
 // src/effets/initializer.rs
-// The Effects Initializer
+// Effects Initializer
 
 use super::effects_manager::*;
 use super::grid_effects::PulseEffect;
@@ -11,7 +11,7 @@ pub fn fx_initialize() -> EffectsManager {
         "pulse".to_string(),
         EffectType::Grid(Box::new(PulseEffect {
             frequency: 1.0,
-            min_brightness: 0.2,
+            min_brightness: 0.22,
             max_brightness: 0.22,
         })),
     );

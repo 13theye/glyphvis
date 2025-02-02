@@ -282,8 +282,6 @@ impl GridInstance {
         let transform_update = if let Some(movement) = &mut self.active_movement {
             if movement.update(dt) {
                 let update = movement.advance();
-                println!("Current step: {}", movement.get_current_step());
-
                 if movement.is_complete() {
                     self.active_movement = None;
                 }
@@ -298,7 +296,6 @@ impl GridInstance {
         // Then apply the transform if we got one
         if let Some(update) = transform_update {
             self.apply_transform(&update.transform);
-            println!("Moved to {:?}", self.current_location);
         }
     }
 

@@ -37,6 +37,12 @@ pub enum OscCommand {
         grid_name: String,
         immediate: bool,
     },
+    NextGlyphColor {
+        grid_name: String,
+        r: f32,
+        g: f32,
+        b: f32,
+    },
     NoGlyph {
         grid_name: String,
         immediate: bool,
@@ -140,6 +146,18 @@ impl OscController {
                             self.command_queue.push(OscCommand::NextGlyph {
                                 grid_name: name.clone(),
                                 immediate,
+                            });
+                        }
+                    }
+                    "/grid/nextglyphcolor" => {
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::NextGlyphColor {
+                                grid_name: name.clone(),
+                                r: *r,
+                                g: *g,
+                                b: *b,
                             });
                         }
                     }
@@ -274,6 +292,18 @@ impl OscSender {
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(immediate),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_next_glyph_color(&self, grid_name: &str, r: f32, g: f32, b: f32) {
+        let addr = "/grid/nextglyphcolor".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Float(r),
+            osc::Type::Float(g),
+            osc::Type::Float(b),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

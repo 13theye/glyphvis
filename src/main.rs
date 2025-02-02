@@ -233,6 +233,15 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 }
             }
         }
+        Key::J => {
+            for name in model.grids.keys() {
+                if name != "grid_2" {
+                    model
+                        .osc_sender
+                        .send_next_glyph_color(name, 0.82, 0.0, 0.14);
+                }
+            }
+        }
         Key::Right => {
             model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 3.0);
         }
@@ -574,6 +583,15 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph_segments(&model.project);
                     grid.immediately_change = immediate;
+                }
+            }
+            OscCommand::NextGlyphColor { grid_name, r, g, b } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    let style = DrawStyle {
+                        color: rgb(r, g, b),
+                        stroke_weight: model.default_stroke_weight,
+                    };
+                    grid.set_effect_target_style(style);
                 }
             }
             OscCommand::NoGlyph {

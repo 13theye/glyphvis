@@ -1,6 +1,6 @@
-//src/controllers/osc/mod.rs
+// src/controllers/osc/mod.rs
+// OSC Controller
 
-use nannou::prelude::*;
 use nannou_osc as osc;
 use std::error::Error;
 
@@ -31,6 +31,10 @@ pub enum OscCommand {
     DisplayGlyph {
         grid_name: String,
         glyph_index: usize,
+        immediate: bool,
+    },
+    NextGlyph {
+        grid_name: String,
         immediate: bool,
     },
     UpdateTransitionConfig {
@@ -114,6 +118,17 @@ impl OscController {
                             self.command_queue.push(OscCommand::DisplayGlyph {
                                 grid_name: name.clone(),
                                 glyph_index: *index as usize,
+                                immediate,
+                            });
+                        }
+                    }
+                    "/grid/nextglyph" => {
+                        if let [osc::Type::String(name), osc::Type::Int(immediately)] =
+                            &message.args[..]
+                        {
+                            let immediate = *immediately != 0;
+                            self.command_queue.push(OscCommand::NextGlyph {
+                                grid_name: name.clone(),
                                 immediate,
                             });
                         }
@@ -207,11 +222,23 @@ impl OscSender {
             .ok();
     }
 
-    pub fn send_glyph(&self, grid_name: &str, index: i32) {
+    pub fn send_glyph(&self, grid_name: &str, index: i32, immediate: i32) {
         let addr = "/grid/glyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(index),
+            osc::Type::Int(immediate),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_next_glyph(&self, grid_name: &str, immediate: i32) {
+        let addr = "/grid/nextglyph".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Int(immediate),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

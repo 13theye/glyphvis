@@ -278,15 +278,13 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::Space => {
             // Send glyph change for each grid
             for (name, _) in model.grids.iter() {
-                model.osc_sender.send_glyph(name, 1); // You'll need to track current index
+                model.osc_sender.send_next_glyph(name, 0);
             }
-            model.immediately_change = false;
         }
         Key::N => {
             for (name, _) in model.grids.iter() {
-                model.osc_sender.send_glyph(name, 1);
+                model.osc_sender.send_next_glyph(name, 1);
             }
-            model.immediately_change = true;
         }
         Key::G => {
             if model.grids.is_empty() {
@@ -631,6 +629,15 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_segments(&model.project, glyph_index);
+                    model.immediately_change = immediate;
+                }
+            }
+            OscCommand::NextGlyph {
+                grid_name,
+                immediate,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.stage_next_glyph_segments(&model.project);
                     model.immediately_change = immediate;
                 }
             }

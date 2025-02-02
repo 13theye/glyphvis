@@ -41,6 +41,7 @@ pub struct GridInstance {
     pub current_active_segments: HashSet<String>,
     pub target_segments: Option<HashSet<String>>,
     pub effect_target_style: DrawStyle,
+    pub colorful_flag: bool, // enables random-ish color effect target style
 
     // overall grid state
     pub spawn_location: Point2,
@@ -86,6 +87,7 @@ impl GridInstance {
             current_active_segments: HashSet::new(),
             target_segments: None,
             effect_target_style: DrawStyle::default(),
+            colorful_flag: false,
 
             effects_manager: fx_initialize(),
             active_transition: None,

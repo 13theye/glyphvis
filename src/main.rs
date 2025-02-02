@@ -32,7 +32,6 @@ struct Model {
     transition_engine: TransitionEngine,
 
     // Message
-    immediately_change: bool, // when true, change glyphs w/o transition
     debug_flag: bool,
 
     // Style
@@ -147,7 +146,6 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         random: rand::thread_rng(),
 
-        immediately_change: false,
         debug_flag: false,
 
         default_stroke_weight: config.style.default_stroke_weight,
@@ -228,6 +226,13 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 }
             }
         }
+        Key::H => {
+            for name in model.grids.keys() {
+                if name != "grid_2" {
+                    model.osc_sender.send_toggle_colorful(name);
+                }
+            }
+        }
         Key::Right => {
             model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 3.0);
         }
@@ -277,7 +282,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     launch_commands(app, model);
 
     // Glyph update
-    update_glyph(app, model);
+    update_glyph_color_and_transition(app, model);
 
     // Clear the window
     let draw = &model.draw;
@@ -342,28 +347,23 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 // ******************************* State-triggered functions *****************************
 
-fn update_glyph(_app: &App, model: &mut Model) {
-    /*let color_hsl = hsl(
+fn update_glyph_color_and_transition(_app: &App, model: &mut Model) {
+    let color_hsl = hsl(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
         0.4,
     );
 
-
-    let glyph_style = DrawStyle {
+    let colorful_style = DrawStyle {
         color: Rgb::from(color_hsl),
-        stroke_weight: model.default_stroke_weight,
-    };
-    */
-
-    let glyph_style = DrawStyle {
-        color: rgb(0.82, 0.0, 0.14),
         stroke_weight: model.default_stroke_weight,
     };
 
     for grid_instance in model.grids.values_mut() {
         if grid_instance.target_segments.is_some() {
-            grid_instance.set_effect_target_style(glyph_style.clone());
+            if grid_instance.colorful_flag {
+                grid_instance.set_effect_target_style(colorful_style.clone());
+            }
             grid_instance.start_transition(&model.transition_engine);
         }
     }
@@ -588,6 +588,11 @@ fn launch_commands(app: &App, model: &mut Model) {
             OscCommand::ToggleVisibility { grid_name } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.visible = !grid.visible;
+                }
+            }
+            OscCommand::ToggleColorful { grid_name } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.colorful_flag = !grid.colorful_flag;
                 }
             }
             OscCommand::UpdateTransitionConfig {

@@ -44,6 +44,9 @@ pub enum OscCommand {
     ToggleVisibility {
         grid_name: String,
     },
+    ToggleColorful {
+        grid_name: String,
+    },
     UpdateTransitionConfig {
         steps: Option<usize>,
         frame_duration: Option<f32>,
@@ -154,6 +157,13 @@ impl OscController {
                     "/grid/togglevisibility" => {
                         if let [osc::Type::String(name)] = &message.args[..] {
                             self.command_queue.push(OscCommand::ToggleVisibility {
+                                grid_name: name.clone(),
+                            });
+                        }
+                    }
+                    "/grid/togglecolorful" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::ToggleColorful {
                                 grid_name: name.clone(),
                             });
                         }
@@ -282,6 +292,13 @@ impl OscSender {
 
     pub fn send_toggle_visibility(&self, grid_name: &str) {
         let addr = "/grid/togglevisibility".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_toggle_colorful(&self, grid_name: &str) {
+        let addr = "/grid/togglecolorful".to_string();
         let args = vec![osc::Type::String(grid_name.to_string())];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

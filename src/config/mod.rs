@@ -4,6 +4,6 @@ pub mod runtime;
 
 pub use config_load::Config;
 pub use config_types::{
-    AnimationConfig, MovementConfig, OscConfig, OutputConfig, PathConfig, RenderConfig,
+    AnimationConfig, FrameRecorderConfig, MovementConfig, OscConfig, PathConfig, RenderConfig,
     SpeedConfig, StyleConfig, TransitionConfig, WindowConfig,
 };

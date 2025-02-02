@@ -13,7 +13,7 @@ pub struct Config {
     pub rendering: RenderConfig,
     pub window: WindowConfig,
     pub osc: OscConfig,
-    pub output: OutputConfig,
+    pub frame_recorder: FrameRecorderConfig,
     pub style: StyleConfig,
     pub speed: SpeedConfig,
     pub animation: AnimationConfig,

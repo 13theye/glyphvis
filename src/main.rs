@@ -2,16 +2,15 @@
 use nannou::prelude::*;
 use nannou_osc as osc;
 use rand::Rng;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Instant;
 
 use glyphvis::{
     animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
-    controllers::GlyphController,
     models::Project,
     services::{FrameRecorder, OutputFormat},
-    views::{DrawStyle, GridInstance, Transform2D},
+    views::{DrawStyle, GridInstance},
 };
 
 // const BPM: u32 = 120;
@@ -20,7 +19,6 @@ struct Model {
     // Core components:
     project: Project,
     grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
-    glyphs: GlyphController,
     receiver: osc::Receiver,
 
     // Rendering components:
@@ -30,21 +28,15 @@ struct Model {
     texture_reshaper: wgpu::TextureReshaper,
     random: rand::rngs::ThreadRng,
 
-    // Time:
-    bpm: u32,
-    quantize: bool,
-
     // Segment Transitions
     transition_engine: TransitionEngine,
 
     // Message
-    target_segments: Option<HashSet<String>>,
     immediately_change: bool, // when true, change glyphs w/o transition
     debug_flag: bool,
 
     // Style
     default_stroke_weight: f32,
-    effect_target_style: DrawStyle, // for testing
 
     // Frame recording:
     frame_recorder: FrameRecorder,
@@ -69,8 +61,6 @@ fn model(app: &App) -> Model {
     // Load project & config
     let project_path = config.resolve_project_path();
     let project = Project::load(project_path).expect("Failed to load project file");
-
-    let glyphs = GlyphController::new(&project);
 
     // Create window
     let window_id = app
@@ -122,9 +112,6 @@ fn model(app: &App) -> Model {
         dst_format,
     );
 
-    // Set up BPM
-    let bpm = config.speed.bpm;
-
     let transition_config = TransitionConfig {
         steps: 50,
         frame_duration: 0.1,
@@ -132,14 +119,14 @@ fn model(app: &App) -> Model {
         density: 0.00001,
     };
 
-    let output_format = OutputFormat::JPEG(config.output.jpeg_quality);
+    let output_format = OutputFormat::JPEG(config.frame_recorder.jpeg_quality);
 
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
         device,
         &texture,
         &config.resolve_output_dir_as_str(),
-        config.output.frame_limit,
+        config.frame_recorder.frame_limit,
         output_format,
     );
 
@@ -149,7 +136,6 @@ fn model(app: &App) -> Model {
     Model {
         project,
         grids: HashMap::new(), //grid,
-        glyphs,
         receiver,
 
         texture,
@@ -158,18 +144,10 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         random: rand::thread_rng(),
 
-        bpm,
-        quantize: false,
-
-        target_segments: None,
         immediately_change: false,
         debug_flag: false,
 
         default_stroke_weight: config.style.default_stroke_weight,
-        effect_target_style: DrawStyle {
-            color: rgb(1.0, 0.0, 0.0),
-            stroke_weight: config.style.default_stroke_weight,
-        },
 
         transition_engine: TransitionEngine::new(transition_config),
 
@@ -189,12 +167,16 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         // show next glyph
         Key::Space => {
-            model.target_segments = Some(model.glyphs.next_glyph(&model.project));
-            model.immediately_change = false;
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.stage_next_glyph_segments(&model.project);
+                model.immediately_change = false;
+            }
         }
         Key::N => {
-            model.target_segments = Some(model.glyphs.next_glyph(&model.project));
-            model.immediately_change = true;
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.stage_next_glyph_segments(&model.project);
+                model.immediately_change = true;
+            }
         }
         // Return grids to where they spawned
         Key::Backslash => {
@@ -209,13 +191,18 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
             }
         }
         Key::C => {
-            model.target_segments = Some(model.glyphs.no_glyph());
-            model.immediately_change = true;
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.no_glyph();
+                model.immediately_change = true;
+            }
         }
         Key::X => {
-            model.target_segments = Some(model.glyphs.no_glyph());
-            model.immediately_change = false;
+            for (_, grid_instance) in model.grids.iter_mut() {
+                grid_instance.no_glyph();
+                model.immediately_change = false;
+            }
         }
+
         // Init grids or hide/show them
         Key::G => {
             if model.grids.is_empty() {
@@ -290,11 +277,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         model.fps = 1.0 / duration.as_secs_f32();
     }
 
-    // Update the current model-wide glyph here -- solves timing issues
-
-    if model.target_segments.is_some() {
-        update_glyph(app, model);
-    }
+    update_glyph(app, model);
 
     // Clear the window
     let draw = &model.draw;
@@ -308,18 +291,13 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Set grid background base style
     let bg_style = DrawStyle {
-        color: rgb(0.1, 0.1, 0.1),
+        color: rgb(0.18, 0.18, 0.18),
         stroke_weight: model.default_stroke_weight,
     };
 
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
-        grid_instance.update(
-            &model.effect_target_style,
-            &bg_style,
-            app.time,
-            duration.as_secs_f32(),
-        );
+        grid_instance.update(&bg_style, app.time, duration.as_secs_f32());
 
         grid_instance.update_background_segments(&bg_style, app.time);
 
@@ -382,20 +360,13 @@ fn update_glyph(_app: &App, model: &mut Model) {
         color: rgb(0.82, 0.0, 0.14),
         stroke_weight: model.default_stroke_weight,
     };
-    model.effect_target_style = glyph_style;
 
-    if let Some(target_segments) = &model.target_segments {
-        for grid_instance in model.grids.values_mut() {
-            grid_instance.start_transition(
-                target_segments,
-                &model.effect_target_style,
-                &model.transition_engine,
-                model.immediately_change,
-            );
+    for grid_instance in model.grids.values_mut() {
+        if grid_instance.target_segments.is_some() {
+            grid_instance.set_effect_target_style(glyph_style.clone());
+            grid_instance.start_transition(&model.transition_engine, model.immediately_change);
         }
     }
-
-    model.target_segments = None;
 }
 
 // ******************************* Rendering and Capture *****************************

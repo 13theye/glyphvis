@@ -107,7 +107,7 @@ pub struct DrawStyle {
 impl Default for DrawStyle {
     fn default() -> Self {
         Self {
-            color: rgb(0.1, 0.1, 0.1),
+            color: rgb(0.18, 0.18, 0.18),
             stroke_weight: 5.0,
         }
     }

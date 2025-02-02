@@ -26,6 +26,8 @@ pub struct GridInstance {
 
     // glyph state
     pub show: String,
+    pub current_glyph_index: usize,
+    index_max: usize,
 
     // effects state
     pub effects_manager: EffectsManager,
@@ -36,6 +38,8 @@ pub struct GridInstance {
 
     // inside-grid state
     pub current_active_segments: HashSet<String>,
+    pub target_segments: Option<HashSet<String>>,
+    pub effect_target_style: DrawStyle,
 
     // overall grid state
     pub spawn_location: Point2,
@@ -65,14 +69,22 @@ impl GridInstance {
         };
         grid.apply_transform(&transform);
 
+        let index_max = project
+            .get_show(show)
+            .map_or(0, |show| show.show_order.len());
+
         Self {
             id,
             grid,
             graph,
 
             show: show.to_string(),
+            current_glyph_index: 1,
+            index_max,
 
             current_active_segments: HashSet::new(),
+            target_segments: None,
+            effect_target_style: DrawStyle::default(),
 
             effects_manager: fx_initialize(),
             active_transition: None,
@@ -86,6 +98,49 @@ impl GridInstance {
             current_scale: 1.0,
             active_movement: None,
             visible: true,
+        }
+    }
+
+    /************************** Glyph System ********************************** */
+
+    pub fn stage_glyph_segments(&mut self, project: &Project, index: usize) {
+        if let Some(show) = project.get_show(&self.show) {
+            let show_order = &show.show_order;
+            let show_element = show_order.get(&(index as u32));
+            if let Some(show_element) = show_element {
+                let glyph_name = &show_element.name;
+                if let Some(glyph) = project.get_glyph(glyph_name) {
+                    self.current_glyph_index = index;
+                    self.target_segments = if glyph.segments.is_empty() {
+                        None
+                    } else {
+                        Some(glyph.segments.iter().cloned().collect())
+                    };
+                } else {
+                    self.no_glyph();
+                }
+            } else {
+                self.no_glyph();
+            }
+        } else {
+            self.no_glyph();
+        }
+    }
+
+    pub fn no_glyph(&mut self) {
+        self.target_segments = Some(HashSet::new());
+    }
+
+    pub fn stage_next_glyph_segments(&mut self, project: &Project) {
+        self.advance_index(self.current_glyph_index);
+        self.stage_glyph_segments(project, self.current_glyph_index);
+    }
+
+    fn advance_index(&mut self, index: usize) {
+        if index + 1 > self.index_max {
+            self.current_glyph_index = 1;
+        } else {
+            self.current_glyph_index += 1;
         }
     }
 
@@ -135,7 +190,10 @@ impl GridInstance {
         }
     }
 
-    pub fn update(&mut self, target_style: &DrawStyle, bg_style: &DrawStyle, _time: f32, dt: f32) {
+    pub fn update(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
+        // extract target style
+        let target_style = self.effect_target_style.clone();
+
         // update movement animation if active
         self.update_movement(dt);
 
@@ -166,7 +224,7 @@ impl GridInstance {
 
             // Convert frame difference into on/off messages
             if !updates.segments_on.is_empty() {
-                self.turn_on_segments(updates.segments_on, target_style);
+                self.turn_on_segments(updates.segments_on, &target_style);
             }
 
             if !updates.segments_off.is_empty() {
@@ -185,31 +243,43 @@ impl GridInstance {
         self.clear_update_batch();
     }
 
-    /************************* Old update system ******************************/
-
     pub fn set_active_segments(&mut self, segments: HashSet<String>) {
         self.current_active_segments = segments;
+    }
+
+    pub fn set_effect_target_style(&mut self, style: DrawStyle) {
+        self.effect_target_style = style;
     }
 
     /*********************** Segment Transitions  *****************************/
 
     pub fn start_transition(
         &mut self,
-        target_segments: &HashSet<String>,
-        target_style: &DrawStyle,
         engine: &TransitionEngine,
         immediate: bool, // when true, all segments change at once
     ) {
+        // Handle target segments
+        let target_segments = {
+            if let Some(segments) = &self.target_segments {
+                segments
+            } else {
+                return;
+            }
+        };
+
         let changes = engine.generate_changes(
             &self.grid,
             &self.current_active_segments,
             target_segments,
-            target_style,
+            &self.effect_target_style,
             &self.graph,
             immediate,
         );
 
         self.active_transition = Some(Transition::new(changes, engine.config.frame_duration));
+
+        // reset target segments
+        self.target_segments = None;
     }
 
     /**************************** Grid movement **********************************/

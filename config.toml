@@ -33,7 +33,8 @@ height = 480
 # OSC listening port. UDP only.
 rx_port = 8000
 
-[output]
+[frame_recorder]
+# Settings for the frame recorder
 # Frame limit of 30000 frames is about 16m40s at 30fps
 frame_limit = 30000
 jpeg_quality = 85
@@ -43,7 +44,7 @@ jpeg_quality = 85
 default_stroke_weight = 5.1
 
 [speed]
-# Not yet implemented
+# This is not used. BPM will be controlled from Ableton.
 bpm = 120
 
 [animation]

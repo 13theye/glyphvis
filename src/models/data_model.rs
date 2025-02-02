@@ -32,7 +32,7 @@ pub struct Show {
     pub name: String,
     pub metadata: HashMap<String, serde_json::Value>,
     #[serde(rename = "showOrder")]
-    pub show_order: HashMap<String, ShowElement>,
+    pub show_order: HashMap<u32, ShowElement>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,7 +43,6 @@ pub struct ShowElement {
     pub position: u32,
     pub metadata: HashMap<String, serde_json::Value>,
 }
-
 
 impl Project {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
@@ -108,5 +107,3 @@ mod tests {
         assert_eq!(parsed, None);
     }
 }
-
-

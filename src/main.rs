@@ -503,22 +503,25 @@ fn render_progress(app: &App, model: &mut Model) {
 fn make_three_grids(app: &App, model: &mut Model) {
     let grid_1 = GridInstance::new(
         app,
-        &model.project,
         "grid_1".to_string(),
+        &model.project,
+        "heol",
         pt2(0.0, 0.0),
         0.0,
     );
     let grid_2 = GridInstance::new(
         app,
-        &model.project,
         "grid_2".to_string(),
+        &model.project,
+        "heol",
         pt2(0.0, 0.0),
         0.0,
     );
     let grid_3 = GridInstance::new(
         app,
-        &model.project,
         "grid_3".to_string(),
+        &model.project,
+        "heol",
         pt2(0.0, 0.0),
         0.0,
     );

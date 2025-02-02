@@ -24,6 +24,9 @@ pub struct GridInstance {
     pub grid: CachedGrid,
     pub graph: SegmentGraph,
 
+    // glyph state
+    pub show: String,
+
     // effects state
     pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
@@ -45,7 +48,14 @@ pub struct GridInstance {
 }
 
 impl GridInstance {
-    pub fn new(_app: &App, project: &Project, id: String, position: Point2, rotation: f32) -> Self {
+    pub fn new(
+        _app: &App,
+        id: String,
+        project: &Project,
+        show: &str,
+        position: Point2,
+        rotation: f32,
+    ) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {
@@ -60,13 +70,10 @@ impl GridInstance {
             grid,
             graph,
 
+            show: show.to_string(),
+
             current_active_segments: HashSet::new(),
 
-            /* will add this when timeline is implemented
-            target_active_segments: None,
-            transition_timeline: None,
-            transition_start_time: None,
-             */
             effects_manager: fx_initialize(),
             active_transition: None,
 

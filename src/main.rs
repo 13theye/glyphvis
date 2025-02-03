@@ -8,7 +8,6 @@ use glyphvis::{
     animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
-    effects::BackgroundFlash,
     models::Project,
     services::{FrameRecorder, OutputFormat},
     views::{BackgroundManager, DrawStyle, GridInstance},
@@ -31,7 +30,6 @@ struct Model {
 
     // Transitions & Animation
     transition_engine: TransitionEngine,
-    bg_flash: BackgroundFlash,
 
     // Message
     debug_flag: bool,
@@ -151,7 +149,6 @@ fn model(app: &App) -> Model {
         default_stroke_weight: config.style.default_stroke_weight,
 
         transition_engine: TransitionEngine::new(default_transition_config),
-        bg_flash: BackgroundFlash::new(),
 
         frame_recorder,
         exit_requested: false,

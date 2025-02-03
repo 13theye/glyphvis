@@ -66,7 +66,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.0")
+        .title("glyphvis 0.1.1")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)

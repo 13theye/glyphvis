@@ -1,5 +1,7 @@
 // src/animation/transition/mod.rs
 //
+// The Glyph Transition Manager
+//
 // A Transition a timeline of on/off msgs that makes the Grid
 // tranistion from one Glyph to another.
 // It doesn't need to finish to smoothly start transitioning to

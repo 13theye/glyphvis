@@ -1,6 +1,6 @@
 pub mod background_fx;
 pub mod effects_manager;
-pub mod grid_effects;
+pub mod grid_fx;
 pub mod initializer;
 
 pub use background_fx::BackgroundFlash;

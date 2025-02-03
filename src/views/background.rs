@@ -1,0 +1,44 @@
+// src/views/background.rs
+//
+// A simple module to manage background state
+
+use crate::effects::BackgroundFlash;
+use nannou::prelude::*;
+
+#[derive(Debug, Default)]
+pub struct BackgroundManager {
+    current_color: Rgb,
+    flasher: BackgroundFlash,
+}
+
+impl BackgroundManager {
+    pub fn new() -> Self {
+        Self {
+            current_color: rgb(0.0, 0.0, 0.0),
+            flasher: BackgroundFlash::default(),
+        }
+    }
+
+    pub fn flash(&mut self, flash_color: Rgb, duration: f32, current_time: f32) {
+        self.flasher
+            .start(flash_color, self.current_color, duration, current_time);
+    }
+
+    fn update_color(&mut self, current_time: f32) {
+        if self.flasher.is_active {
+            if let Some(new_color) = self.flasher.update(current_time) {
+                self.current_color = new_color;
+                println!("Current background color: {:?}", self.current_color)
+            }
+        }
+    }
+
+    pub fn draw(&mut self, draw: &Draw, current_time: f32) {
+        self.update_color(current_time);
+        draw.background().color(self.current_color);
+    }
+
+    pub fn get_current_color(&self) -> Rgb {
+        self.current_color
+    }
+}

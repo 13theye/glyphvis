@@ -11,13 +11,14 @@ use glyphvis::{
     effects::BackgroundFlash,
     models::Project,
     services::{FrameRecorder, OutputFormat},
-    views::{DrawStyle, GridInstance},
+    views::{BackgroundManager, DrawStyle, GridInstance},
 };
 
 struct Model {
     // Core components:
     project: Project,
     grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
+    background: BackgroundManager,
     osc_controller: OscController,
     osc_sender: OscSender,
 
@@ -135,6 +136,7 @@ fn model(app: &App) -> Model {
     Model {
         project,
         grids: HashMap::new(), //grid,
+        background: BackgroundManager::default(),
         osc_controller,
         osc_sender,
 
@@ -292,12 +294,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Glyph update
     update_glyph_color_and_transition(app, model);
 
-    // Clear the window
+    // Set up Draw
     let draw = &model.draw;
 
     // Handle the background
-    let background_color = model.bg_flash.get_current_color(app.time);
-    draw.background().color(background_color);
+    model.background.draw(draw, app.time);
 
     // frames processing progress bar:
     if model.exit_requested {
@@ -522,7 +523,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 }
             }
             OscCommand::FlashBackground { r, g, b, duration } => {
-                model.bg_flash.start_flash(rgb(r, g, b), duration, app.time);
+                model.background.flash(rgb(r, g, b), duration, app.time);
             }
             OscCommand::DisplayGlyph {
                 grid_name,

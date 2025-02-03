@@ -86,6 +86,7 @@ impl EffectsManager {
         }
     }
 
+    /* Deprecating
     // Apply all active effects
     pub fn apply_segment_effects(
         &self,
@@ -121,6 +122,7 @@ impl EffectsManager {
 
         current_style
     }
+     */
 
     // Apply all active effects
     pub fn apply_grid_effects(&self, base_style: DrawStyle, time: f32) -> DrawStyle {
@@ -148,6 +150,7 @@ impl EffectsManager {
         current_style
     }
 
+    /* Deprecating
     // for segment-specific operations
     pub fn activate_segment(&mut self, segment_id: &str, effect_name: &str, time: f32) {
         if let Some(instance) = self.effects.get_mut(effect_name) {
@@ -156,6 +159,7 @@ impl EffectsManager {
             }
         }
     }
+    */
 
     // Clean up finished effects
     pub fn cleanup(&mut self) {

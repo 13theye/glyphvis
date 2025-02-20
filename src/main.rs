@@ -240,6 +240,21 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::B => {
             model.osc_sender.send_background_flash(1.0, 1.0, 1.0, 0.1);
         }
+        Key::V => {
+            model
+                .osc_sender
+                .send_background_color_fade(1.0, 0.0, 0.0, 10.0);
+        }
+        Key::M => {
+            model
+                .osc_sender
+                .send_background_color_fade(0.0, 0.0, 0.0, 10.0);
+        }
+        Key::Comma => {
+            model
+                .osc_sender
+                .send_background_color_fade(0.6, 0.2, 0.5, 10.0);
+        }
         Key::Right => {
             model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 3.0);
         }
@@ -521,6 +536,11 @@ fn launch_commands(app: &App, model: &mut Model) {
             }
             OscCommand::FlashBackground { r, g, b, duration } => {
                 model.background.flash(rgb(r, g, b), duration, app.time);
+            }
+            OscCommand::ColorFadeBackground { r, g, b, duration } => {
+                model
+                    .background
+                    .color_fade(rgb(r, g, b), duration, app.time);
             }
             OscCommand::DisplayGlyph {
                 grid_name,

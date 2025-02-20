@@ -1,23 +1,8 @@
 // src/effects/effects_manager.rs
 
+use crate::effects::*;
 use crate::views::DrawStyle;
 use std::collections::HashMap;
-
-pub enum EffectType {
-    Grid(Box<dyn Effect>),
-}
-
-// the base Effect trait which all effects must implement
-pub trait Effect {
-    fn apply(&self, style: &DrawStyle, time: f32) -> DrawStyle;
-    fn is_finished(&self) -> bool;
-}
-
-// Effect instance with metadata
-struct EffectInstance {
-    effect: EffectType,
-    is_active: bool,
-}
 
 #[derive(Default)]
 pub struct EffectsManager {
@@ -75,7 +60,7 @@ impl EffectsManager {
 
             match &instance.effect {
                 EffectType::Grid(effect) => {
-                    current_style = effect.apply(&current_style, time);
+                    current_style = effect.update(&current_style, time);
                 }
             }
         }

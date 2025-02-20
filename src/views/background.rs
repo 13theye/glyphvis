@@ -2,13 +2,14 @@
 //
 // A simple module to manage background state
 
-use crate::effects::BackgroundFlash;
+use crate::effects::*;
 use nannou::prelude::*;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct BackgroundManager {
     current_color: Rgb,
     flasher: BackgroundFlash,
+    color_fader: BackgroundColorFade,
 }
 
 impl BackgroundManager {
@@ -16,6 +17,7 @@ impl BackgroundManager {
         Self {
             current_color: rgb(0.0, 0.0, 0.0),
             flasher: BackgroundFlash::default(),
+            color_fader: BackgroundColorFade::default(),
         }
     }
 
@@ -24,8 +26,18 @@ impl BackgroundManager {
             .start(flash_color, self.current_color, duration, current_time);
     }
 
+    pub fn color_fade(&mut self, target_color: Rgb, duration: f32, current_time: f32) {
+        self.color_fader
+            .start(self.current_color, target_color, duration, current_time);
+    }
+
     fn update_color(&mut self, current_time: f32) {
-        if self.flasher.is_active {
+        if self.color_fader.is_active() {
+            if let Some(new_color) = self.color_fader.update(current_time) {
+                self.current_color = new_color;
+            }
+        }
+        if self.flasher.is_active() {
             if let Some(new_color) = self.flasher.update(current_time) {
                 self.current_color = new_color;
                 println!("Current background color: {:?}", self.current_color)

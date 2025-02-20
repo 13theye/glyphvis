@@ -28,6 +28,12 @@ pub enum OscCommand {
         b: f32,
         duration: f32,
     },
+    ColorFadeBackground {
+        r: f32,
+        g: f32,
+        b: f32,
+        duration: f32,
+    },
     DisplayGlyph {
         grid_name: String,
         glyph_index: usize,
@@ -120,6 +126,18 @@ impl OscController {
                             &message.args[..]
                         {
                             self.command_queue.push(OscCommand::FlashBackground {
+                                r: *r,
+                                g: *g,
+                                b: *b,
+                                duration: *duration,
+                            });
+                        }
+                    }
+                    "/background/color_fade" => {
+                        if let [osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(duration)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::ColorFadeBackground {
                                 r: *r,
                                 g: *g,
                                 b: *b,
@@ -341,6 +359,18 @@ impl OscSender {
 
     pub fn send_background_flash(&self, r: f32, g: f32, b: f32, duration: f32) {
         let addr = "/background/flash".to_string();
+        let args = vec![
+            osc::Type::Float(r),
+            osc::Type::Float(g),
+            osc::Type::Float(b),
+            osc::Type::Float(duration),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_background_color_fade(&self, r: f32, g: f32, b: f32, duration: f32) {
+        let addr = "/background/color_fade".to_string();
         let args = vec![
             osc::Type::Float(r),
             osc::Type::Float(g),

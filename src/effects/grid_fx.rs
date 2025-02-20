@@ -12,19 +12,19 @@ pub struct PulseEffect {
 }
 
 impl Effect for PulseEffect {
-    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle {
+    fn update(&self, start_style: &DrawStyle, time: f32) -> DrawStyle {
         let brightness = (time * self.frequency).sin() * 0.5 + 0.5;
         let brightness =
             self.min_brightness + brightness * (self.max_brightness - self.min_brightness);
 
-        let color = base_params.color;
+        let color = start_style.color;
         DrawStyle {
             color: rgb(
                 color.red * brightness,
                 color.green * brightness,
                 color.blue * brightness,
             ),
-            stroke_weight: base_params.stroke_weight,
+            stroke_weight: start_style.stroke_weight,
         }
     }
 
@@ -41,11 +41,11 @@ pub struct ColorCycleEffect {
 }
 
 impl Effect for ColorCycleEffect {
-    fn apply(&self, base_params: &DrawStyle, time: f32) -> DrawStyle {
+    fn update(&self, base_style: &DrawStyle, time: f32) -> DrawStyle {
         let hue = (time * self.frequency) % 1.0;
         DrawStyle {
             color: hsv(hue, self.saturation, self.brightness).into(),
-            stroke_weight: base_params.stroke_weight,
+            stroke_weight: base_style.stroke_weight,
         }
     }
 

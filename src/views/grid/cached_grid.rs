@@ -485,7 +485,7 @@ impl CachedGrid {
     }
 
     /************************ Rendering methods ****************************/
-    pub fn trigger_screen_update(
+    pub fn update_screen(
         &mut self,
         draw: &Draw,
         update_batch: &HashMap<String, StyleUpdateMsg>,

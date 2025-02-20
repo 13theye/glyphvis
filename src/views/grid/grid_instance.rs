@@ -177,7 +177,7 @@ impl GridInstance {
         }
     }
 
-    pub fn update_background_segments(&mut self, bg_style: &DrawStyle, time: f32) {
+    pub fn stage_background_segment_updates(&mut self, bg_style: &DrawStyle, time: f32) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].layer == Layer::Background
@@ -197,7 +197,7 @@ impl GridInstance {
         }
     }
 
-    pub fn update(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
+    pub fn stage_active_segment_updates(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
         // extract target style
         let target_style = self.effect_target_style.clone();
 
@@ -244,9 +244,9 @@ impl GridInstance {
         self.update_batch.clear();
     }
 
-    pub fn trigger_screen_update(&mut self, draw: &Draw) {
+    pub fn update_screen(&mut self, draw: &Draw) {
         self.grid
-            .trigger_screen_update(draw, &self.update_batch, self.visible);
+            .update_screen(draw, &self.update_batch, self.visible);
         self.clear_update_batch();
     }
 

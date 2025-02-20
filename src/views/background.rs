@@ -40,7 +40,6 @@ impl BackgroundManager {
         if self.flasher.is_active() {
             if let Some(new_color) = self.flasher.update(current_time) {
                 self.current_color = new_color;
-                println!("Current background color: {:?}", self.current_color)
             }
         }
     }

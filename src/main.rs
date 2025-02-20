@@ -18,6 +18,8 @@ struct Model {
     project: Project,
     grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
     background: BackgroundManager,
+
+    // Comms components:
     osc_controller: OscController,
     osc_sender: OscSender,
 
@@ -31,9 +33,6 @@ struct Model {
     // Transitions & Animation
     transition_engine: TransitionEngine,
 
-    // Message
-    debug_flag: bool,
-
     // Style
     default_stroke_weight: f32,
 
@@ -44,6 +43,9 @@ struct Model {
     // FPS
     last_update: Instant,
     fps: f32,
+
+    // Message
+    debug_flag: bool,
 }
 
 fn main() {
@@ -144,8 +146,6 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         random: rand::thread_rng(),
 
-        debug_flag: false,
-
         default_stroke_weight: config.style.default_stroke_weight,
 
         transition_engine: TransitionEngine::new(default_transition_config),
@@ -156,6 +156,8 @@ fn model(app: &App) -> Model {
         // FPS
         last_update: Instant::now(),
         fps: 0.0,
+
+        debug_flag: false,
     }
 }
 
@@ -303,8 +305,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     model.osc_controller.process_messages();
     launch_commands(app, model);
 
-    // Glyph update
-    update_glyph_color_and_transition(app, model);
+    // Coordinate simulataneous style changes on multiple grids
+    handle_coordinated_grid_styles(app, model);
 
     // Set up Draw
     let draw = &model.draw;
@@ -312,26 +314,30 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Handle the background
     model.background.draw(draw, app.time);
 
-    // frames processing progress bar:
+    // Frames processing progress bar:
     if model.exit_requested {
         handle_exit_state(app, model);
         return; // Important: return here to not continue with normal rendering
     }
 
     // Set grid background base style
-    let bg_style = DrawStyle {
+    let grid_bg_style = DrawStyle {
         color: rgb(0.18, 0.18, 0.18),
         stroke_weight: model.default_stroke_weight,
     };
 
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
-        grid_instance.update(&bg_style, app.time, duration.as_secs_f32());
+        grid_instance.stage_active_segment_updates(
+            &grid_bg_style,
+            app.time,
+            duration.as_secs_f32(),
+        );
 
-        grid_instance.update_background_segments(&bg_style, app.time);
+        grid_instance.stage_background_segment_updates(&grid_bg_style, app.time);
 
         // Send update messages to grid & draw
-        grid_instance.trigger_screen_update(draw);
+        grid_instance.update_screen(draw);
     }
 
     if model.debug_flag {
@@ -369,9 +375,9 @@ fn view(_app: &App, model: &Model, frame: Frame) {
         .encode_render_pass(frame.texture_view(), &mut encoder);
 }
 
-// ******************************* State-triggered functions *****************************
+// ************************ Multi-grid style coordination  *****************************
 
-fn update_glyph_color_and_transition(_app: &App, model: &mut Model) {
+fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
     let color_hsl = hsl(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),

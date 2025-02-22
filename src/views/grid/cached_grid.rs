@@ -30,6 +30,7 @@ use crate::{
     views::Transform2D,
 };
 
+// TODO: USE ANIMATION DURATION CONFIG INSTEAD OF THESE CONSTANTS
 const ARC_RESOLUTION: usize = 25;
 const FLASH_DURATION: f32 = 0.07;
 const FADE_DURATION: f32 = 0.15;

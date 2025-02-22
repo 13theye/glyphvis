@@ -8,16 +8,18 @@ use glyphvis::{
     animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
-    effects::BackgroundFlash,
     models::Project,
     services::{FrameRecorder, OutputFormat},
-    views::{DrawStyle, GridInstance},
+    views::{BackgroundManager, DrawStyle, GridInstance},
 };
 
 struct Model {
     // Core components:
     project: Project,
     grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
+    background: BackgroundManager,
+
+    // Comms components:
     osc_controller: OscController,
     osc_sender: OscSender,
 
@@ -30,10 +32,6 @@ struct Model {
 
     // Transitions & Animation
     transition_engine: TransitionEngine,
-    bg_flash: BackgroundFlash,
-
-    // Message
-    debug_flag: bool,
 
     // Style
     default_stroke_weight: f32,
@@ -45,6 +43,9 @@ struct Model {
     // FPS
     last_update: Instant,
     fps: f32,
+
+    // Message
+    debug_flag: bool,
 }
 
 fn main() {
@@ -67,7 +68,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.0")
+        .title("glyphvis 0.1.1")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -135,6 +136,7 @@ fn model(app: &App) -> Model {
     Model {
         project,
         grids: HashMap::new(), //grid,
+        background: BackgroundManager::default(),
         osc_controller,
         osc_sender,
 
@@ -144,12 +146,9 @@ fn model(app: &App) -> Model {
         texture_reshaper,
         random: rand::thread_rng(),
 
-        debug_flag: false,
-
         default_stroke_weight: config.style.default_stroke_weight,
 
         transition_engine: TransitionEngine::new(default_transition_config),
-        bg_flash: BackgroundFlash::new(),
 
         frame_recorder,
         exit_requested: false,
@@ -157,6 +156,8 @@ fn model(app: &App) -> Model {
         // FPS
         last_update: Instant::now(),
         fps: 0.0,
+
+        debug_flag: false,
     }
 }
 
@@ -241,6 +242,21 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::B => {
             model.osc_sender.send_background_flash(1.0, 1.0, 1.0, 0.1);
         }
+        Key::V => {
+            model
+                .osc_sender
+                .send_background_color_fade(1.0, 0.0, 0.0, 10.0);
+        }
+        Key::M => {
+            model
+                .osc_sender
+                .send_background_color_fade(0.0, 0.0, 0.0, 10.0);
+        }
+        Key::Comma => {
+            model
+                .osc_sender
+                .send_background_color_fade(0.6, 0.2, 0.5, 10.0);
+        }
         Key::Right => {
             model.osc_sender.send_move_grid("grid_3", 700.0, 0.0, 3.0);
         }
@@ -289,36 +305,39 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     model.osc_controller.process_messages();
     launch_commands(app, model);
 
-    // Glyph update
-    update_glyph_color_and_transition(app, model);
+    // Coordinate simulataneous style changes on multiple grids
+    handle_coordinated_grid_styles(app, model);
 
-    // Clear the window
+    // Set up Draw
     let draw = &model.draw;
 
     // Handle the background
-    let background_color = model.bg_flash.get_current_color(app.time);
-    draw.background().color(background_color);
+    model.background.draw(draw, app.time);
 
-    // frames processing progress bar:
+    // Frames processing progress bar:
     if model.exit_requested {
         handle_exit_state(app, model);
         return; // Important: return here to not continue with normal rendering
     }
 
     // Set grid background base style
-    let bg_style = DrawStyle {
+    let grid_bg_style = DrawStyle {
         color: rgb(0.18, 0.18, 0.18),
         stroke_weight: model.default_stroke_weight,
     };
 
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
-        grid_instance.update(&bg_style, app.time, duration.as_secs_f32());
+        grid_instance.stage_active_segment_updates(
+            &grid_bg_style,
+            app.time,
+            duration.as_secs_f32(),
+        );
 
-        grid_instance.update_background_segments(&bg_style, app.time);
+        grid_instance.stage_background_segment_updates(&grid_bg_style, app.time);
 
         // Send update messages to grid & draw
-        grid_instance.trigger_screen_update(draw);
+        grid_instance.update_screen(draw);
     }
 
     if model.debug_flag {
@@ -356,9 +375,9 @@ fn view(_app: &App, model: &Model, frame: Frame) {
         .encode_render_pass(frame.texture_view(), &mut encoder);
 }
 
-// ******************************* State-triggered functions *****************************
+// ************************ Multi-grid style coordination  *****************************
 
-fn update_glyph_color_and_transition(_app: &App, model: &mut Model) {
+fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
     let color_hsl = hsl(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
@@ -522,7 +541,12 @@ fn launch_commands(app: &App, model: &mut Model) {
                 }
             }
             OscCommand::FlashBackground { r, g, b, duration } => {
-                model.bg_flash.start_flash(rgb(r, g, b), duration, app.time);
+                model.background.flash(rgb(r, g, b), duration, app.time);
+            }
+            OscCommand::ColorFadeBackground { r, g, b, duration } => {
+                model
+                    .background
+                    .color_fade(rgb(r, g, b), duration, app.time);
             }
             OscCommand::DisplayGlyph {
                 grid_name,

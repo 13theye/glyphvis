@@ -2,7 +2,8 @@
 // Effects Initializer
 
 use super::effects_manager::*;
-use super::grid_effects::PulseEffect;
+use super::grid_fx::PulseEffect;
+use super::*;
 
 pub fn fx_initialize() -> EffectsManager {
     let mut effects_manager = EffectsManager::new();

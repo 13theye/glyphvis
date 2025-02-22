@@ -1,9 +1,9 @@
 // src/views/mod.rs
 
+pub mod background;
 pub mod grid;
-//pub mod glyph;
-//pub mod ui;
 
+pub use background::BackgroundManager;
 pub use grid::cached_grid::{
     CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, SegmentAction, StyleUpdateMsg,
 };

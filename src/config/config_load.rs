@@ -2,6 +2,7 @@
 //
 // loading to config.toml
 
+use super::config_types::*;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,56 +12,16 @@ pub struct Config {
     pub paths: PathConfig,
     pub rendering: RenderConfig,
     pub window: WindowConfig,
-    pub output: OutputConfig,
+    pub osc: OscConfig,
+    pub frame_recorder: FrameRecorderConfig,
     pub style: StyleConfig,
     pub speed: SpeedConfig,
     pub animation: AnimationConfig,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RenderConfig {
-    pub texture_width: u32,
-    pub texture_height: u32,
-    pub texture_samples: u32,
-    pub arc_resolution: u32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct WindowConfig {
-    pub width: u32,
-    pub height: u32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct OutputConfig {
-    pub frame_limit: u32,
-    pub jpeg_quality: u8,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StyleConfig {
-    pub default_stroke_weight: f32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SpeedConfig {
-    pub bpm: u32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PathConfig {
-    pub project_file: String,
-    pub output_directory: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AnimationConfig {
-    pub power_on_flash_duration: f32,
-    pub power_on_fade_duration: f32,
-    pub power_off_fade_duration: f32,
-}
-
 impl Config {
+    /************************* Config file loading ********************/
+
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         // First try to load from the executable's directory
         if let Some(exe_config) = Self::load_from_exe_dir() {
@@ -88,6 +49,8 @@ impl Config {
         let content = fs::read_to_string("config.toml")?;
         Ok(toml::from_str(&content)?)
     }
+
+    /************************* Resolving paths to the types needed in app ********************/
 
     pub fn resolve_project_path(&self) -> PathBuf {
         if Path::new(&self.paths.project_file).is_absolute() {

@@ -1,31 +1,61 @@
 # config.toml
 
 [paths]
-#relative paths from executable directory
-project_file = "projects/small-cir-d2.json"
+#paths are relative to executable directory
+project_file = "projects/ulsan.json"
 output_directory = "frames"
 
 [rendering]
+# The left and right walls are 4742x1200. 
+# The center wall is 4542x1200. 
 texture_width = 4742
 texture_height = 1200
+
+# Please don't change these
 texture_samples = 4
 arc_resolution = 25
 
 [window]
+# The size of the monitoring window. 
+# Currently scaling to 2/5 of texture resolution
 width = 1897
 height = 480
 
-[output]
+[osc]
+# OSC listening port. UDP only.
+rx_port = 8000
+
+[frame_recorder]
+# Settings for the frame recorder
+# Frame limit of 30000 frames is about 16m40s at 30fps
 frame_limit = 30000
 jpeg_quality = 85
 
 [style]
+# To me this is the best looking line thickness
 default_stroke_weight = 5.1
 
 [speed]
+# This is not used. BPM will be controlled from Ableton.
 bpm = 120
 
 [animation]
-power_on_flash_duration = 0.035
-power_on_fade_duration = 0.15
-power_off_fade_duration = 0.3
+# Default values for animation and effects parameters.
+# I tried many combinations, this is the best looking to me.
+
+    [animation.power_on]
+    flash_duration = 0.035
+    fade_duration = 0.15
+
+    [animation.power_off]
+    fade_duration = 0.3
+
+    [animation.background_flash]
+    flash_duration = 0.035
+    fade_duration = 0.15
+
+    [animation.transition]
+    steps = 50
+    frame_duration = 0.1
+    wandering = 1.0
+    density = 0.00001

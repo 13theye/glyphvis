@@ -1,2 +1,4 @@
-pub mod glyph_controller;
-pub use glyph_controller::GlyphController;
+// src/controllers/mod.rs
+
+pub mod osc;
+pub use osc::{OscCommand, OscController, OscSender};

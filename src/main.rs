@@ -337,7 +337,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         grid_instance.stage_background_segment_updates(&grid_bg_style, app.time);
 
         // Send update messages to grid & draw
-        grid_instance.update_screen(draw);
+        grid_instance.draw_grid_segments(draw);
     }
 
     if model.debug_flag {

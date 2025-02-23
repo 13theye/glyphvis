@@ -66,7 +66,7 @@ impl SegmentGraph {
                 id.clone(),
                 SegmentNode {
                     id: id.clone(),
-                    tile_pos: segment.tile_pos,
+                    tile_pos: segment.tile_coordinate,
                     commands: segment.draw_commands.clone(),
                     connections: Vec::new(),
                 },

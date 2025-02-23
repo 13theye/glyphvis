@@ -133,20 +133,35 @@ pub struct StyleUpdateMsg {
     pub target_style: Option<DrawStyle>,
 }
 
+#[derive(Debug, Clone)]
+pub enum SegmentState {
+    Idle {
+        style: DrawStyle,
+    },
+    PoweringOn {
+        start_time: Instant,
+        target_style: DrawStyle,
+    },
+    PoweringOff {
+        start_time: Instant,
+        from_style: DrawStyle,
+        target_style: DrawStyle,
+    },
+    Active {
+        style: DrawStyle,
+    },
+}
+
 // A CachedSegment contains pre-processed draw commands for a segment
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     // metadata
     pub id: String,
-    pub tile_pos: (u32, u32),
-
-    // style states
-    previous_style: Option<DrawStyle>,
-    current_style: DrawStyle,
-    target_style: Option<DrawStyle>,
+    pub tile_coordinate: (u32, u32),
     pub layer: Layer,
-    pub current_action: Option<SegmentAction>,
-    activation_time: Option<Instant>,
+
+    // style state
+    state: SegmentState,
 
     // draw commands cache
     pub draw_commands: Vec<DrawCommand>,
@@ -158,37 +173,132 @@ pub struct CachedSegment {
 impl CachedSegment {
     pub fn new(
         element_id: String,
-        position: (u32, u32),
+        tile_coordinate: (u32, u32),
         path: &PathElement,
         edge_type: EdgeType,
         viewbox: &ViewBox,
         grid_dims: (u32, u32),
     ) -> Self {
         // create the transformation to this tile's position
-        let tile_transform = Self::calculate_tile_transform(viewbox, position, grid_dims);
+        let tile_transform = Self::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
 
         // Generate commands with combined transform
         let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform);
 
         Self {
             id: element_id,
-            tile_pos: position,
-
-            previous_style: None,
-            current_style: DrawStyle::default(),
-            target_style: None,
+            tile_coordinate,
             layer: Layer::Background,
-            current_action: None,
 
-            activation_time: None,
+            // segment starts out in the Idle state
+            state: SegmentState::Idle {
+                style: DrawStyle::default(),
+            },
+
             draw_commands,
             original_path: path.clone(),
             edge_type,
-            //transform: Transform2D::default(),
         }
     }
 
     /**************************  Style functions *************************************** */
+
+    fn update_animation(&mut self) {
+        match &self.state {
+            SegmentState::PoweringOn {
+                start_time,
+                target_style,
+            } => {
+                let elapsed_time = start_time.elapsed().as_secs_f32();
+                if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
+                    self.layer = Layer::Foreground;
+                } else {
+                    // Animation complete
+                    self.state = SegmentState::Active {
+                        style: target_style.clone(),
+                    }
+                }
+            }
+
+            SegmentState::PoweringOff {
+                start_time,
+                from_style: _,
+                target_style,
+            } => {
+                let elapsed_time = start_time.elapsed().as_secs_f32();
+                if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
+                    self.layer = Layer::Middle;
+                } else {
+                    // Animation complete
+                    self.layer = Layer::Background;
+                    self.state = SegmentState::Idle {
+                        style: target_style.clone(),
+                    }
+                }
+            }
+            _ => {}
+        };
+    }
+
+    pub fn get_current_style(&self) -> DrawStyle {
+        match &self.state {
+            SegmentState::Idle { style } | SegmentState::Active { style } => style.clone(),
+            SegmentState::PoweringOn { .. } => self.calculate_transition_style(),
+            SegmentState::PoweringOff { .. } => self.calculate_transition_style(),
+        }
+    }
+
+    fn calculate_transition_style(&self) -> DrawStyle {
+        match &self.state {
+            SegmentState::PoweringOn {
+                start_time,
+                target_style,
+            } => {
+                let elapsed_time = start_time.elapsed().as_secs_f32();
+                let flash_color = rgb(1.0, 1.0, 0.8);
+                let color = if elapsed_time <= FLASH_DURATION {
+                    flash_color
+                } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
+                    // Fade to target color
+                    let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
+                    Self::exp_ease(flash_color, target_style.color, fade_progress, 6.0)
+                } else {
+                    // Animation complete
+                    target_style.color
+                };
+
+                DrawStyle {
+                    color,
+                    stroke_weight: target_style.stroke_weight,
+                }
+            }
+
+            SegmentState::PoweringOff {
+                start_time,
+                from_style,
+                target_style,
+            } => {
+                let elapsed_time = start_time.elapsed().as_secs_f32();
+
+                // Calculate color based on animation phase
+                let color = if elapsed_time <= FADE_DURATION {
+                    // Fade to target color
+                    let fade_progress = elapsed_time / FADE_DURATION;
+                    Self::exp_ease(from_style.color, target_style.color, fade_progress, 6.0)
+                } else {
+                    // Animation complete
+                    target_style.color
+                };
+
+                DrawStyle {
+                    color,
+                    stroke_weight: target_style.stroke_weight,
+                }
+            }
+
+            SegmentState::Idle { style } | SegmentState::Active { style } => style.clone(),
+        }
+    }
 
     pub fn process_style_update_msg(&mut self, msg: &StyleUpdateMsg) {
         match (&msg.action, &msg.target_style) {
@@ -196,87 +306,38 @@ impl CachedSegment {
                 match action {
                     SegmentAction::On => {
                         // Update the style for active segments
-                        self.target_style = Some(target_style.clone());
-                        self.layer = Layer::Foreground;
-                        self.current_action = Some(SegmentAction::On);
-                        self.activation_time = Some(Instant::now());
+                        self.state = SegmentState::PoweringOn {
+                            start_time: Instant::now(),
+                            target_style: target_style.clone(),
+                        }
                     }
                     SegmentAction::Off => {
-                        if self.previous_style.is_none() {
-                            self.previous_style = Some(self.current_style.clone());
+                        self.state = SegmentState::PoweringOff {
+                            start_time: Instant::now(),
+                            from_style: self.get_current_style(),
+                            target_style: target_style.clone(),
                         }
-                        self.target_style = Some(target_style.clone());
-                        self.layer = Layer::Middle;
-                        self.current_action = Some(SegmentAction::Off);
-                        self.activation_time = Some(Instant::now());
                     }
                 }
             }
             (None, Some(target_style)) => {
                 // Direct style update without action
-                self.previous_style = Some(self.current_style.clone());
-                self.current_style = target_style.clone();
-                self.target_style = None;
+                self.state = SegmentState::Active {
+                    style: target_style.clone(),
+                }
             }
             _ => {}
         }
     }
 
-    /**************************  Physical modeling effect functions *************************************** */
+    /**************************  Helper functions *************************************** */
 
-    fn apply_power_on_effect(&mut self) {
-        if let (Some(target_style), Some(start_time)) = (&self.target_style, &self.activation_time)
-        {
-            let elapsed_time = start_time.elapsed().as_secs_f32();
-
-            let flash_color = rgb(1.0, 1.0, 0.8);
-            // Calculate color based on animation phase
-            let color = if elapsed_time <= FLASH_DURATION {
-                flash_color
-            } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
-                // Fade to target color
-                let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
-                Self::exp_ease(flash_color, target_style.color, fade_progress, 6.0)
-            } else {
-                // Animation complete
-                self.current_action = None;
-                self.activation_time = None;
-                target_style.color
-            };
-            self.current_style = DrawStyle {
-                color,
-                stroke_weight: target_style.stroke_weight,
-            };
-            self.previous_style = Some(self.current_style.clone());
-        }
-    }
-
-    fn apply_power_off_effect(&mut self) {
-        if let (Some(before_style), Some(target_style), Some(start_time)) = (
-            &self.previous_style,
-            &self.target_style,
-            &self.activation_time,
-        ) {
-            let elapsed_time = start_time.elapsed().as_secs_f32();
-
-            // Calculate color based on animation phase
-            let color = if elapsed_time <= FADE_DURATION {
-                // Fade to target color
-                let fade_progress = elapsed_time / FADE_DURATION;
-                Self::exp_ease(before_style.color, target_style.color, fade_progress, 6.0)
-            } else {
-                // Animation complete
-                self.current_action = None;
-                self.layer = Layer::Background;
-                self.activation_time = None;
-                self.previous_style = None;
-                target_style.color
-            };
-
-            self.current_style = DrawStyle {
-                color,
-                stroke_weight: target_style.stroke_weight,
-            }
+    pub fn is_idle(&self) -> bool {
+        match self.state {
+            SegmentState::Idle { .. } => true,
+            SegmentState::Active { .. }
+            | SegmentState::PoweringOn { .. }
+            | SegmentState::PoweringOff { .. } => false,
         }
     }
 
@@ -312,14 +373,9 @@ impl CachedSegment {
         Rgb::from(result)
     }
 
-    pub fn get_current_style(&self) -> DrawStyle {
-        self.current_style.clone()
-    }
-
     /**************************  Transform functions *************************************** */
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        //self.transform = transform.clone();
         for command in &mut self.draw_commands {
             command.apply_transform(transform);
         }
@@ -486,7 +542,7 @@ impl CachedGrid {
     }
 
     /************************ Rendering methods ****************************/
-    pub fn update_screen(
+    pub fn draw_grid_segments(
         &mut self,
         draw: &Draw,
         update_batch: &HashMap<String, StyleUpdateMsg>,
@@ -500,23 +556,14 @@ impl CachedGrid {
                 segment.process_style_update_msg(msg);
             }
 
-            if let Some(action) = &segment.current_action {
-                match action {
-                    SegmentAction::On => {
-                        segment.apply_power_on_effect();
-                    }
-                    SegmentAction::Off => {
-                        segment.apply_power_off_effect();
-                    }
-                }
-            }
+            segment.update_animation();
 
             // draw background layer first, or prepare other layers
             if visible {
                 match segment.layer {
                     Layer::Background => {
                         for command in &segment.draw_commands {
-                            command.draw(draw, &segment.current_style);
+                            command.draw(draw, &segment.get_current_style());
                         }
                     }
                     Layer::Middle => {
@@ -532,13 +579,13 @@ impl CachedGrid {
         if visible {
             for segment in middle_segments {
                 for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style);
+                    command.draw(draw, &segment.get_current_style());
                 }
             }
 
             for segment in foreground_segments {
                 for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style);
+                    command.draw(draw, &segment.get_current_style());
                 }
             }
         }
@@ -566,7 +613,7 @@ impl CachedGrid {
         let mut segments_by_pos: HashMap<(u32, u32), Vec<&CachedSegment>> = HashMap::new();
         for segment in segments.values() {
             segments_by_pos
-                .entry(segment.tile_pos)
+                .entry(segment.tile_coordinate)
                 .or_default()
                 .push(segment);
         }
@@ -584,15 +631,16 @@ impl CachedGrid {
 
             // Get potential neighbors based on edge type
             if let Some((neighbor_x, neighbor_y)) = get_neighbor_coords(
-                segment.tile_pos.0,
-                segment.tile_pos.1,
+                segment.tile_coordinate.0,
+                segment.tile_coordinate.1,
                 segment.edge_type,
                 grid_width,
                 grid_height,
             ) {
                 // check if neighbor has priority
-                let neighbor_has_priority = neighbor_x < segment.tile_pos.0
-                    || (neighbor_x == segment.tile_pos.1 && neighbor_y < segment.tile_pos.1);
+                let neighbor_has_priority = neighbor_x < segment.tile_coordinate.0
+                    || (neighbor_x == segment.tile_coordinate.1
+                        && neighbor_y < segment.tile_coordinate.1);
 
                 if neighbor_has_priority {
                     // Look for matching segments at neighbor position
@@ -602,8 +650,8 @@ impl CachedGrid {
 
                         for neighbor in neighbor_segments {
                             let direction = get_neighbor_direction(
-                                segment.tile_pos.0,
-                                segment.tile_pos.1,
+                                segment.tile_coordinate.0,
+                                segment.tile_coordinate.1,
                                 neighbor_x,
                                 neighbor_y,
                             );
@@ -648,7 +696,7 @@ impl CachedGrid {
     pub fn get_segments_at(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
         self.segments
             .values()
-            .filter(move |segment| segment.tile_pos == (x, y))
+            .filter(move |segment| segment.tile_coordinate == (x, y))
     }
 
     /*
@@ -766,7 +814,7 @@ mod tests {
             );
 
             assert_eq!(segment.id, "test");
-            assert_eq!(segment.tile_pos, (1, 1));
+            assert_eq!(segment.tile_coordinate, (1, 1));
             assert_eq!(segment.edge_type, EdgeType::None);
             assert!(!segment.draw_commands.is_empty());
         }

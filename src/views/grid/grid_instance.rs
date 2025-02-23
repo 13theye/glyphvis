@@ -181,7 +181,7 @@ impl GridInstance {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].layer == Layer::Background
-                && segment.current_action.is_none()
+                && segment.is_idle()
             {
                 self.update_batch.insert(
                     segment_id.clone(),
@@ -244,9 +244,9 @@ impl GridInstance {
         self.update_batch.clear();
     }
 
-    pub fn update_screen(&mut self, draw: &Draw) {
+    pub fn draw_grid_segments(&mut self, draw: &Draw) {
         self.grid
-            .update_screen(draw, &self.update_batch, self.visible);
+            .draw_grid_segments(draw, &self.update_batch, self.visible);
         self.clear_update_batch();
     }
 

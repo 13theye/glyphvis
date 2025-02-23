@@ -7,11 +7,7 @@
 // It doesn't need to finish to smoothly start transitioning to
 // the next glyph.
 
-use crate::{
-    config::TransitionConfig,
-    services::SegmentGraph,
-    views::{CachedGrid, DrawStyle},
-};
+use crate::{config::TransitionConfig, services::SegmentGraph, views::GridInstance};
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
 
@@ -102,19 +98,21 @@ impl TransitionEngine {
 
     pub fn generate_changes(
         &self,
-        grid: &CachedGrid,
-        optional_config: &Option<TransitionConfig>,
-        start_segments: &HashSet<String>,
+        grid_instance: &GridInstance,
         target_segments: &HashSet<String>,
-        target_style: &DrawStyle,
-        segment_graph: &SegmentGraph,
         immediate: bool, // when true, all segments change at once
     ) -> Vec<Vec<SegmentChange>> {
-        let config = if let Some(config) = optional_config {
+        let grid = &grid_instance.grid;
+        let start_segments = &grid_instance.current_active_segments;
+        let target_style = &grid_instance.effect_target_style;
+        let segment_graph = &grid_instance.graph;
+
+        let config = if let Some(config) = &grid_instance.transition_config {
             config
         } else {
             &self.default_config
         };
+
         let mut rng = thread_rng();
         let mut changes_by_step: Vec<Vec<SegmentChange>> =
             (0..config.steps).map(|_| Vec::new()).collect();

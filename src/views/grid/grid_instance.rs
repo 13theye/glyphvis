@@ -271,12 +271,8 @@ impl GridInstance {
         };
 
         let changes = engine.generate_changes(
-            &self.grid,
-            &self.transition_config,
-            &self.current_active_segments,
+            self,
             target_segments,
-            &self.effect_target_style,
-            &self.graph,
             self.immediately_change, // when true, all segments change at once
         );
 

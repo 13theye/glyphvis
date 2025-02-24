@@ -159,31 +159,38 @@ impl GridInstance {
 
     /************************** New Update System ***************************** */
 
+    pub fn update(&mut self, draw: &Draw, bg_style: &DrawStyle, time: f32, dt: f32) {
+        self.stage_active_segment_updates(bg_style, time, dt);
+        self.stage_background_segment_updates(bg_style, time);
+        self.draw_grid_segments(draw);
+    }
+
     fn commit_segment_update_message(&mut self, segment: &str, style_update_msg: StyleUpdateMsg) {
         self.update_batch
             .insert(segment.to_string(), style_update_msg);
     }
 
-    pub fn stage_background_segment_updates(&mut self, bg_style: &DrawStyle, time: f32) {
+    fn stage_background_segment_updates(&mut self, bg_style: &DrawStyle, time: f32) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
-                && segment.layer == Layer::Background
+                && self.grid.segments[segment_id].layer == Layer::Background
                 && segment.is_idle()
             {
-                let update = StyleUpdateMsg {
-                    action: None,
-                    target_style: Some(
-                        self.effects_manager
-                            .apply_grid_effects(bg_style.clone(), time),
-                    ),
-                };
-
-                self.commit_segment_update_message(segment_id, update);
+                self.update_batch.insert(
+                    segment_id.clone(),
+                    StyleUpdateMsg {
+                        action: None,
+                        target_style: Some(
+                            self.effects_manager
+                                .apply_grid_effects(bg_style.clone(), time),
+                        ),
+                    },
+                );
             }
         }
     }
 
-    pub fn stage_active_segment_updates(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
+    fn stage_active_segment_updates(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
         // update movement animation if active
         self.update_movement(dt);
 
@@ -231,11 +238,11 @@ impl GridInstance {
         }
     }
 
-    pub fn clear_update_batch(&mut self) {
+    fn clear_update_batch(&mut self) {
         self.update_batch.clear();
     }
 
-    pub fn draw_grid_segments(&mut self, draw: &Draw) {
+    fn draw_grid_segments(&mut self, draw: &Draw) {
         self.grid
             .draw_grid_segments(draw, &self.update_batch, self.visible);
         self.clear_update_batch();

@@ -328,16 +328,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
-        grid_instance.stage_active_segment_updates(
-            &grid_bg_style,
-            app.time,
-            duration.as_secs_f32(),
-        );
-
-        grid_instance.stage_background_segment_updates(&grid_bg_style, app.time);
-
-        // Send update messages to grid & draw
-        grid_instance.draw_grid_segments(draw);
+        let dt = duration.as_secs_f32();
+        grid_instance.update(draw, &grid_bg_style, app.time, dt);
     }
 
     if model.debug_flag {

@@ -241,19 +241,11 @@ impl GridInstance {
 
             // Convert frame difference into on/off messages
             if !updates.segments_on.is_empty() {
-                for segment_id in updates.segments_on {
-                    let target_style = self.effect_target_style.clone();
-                    let update = StyleUpdateMsg::new(SegmentAction::On, target_style);
-                    self.commit_segment_update_message(&segment_id, update);
-                }
+                self.turn_on_segments(updates.segments_on, &target_style);
             }
 
             if !updates.segments_off.is_empty() {
-                for segment_id in updates.segments_off {
-                    let target_style = bg_style.clone();
-                    let update = StyleUpdateMsg::new(SegmentAction::Off, target_style);
-                    self.commit_segment_update_message(&segment_id, update);
-                }
+                self.turn_off_segments(updates.segments_off, bg_style);
             }
         }
     }

@@ -133,6 +133,15 @@ pub struct StyleUpdateMsg {
     pub target_style: Option<DrawStyle>,
 }
 
+impl StyleUpdateMsg {
+    pub fn new(action: SegmentAction, target_style: DrawStyle) -> Self {
+        Self {
+            action: Some(action),
+            target_style: Some(target_style),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum SegmentState {
     Idle {

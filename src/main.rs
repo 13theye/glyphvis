@@ -329,8 +329,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
         let dt = duration.as_secs_f32();
-
-        // update movement animation if active
         grid_instance.update(draw, &grid_bg_style, app.time, dt);
     }
 

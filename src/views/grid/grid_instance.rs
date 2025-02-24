@@ -153,7 +153,14 @@ impl GridInstance {
 
     /************************** New Update System ***************************** */
 
-    pub fn turn_on_segments(&mut self, segments: HashSet<String>, target_style: &DrawStyle) {
+    pub fn update(&mut self, draw: &Draw, bg_style: &DrawStyle, time: f32, dt: f32) {
+        self.update_movement(dt);
+        self.update_transition_segments(bg_style, time, dt);
+        self.update_background_segments(bg_style, time);
+        self.draw_grid_segments(draw);
+    }
+
+    fn turn_on_segments(&mut self, segments: HashSet<String>, target_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -165,7 +172,7 @@ impl GridInstance {
         }
     }
 
-    pub fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: &DrawStyle) {
+    fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -177,7 +184,7 @@ impl GridInstance {
         }
     }
 
-    pub fn stage_background_segment_updates(&mut self, bg_style: &DrawStyle, time: f32) {
+    fn update_background_segments(&mut self, bg_style: &DrawStyle, time: f32) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].layer == Layer::Background
@@ -197,12 +204,9 @@ impl GridInstance {
         }
     }
 
-    pub fn stage_active_segment_updates(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
+    fn update_transition_segments(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
         // extract target style
         let target_style = self.effect_target_style.clone();
-
-        // update movement animation if active
-        self.update_movement(dt);
 
         // Get transition updates if any exist
         let transition_updates = if let Some(transition) = &mut self.active_transition {
@@ -240,18 +244,14 @@ impl GridInstance {
         }
     }
 
-    pub fn clear_update_batch(&mut self) {
+    fn clear_update_batch(&mut self) {
         self.update_batch.clear();
     }
 
-    pub fn draw_grid_segments(&mut self, draw: &Draw) {
+    fn draw_grid_segments(&mut self, draw: &Draw) {
         self.grid
             .draw_grid_segments(draw, &self.update_batch, self.visible);
         self.clear_update_batch();
-    }
-
-    pub fn set_active_segments(&mut self, segments: HashSet<String>) {
-        self.current_active_segments = segments;
     }
 
     pub fn set_effect_target_style(&mut self, style: DrawStyle) {

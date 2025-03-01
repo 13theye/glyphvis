@@ -6,6 +6,13 @@ use std::error::Error;
 
 #[derive(Debug)]
 pub enum OscCommand {
+    BackboneFadeGrid {
+        name: String,
+        r: f32,
+        g: f32,
+        b: f32,
+        duration: f32,
+    },
     CreateGrid {
         name: String,
         show: String,
@@ -87,6 +94,19 @@ impl OscController {
         for (packet, _addr) in self.receiver.try_iter() {
             for message in packet.into_msgs() {
                 match message.addr.as_str() {
+                    "/grid/backbone_fade" => {
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(duration)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::BackboneFadeGrid {
+                                name: name.clone(),
+                                r: *r,
+                                g: *g,
+                                b: *b,
+                                duration: *duration,
+                            });
+                        }
+                    }
                     "/grid/create" => {
                         if let [osc::Type::String(name), osc::Type::String(show), osc::Type::Float(x), osc::Type::Float(y), osc::Type::Float(rot)] =
                             &message.args[..]
@@ -292,6 +312,20 @@ impl OscSender {
     pub fn send_rotate_grid(&self, name: &str, angle: f32) {
         let addr = "/grid/rotate".to_string();
         let args = vec![osc::Type::String(name.to_string()), osc::Type::Float(angle)];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_grid_backbone_fade(&self, grid_name: &str, r: f32, g: f32, b: f32, duration: f32) {
+        let addr = "/grid/backbone_fade".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Float(r),
+            osc::Type::Float(g),
+            osc::Type::Float(b),
+            osc::Type::Float(duration),
+        ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

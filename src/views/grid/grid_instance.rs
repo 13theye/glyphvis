@@ -43,7 +43,7 @@ pub struct GridInstance {
     pub target_segments: Option<HashSet<String>>,
     pub target_style: DrawStyle,
 
-    pub backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
+    pub backbone_effects: HashMap<u32, Box<dyn BackboneEffect>>,
     pub backbone_style: DrawStyle,
 
     pub colorful_flag: bool, // enables random-ish color effect target style
@@ -94,7 +94,10 @@ impl GridInstance {
             target_style: DrawStyle::default(),
 
             backbone_effects: HashMap::new(),
-            backbone_style: DrawStyle::default(),
+            backbone_style: DrawStyle {
+                color: rgb(0.2, 0.2, 0.2),
+                stroke_weight: 5.1,
+            },
 
             colorful_flag: false,
 
@@ -169,7 +172,7 @@ impl GridInstance {
         // update Grid Instance State
         self.update_movement(dt);
         self.update_backbone_style(time);
-        self.cleanup_backbone_effects();
+        self.cleanup_backbone_effects(time);
 
         // push updates to segments
         self.update_transition_segments(time, dt);
@@ -202,7 +205,7 @@ impl GridInstance {
     }
 
     fn update_backbone_style(&mut self, time: f32) {
-        self.backbone_style = self.apply_backbone_effects(&self.backbone_style, time)
+        self.backbone_style = self.apply_backbone_effects(&self.backbone_style, time);
     }
 
     fn update_backbone_segments(&mut self) {
@@ -211,6 +214,7 @@ impl GridInstance {
                 && self.grid.segments[segment_id].layer == Layer::Background
                 && segment.is_idle()
             {
+                println!("found one {}", segment_id);
                 self.update_batch.insert(
                     segment_id.clone(),
                     StyleUpdateMsg {
@@ -424,7 +428,7 @@ impl GridInstance {
         let mut current_style = base_style.clone();
 
         for effect in self.backbone_effects.values() {
-            if effect.is_finished() {
+            if effect.is_finished(time) {
                 continue;
             }
 
@@ -434,26 +438,27 @@ impl GridInstance {
         current_style
     }
 
-    fn cleanup_backbone_effects(&mut self) {
-        for effect_name in self.get_finished_effects() {
-            self.backbone_effects.remove(&effect_name);
+    fn cleanup_backbone_effects(&mut self, time: f32) {
+        for effect_id in self.get_finished_effects(time) {
+            println!("Removing effect {}", effect_id);
+            self.backbone_effects.remove(&effect_id);
         }
     }
 
-    fn get_finished_effects(&self) -> Vec<String> {
+    fn get_finished_effects(&self, time: f32) -> Vec<u32> {
         let mut finished_effects = Vec::new();
-        for effect_name in self.backbone_effects.keys() {
-            if let Some(effect) = self.backbone_effects.get(effect_name) {
-                if effect.is_finished() {
-                    finished_effects.push(effect_name.clone());
+        for effect_id in self.backbone_effects.keys() {
+            if let Some(effect) = self.backbone_effects.get(effect_id) {
+                if effect.is_finished(time) {
+                    finished_effects.push(*effect_id);
                 }
             }
         }
         finished_effects
     }
 
-    fn add_backbone_effect(&mut self, name: String, effect: Box<dyn BackboneEffect>) {
-        self.backbone_effects.insert(name, effect);
+    pub fn add_backbone_effect(&mut self, id: u32, effect: Box<dyn BackboneEffect>) {
+        self.backbone_effects.insert(id, effect);
     }
     /*********************** Debug Helper ******************************* */
 

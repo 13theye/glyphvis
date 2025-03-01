@@ -29,7 +29,7 @@ impl BackboneEffect for PulseEffect {
     }
 
     // this is a continuous effect
-    fn is_finished(&self) -> bool {
+    fn is_finished(&self, _time: f32) -> bool {
         false
     }
 }
@@ -49,7 +49,7 @@ impl BackboneEffect for ColorCycleEffect {
         }
     }
 
-    fn is_finished(&self) -> bool {
+    fn is_finished(&self, _time: f32) -> bool {
         false
     }
 }
@@ -64,7 +64,8 @@ pub struct FadeEffect {
 
 impl BackboneEffect for FadeEffect {
     fn update(&self, current_style: &DrawStyle, time: f32) -> DrawStyle {
-        let t = (time / self.duration).clamp(0.0, 1.0);
+        let elapsed = time - self.start_time;
+        let t = (elapsed / self.duration).clamp(0.0, 1.0);
 
         let current_color = Hsl::from(current_style.color);
         let current_hue: f32 = current_color.hue.into();
@@ -85,7 +86,9 @@ impl BackboneEffect for FadeEffect {
         }
     }
 
-    fn is_finished(&self) -> bool {
-        false
+    fn is_finished(&self, time: f32) -> bool {
+        let elapsed = time - self.start_time;
+        println!("Elapsed: {}, Duration: {}", elapsed, self.duration);
+        elapsed > self.duration
     }
 }

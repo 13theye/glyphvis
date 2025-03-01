@@ -1,6 +1,6 @@
 // src/main.rs
 use nannou::prelude::*;
-use rand::Rng;
+use rand::{Rng, RngCore};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -8,6 +8,7 @@ use glyphvis::{
     animation::{EasingType, MovementEngine, TransitionEngine},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
+    effects::FadeEffect,
     models::Project,
     services::{FrameRecorder, OutputFormat},
     views::{BackgroundManager, DrawStyle, GridInstance},
@@ -200,6 +201,20 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::Key2 => {
             for name in model.grids.keys() {
                 model.osc_sender.send_glyph(name, 2, 0);
+            }
+        }
+        Key::Key9 => {
+            for name in model.grids.keys() {
+                model
+                    .osc_sender
+                    .send_grid_backbone_fade(name, 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+        Key::Key0 => {
+            for name in model.grids.keys() {
+                model
+                    .osc_sender
+                    .send_grid_backbone_fade(name, 0.2, 0.2, 0.2, 1.0);
             }
         }
         Key::G => {
@@ -490,6 +505,27 @@ fn render_progress(app: &App, model: &mut Model) {
 fn launch_commands(app: &App, model: &mut Model) {
     for command in model.osc_controller.take_commands() {
         match command {
+            OscCommand::BackboneFadeGrid {
+                name,
+                r,
+                g,
+                b,
+                duration,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&name) {
+                    let effect = FadeEffect {
+                        base_style: grid.backbone_style.clone(),
+                        target_style: DrawStyle {
+                            color: rgb(r, g, b),
+                            stroke_weight: grid.backbone_style.stroke_weight,
+                        },
+                        duration,
+                        start_time: app.time,
+                        is_active: true,
+                    };
+                    grid.add_backbone_effect(model.random.next_u32(), Box::new(effect));
+                }
+            }
             OscCommand::CreateGrid {
                 name,
                 show,

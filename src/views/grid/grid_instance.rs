@@ -43,7 +43,7 @@ pub struct GridInstance {
     pub target_segments: Option<HashSet<String>>,
     pub target_style: DrawStyle,
 
-    pub backbone_effects: HashMap<u32, Box<dyn BackboneEffect>>,
+    pub backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
     pub backbone_style: DrawStyle,
 
     pub colorful_flag: bool, // enables random-ish color effect target style
@@ -95,7 +95,7 @@ impl GridInstance {
 
             backbone_effects: HashMap::new(),
             backbone_style: DrawStyle {
-                color: rgb(0.2, 0.2, 0.2),
+                color: rgb(0.19, 0.19, 0.19),
                 stroke_weight: 5.1,
             },
 
@@ -438,26 +438,26 @@ impl GridInstance {
     }
 
     fn cleanup_backbone_effects(&mut self, time: f32) {
-        for effect_id in self.get_finished_effects(time) {
-            println!("Removing effect {}", effect_id);
-            self.backbone_effects.remove(&effect_id);
+        for effect_type in self.get_finished_effects(time) {
+            println!("Removing effect {}", effect_type);
+            self.backbone_effects.remove(&effect_type);
         }
     }
 
-    fn get_finished_effects(&self, time: f32) -> Vec<u32> {
+    fn get_finished_effects(&self, time: f32) -> Vec<String> {
         let mut finished_effects = Vec::new();
-        for effect_id in self.backbone_effects.keys() {
-            if let Some(effect) = self.backbone_effects.get(effect_id) {
+        for effect_type in self.backbone_effects.keys() {
+            if let Some(effect) = self.backbone_effects.get(effect_type) {
                 if effect.is_finished(time) {
-                    finished_effects.push(*effect_id);
+                    finished_effects.push(effect_type.clone());
                 }
             }
         }
         finished_effects
     }
 
-    pub fn add_backbone_effect(&mut self, id: u32, effect: Box<dyn BackboneEffect>) {
-        self.backbone_effects.insert(id, effect);
+    pub fn add_backbone_effect(&mut self, effect_type: String, effect: Box<dyn BackboneEffect>) {
+        self.backbone_effects.insert(effect_type, effect);
     }
     /*********************** Debug Helper ******************************* */
 

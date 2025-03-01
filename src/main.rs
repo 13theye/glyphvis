@@ -1,6 +1,6 @@
 // src/main.rs
 use nannou::prelude::*;
-use rand::{Rng, RngCore};
+use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -207,14 +207,14 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             for name in model.grids.keys() {
                 model
                     .osc_sender
-                    .send_grid_backbone_fade(name, 1.0, 1.0, 1.0, 10.0);
+                    .send_grid_backbone_fade(name, 0.0, 0.0, 0.0, 3.0);
             }
         }
         Key::Key0 => {
             for name in model.grids.keys() {
                 model
                     .osc_sender
-                    .send_grid_backbone_fade(name, 0.2, 0.2, 0.2, 10.0);
+                    .send_grid_backbone_fade(name, 0.19, 0.19, 0.19, 3.0);
             }
         }
         Key::G => {
@@ -523,7 +523,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                         start_time: app.time,
                         is_active: true,
                     };
-                    grid.add_backbone_effect(model.random.next_u32(), Box::new(effect));
+                    grid.add_backbone_effect("backbone".to_string(), Box::new(effect));
                 }
             }
             OscCommand::CreateGrid {

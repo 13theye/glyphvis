@@ -67,17 +67,18 @@ impl BackboneEffect for FadeEffect {
         let elapsed = time - self.start_time;
         let t = (elapsed / self.duration).clamp(0.0, 1.0);
 
-        let current_color = Hsl::from(current_style.color);
-        let current_hue: f32 = current_color.hue.into();
+        let base_color: Hsl<_, _> = Hsl::from(self.base_style.color);
+        let base_hue: f32 = base_color.hue.into();
+
         let target_color = Hsl::from(self.target_style.color);
         let target_hue: f32 = target_color.hue.into();
 
-        let new_hue = nannou::color::RgbHue::from(current_hue + (target_hue - current_hue) * t);
+        let new_hue = nannou::color::RgbHue::from(base_hue + (target_hue - base_hue) * t);
 
         let interpolated_color = Hsl::new(
             new_hue,
-            current_color.saturation + (target_color.saturation - current_color.saturation) * t,
-            current_color.lightness + (target_color.lightness - current_color.lightness) * t,
+            base_color.saturation + (target_color.saturation - base_color.saturation) * t,
+            base_color.lightness + (target_color.lightness - base_color.lightness) * t,
         );
 
         DrawStyle {
@@ -88,7 +89,6 @@ impl BackboneEffect for FadeEffect {
 
     fn is_finished(&self, time: f32) -> bool {
         let elapsed = time - self.start_time;
-        println!("Elapsed: {}, Duration: {}", elapsed, self.duration);
         elapsed > self.duration
     }
 }

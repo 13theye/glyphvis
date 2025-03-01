@@ -214,11 +214,10 @@ impl GridInstance {
                 && self.grid.segments[segment_id].layer == Layer::Background
                 && segment.is_idle()
             {
-                println!("found one {}", segment_id);
                 self.update_batch.insert(
                     segment_id.clone(),
                     StyleUpdateMsg {
-                        action: None,
+                        action: Some(SegmentAction::BackboneUpdate),
                         target_style: Some(self.backbone_style.clone()),
                     },
                 );

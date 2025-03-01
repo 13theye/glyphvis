@@ -207,14 +207,14 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             for name in model.grids.keys() {
                 model
                     .osc_sender
-                    .send_grid_backbone_fade(name, 1.0, 1.0, 1.0, 1.0);
+                    .send_grid_backbone_fade(name, 1.0, 1.0, 1.0, 10.0);
             }
         }
         Key::Key0 => {
             for name in model.grids.keys() {
                 model
                     .osc_sender
-                    .send_grid_backbone_fade(name, 0.2, 0.2, 0.2, 1.0);
+                    .send_grid_backbone_fade(name, 0.2, 0.2, 0.2, 10.0);
             }
         }
         Key::G => {

@@ -125,6 +125,7 @@ pub enum Layer {
 pub enum SegmentAction {
     On,
     Off,
+    BackboneUpdate,
 }
 
 #[derive(Debug, Clone)]
@@ -325,6 +326,11 @@ impl CachedSegment {
                             start_time: Instant::now(),
                             from_style: self.get_current_style(),
                             target_style: target_style.clone(),
+                        }
+                    }
+                    SegmentAction::BackboneUpdate => {
+                        self.state = SegmentState::Idle {
+                            style: target_style.clone(),
                         }
                     }
                 }

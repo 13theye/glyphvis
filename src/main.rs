@@ -320,16 +320,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return; // Important: return here to not continue with normal rendering
     }
 
-    // Set grid background base style
-    let grid_bg_style = DrawStyle {
-        color: rgb(0.18, 0.18, 0.18),
-        stroke_weight: model.default_stroke_weight,
-    };
-
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
         let dt = duration.as_secs_f32();
-        grid_instance.update(draw, &grid_bg_style, app.time, dt);
+        grid_instance.update(draw, app.time, dt);
     }
 
     if model.debug_flag {

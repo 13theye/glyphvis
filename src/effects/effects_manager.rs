@@ -46,7 +46,7 @@ impl EffectsManager {
     }
 
     // Apply all active effects
-    pub fn apply_grid_effects(&self, base_style: DrawStyle, time: f32) -> DrawStyle {
+    pub fn apply_backbone_effects(&self, base_style: DrawStyle, time: f32) -> DrawStyle {
         if self.effects.is_empty() {
             return base_style;
         }
@@ -59,7 +59,7 @@ impl EffectsManager {
             }
 
             match &instance.effect {
-                EffectType::Grid(effect) => {
+                EffectType::Backbone(effect) => {
                     current_style = effect.update(&current_style, time);
                 }
             }
@@ -71,7 +71,7 @@ impl EffectsManager {
     // Clean up finished effects
     pub fn cleanup(&mut self) {
         self.effects.retain(|_, instance| match &instance.effect {
-            EffectType::Grid(effect) => !effect.is_finished(),
+            EffectType::Backbone(effect) => !effect.is_finished(),
         });
     }
 

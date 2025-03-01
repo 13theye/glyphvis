@@ -1,29 +1,15 @@
 use crate::views::DrawStyle;
 use nannou::prelude::*;
 
+pub mod backbone_fx;
 pub mod background_fx;
-pub mod effects_manager;
-pub mod grid_fx;
-pub mod initializer;
 
 pub use background_fx::{BackgroundColorFade, BackgroundFlash};
-pub use effects_manager::*;
-pub use initializer::fx_initialize;
-
-pub enum EffectType {
-    Grid(Box<dyn Effect>),
-}
 
 // the base Effect trait which all effects must implement
-pub trait Effect {
+pub trait BackboneEffect {
     fn update(&self, style: &DrawStyle, time: f32) -> DrawStyle;
     fn is_finished(&self) -> bool;
-}
-
-// Effect instance with metadata
-struct EffectInstance {
-    effect: EffectType,
-    is_active: bool,
 }
 
 pub trait BackgroundEffect {

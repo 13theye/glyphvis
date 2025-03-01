@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     animation::{Movement, MovementEngine, Transition, TransitionEngine},
     config::TransitionConfig,
-    effects::{fx_initialize, EffectsManager},
+    effects::BackboneEffect,
     models::Project,
     services::SegmentGraph,
     views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
@@ -31,7 +31,6 @@ pub struct GridInstance {
     index_max: usize,
 
     // effects state
-    pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
     pub immediately_change: bool,
@@ -42,7 +41,11 @@ pub struct GridInstance {
     // inside-grid state
     pub current_active_segments: HashSet<String>,
     pub target_segments: Option<HashSet<String>>,
-    pub effect_target_style: DrawStyle,
+    pub target_style: DrawStyle,
+
+    pub backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
+    pub backbone_style: DrawStyle,
+
     pub colorful_flag: bool, // enables random-ish color effect target style
 
     // overall grid state
@@ -88,10 +91,13 @@ impl GridInstance {
 
             current_active_segments: HashSet::new(),
             target_segments: None,
-            effect_target_style: DrawStyle::default(),
+            target_style: DrawStyle::default(),
+
+            backbone_effects: HashMap::new(),
+            backbone_style: DrawStyle::default(),
+
             colorful_flag: false,
 
-            effects_manager: fx_initialize(),
             active_transition: None,
             transition_config: None,
             immediately_change: false,
@@ -159,10 +165,15 @@ impl GridInstance {
 
     /************************** New Update System ***************************** */
 
-    pub fn update(&mut self, draw: &Draw, bg_style: &DrawStyle, time: f32, dt: f32) {
+    pub fn update(&mut self, draw: &Draw, time: f32, dt: f32) {
+        // update Grid Instance State
         self.update_movement(dt);
-        self.update_transition_segments(bg_style, time, dt);
-        self.update_background_segments(bg_style, time);
+        self.update_backbone_style(time);
+        self.cleanup_backbone_effects();
+
+        // push updates to segments
+        self.update_transition_segments(time, dt);
+        self.update_backbone_segments();
         self.draw_grid_segments(draw);
     }
 
@@ -178,19 +189,23 @@ impl GridInstance {
         }
     }
 
-    fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: &DrawStyle) {
+    fn turn_off_segments(&mut self, segments: HashSet<String>, backbone_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
                 StyleUpdateMsg {
                     action: Some(SegmentAction::Off),
-                    target_style: Some(bg_style.clone()),
+                    target_style: Some(backbone_style.clone()),
                 },
             );
         }
     }
 
-    fn update_background_segments(&mut self, bg_style: &DrawStyle, time: f32) {
+    fn update_backbone_style(&mut self, time: f32) {
+        self.backbone_style = self.apply_backbone_effects(&self.backbone_style, time)
+    }
+
+    fn update_backbone_segments(&mut self) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].layer == Layer::Background
@@ -200,19 +215,17 @@ impl GridInstance {
                     segment_id.clone(),
                     StyleUpdateMsg {
                         action: None,
-                        target_style: Some(
-                            self.effects_manager
-                                .apply_grid_effects(bg_style.clone(), time),
-                        ),
+                        target_style: Some(self.backbone_style.clone()),
                     },
                 );
             }
         }
     }
 
-    fn update_transition_segments(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
+    fn update_transition_segments(&mut self, _time: f32, dt: f32) {
         // extract target style
-        let target_style = self.effect_target_style.clone();
+        let target_style = self.target_style.clone();
+        let backbone_style = self.backbone_style.clone();
 
         // Get transition updates if any exist
         let transition_updates = if let Some(transition) = &mut self.active_transition {
@@ -245,7 +258,7 @@ impl GridInstance {
             }
 
             if !updates.segments_off.is_empty() {
-                self.turn_off_segments(updates.segments_off, bg_style);
+                self.turn_off_segments(updates.segments_off, &backbone_style);
             }
         }
     }
@@ -261,7 +274,7 @@ impl GridInstance {
     }
 
     pub fn set_effect_target_style(&mut self, style: DrawStyle) {
-        self.effect_target_style = style;
+        self.target_style = style;
     }
 
     /*********************** Segment Transitions  *****************************/
@@ -402,6 +415,46 @@ impl GridInstance {
         }
     }
 
+    /********************** Backbone effects **************************** */
+    fn apply_backbone_effects(&self, base_style: &DrawStyle, time: f32) -> DrawStyle {
+        if self.backbone_effects.is_empty() {
+            return base_style.clone();
+        }
+
+        let mut current_style = base_style.clone();
+
+        for effect in self.backbone_effects.values() {
+            if effect.is_finished() {
+                continue;
+            }
+
+            current_style = effect.update(&current_style, time);
+        }
+
+        current_style
+    }
+
+    fn cleanup_backbone_effects(&mut self) {
+        for effect_name in self.get_finished_effects() {
+            self.backbone_effects.remove(&effect_name);
+        }
+    }
+
+    fn get_finished_effects(&self) -> Vec<String> {
+        let mut finished_effects = Vec::new();
+        for effect_name in self.backbone_effects.keys() {
+            if let Some(effect) = self.backbone_effects.get(effect_name) {
+                if effect.is_finished() {
+                    finished_effects.push(effect_name.clone());
+                }
+            }
+        }
+        finished_effects
+    }
+
+    fn add_backbone_effect(&mut self, name: String, effect: Box<dyn BackboneEffect>) {
+        self.backbone_effects.insert(name, effect);
+    }
     /*********************** Debug Helper ******************************* */
 
     pub fn print_grid_info(&self) {

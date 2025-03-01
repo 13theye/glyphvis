@@ -104,7 +104,7 @@ impl TransitionEngine {
     ) -> Vec<Vec<SegmentChange>> {
         let grid = &grid_instance.grid;
         let start_segments = &grid_instance.current_active_segments;
-        let target_style = &grid_instance.effect_target_style;
+        let target_style = &grid_instance.target_style;
         let segment_graph = &grid_instance.graph;
 
         let config = if let Some(config) = &grid_instance.transition_config {

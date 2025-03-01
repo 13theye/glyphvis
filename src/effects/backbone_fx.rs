@@ -1,7 +1,7 @@
 // src/effects/grid_effects.rs
 // these effects are applied to sets of segments, like Glyphs and Grids.
 
-use super::Effect;
+use super::BackboneEffect;
 use crate::views::DrawStyle;
 use nannou::prelude::*;
 
@@ -11,7 +11,7 @@ pub struct PulseEffect {
     pub max_brightness: f32,
 }
 
-impl Effect for PulseEffect {
+impl BackboneEffect for PulseEffect {
     fn update(&self, start_style: &DrawStyle, time: f32) -> DrawStyle {
         let brightness = (time * self.frequency).sin() * 0.5 + 0.5;
         let brightness =
@@ -40,12 +40,48 @@ pub struct ColorCycleEffect {
     pub brightness: f32,
 }
 
-impl Effect for ColorCycleEffect {
+impl BackboneEffect for ColorCycleEffect {
     fn update(&self, base_style: &DrawStyle, time: f32) -> DrawStyle {
         let hue = (time * self.frequency) % 1.0;
         DrawStyle {
-            color: hsv(hue, self.saturation, self.brightness).into(),
+            color: hsl(hue, self.saturation, self.brightness).into(),
             stroke_weight: base_style.stroke_weight,
+        }
+    }
+
+    fn is_finished(&self) -> bool {
+        false
+    }
+}
+
+pub struct FadeEffect {
+    pub base_style: DrawStyle,
+    pub target_style: DrawStyle,
+    pub duration: f32,
+    pub start_time: f32,
+    pub is_active: bool,
+}
+
+impl BackboneEffect for FadeEffect {
+    fn update(&self, current_style: &DrawStyle, time: f32) -> DrawStyle {
+        let t = (time / self.duration).clamp(0.0, 1.0);
+
+        let current_color = Hsl::from(current_style.color);
+        let current_hue: f32 = current_color.hue.into();
+        let target_color = Hsl::from(self.target_style.color);
+        let target_hue: f32 = target_color.hue.into();
+
+        let new_hue = nannou::color::RgbHue::from(current_hue + (target_hue - current_hue) * t);
+
+        let interpolated_color = Hsl::new(
+            new_hue,
+            current_color.saturation + (target_color.saturation - current_color.saturation) * t,
+            current_color.lightness + (target_color.lightness - current_color.lightness) * t,
+        );
+
+        DrawStyle {
+            color: Rgb::from(interpolated_color),
+            ..*current_style
         }
     }
 

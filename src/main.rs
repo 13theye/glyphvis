@@ -523,7 +523,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                         start_time: app.time,
                         is_active: true,
                     };
-                    grid.add_backbone_effect("backbone", Box::new(effect));
+                    grid.init_backbone_effect("backbone", Box::new(effect));
                 }
             }
             OscCommand::CreateGrid {

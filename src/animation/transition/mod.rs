@@ -11,7 +11,7 @@ use crate::{config::TransitionConfig, services::SegmentGraph, views::GridInstanc
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
 
-pub struct TransitionUpdate {
+pub struct TransitionUpdates {
     pub segments_on: HashSet<String>,
     pub segments_off: HashSet<String>,
 }
@@ -49,7 +49,7 @@ impl Transition {
         }
     }
 
-    pub fn advance(&mut self) -> Option<TransitionUpdate> {
+    pub fn advance(&mut self) -> Option<TransitionUpdates> {
         if self.current_step < self.changes.len() {
             let current_changes = &self.changes[self.current_step];
 
@@ -66,7 +66,7 @@ impl Transition {
             }
 
             self.current_step += 1;
-            Some(TransitionUpdate {
+            Some(TransitionUpdates {
                 segments_on,
                 segments_off,
             })

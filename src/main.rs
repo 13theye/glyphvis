@@ -523,7 +523,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                         start_time: app.time,
                         is_active: true,
                     };
-                    grid.add_backbone_effect("backbone".to_string(), Box::new(effect));
+                    grid.add_backbone_effect("backbone", Box::new(effect));
                 }
             }
             OscCommand::CreateGrid {
@@ -612,9 +612,19 @@ fn launch_commands(app: &App, model: &mut Model) {
                     grid.visible = !grid.visible;
                 }
             }
+            OscCommand::SetVisibility { grid_name, setting } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.visible = setting;
+                }
+            }
             OscCommand::ToggleColorful { grid_name } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.colorful_flag = !grid.colorful_flag;
+                }
+            }
+            OscCommand::SetColorful { grid_name, setting } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.colorful_flag = setting;
                 }
             }
             OscCommand::UpdateTransitionConfig {

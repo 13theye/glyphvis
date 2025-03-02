@@ -456,8 +456,9 @@ impl GridInstance {
         finished_effects
     }
 
-    pub fn add_backbone_effect(&mut self, effect_type: String, effect: Box<dyn BackboneEffect>) {
-        self.backbone_effects.insert(effect_type, effect);
+    pub fn add_backbone_effect(&mut self, effect_type: &str, effect: Box<dyn BackboneEffect>) {
+        self.backbone_effects
+            .insert(effect_type.to_string(), effect);
     }
     /*********************** Debug Helper ******************************* */
 

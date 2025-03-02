@@ -63,8 +63,16 @@ pub enum OscCommand {
     ToggleVisibility {
         grid_name: String,
     },
+    SetVisibility {
+        grid_name: String,
+        setting: bool,
+    },
     ToggleColorful {
         grid_name: String,
+    },
+    SetColorful {
+        grid_name: String,
+        setting: bool,
     },
     UpdateTransitionConfig {
         grid_name: String,
@@ -218,10 +226,32 @@ impl OscController {
                             });
                         }
                     }
+                    "/grid/setvisibility" => {
+                        if let [osc::Type::String(name), osc::Type::Int(setting)] =
+                            &message.args[..]
+                        {
+                            let setting_bool = *setting != 0;
+                            self.command_queue.push(OscCommand::SetVisibility {
+                                grid_name: name.clone(),
+                                setting: setting_bool,
+                            });
+                        }
+                    }
                     "/grid/togglecolorful" => {
                         if let [osc::Type::String(name)] = &message.args[..] {
                             self.command_queue.push(OscCommand::ToggleColorful {
                                 grid_name: name.clone(),
+                            });
+                        }
+                    }
+                    "/grid/setcolorful" => {
+                        if let [osc::Type::String(name), osc::Type::Int(setting)] =
+                            &message.args[..]
+                        {
+                            let setting_bool = *setting != 0;
+                            self.command_queue.push(OscCommand::SetColorful {
+                                grid_name: name.clone(),
+                                setting: setting_bool,
                             });
                         }
                     }

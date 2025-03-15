@@ -25,8 +25,8 @@ use std::time::Instant;
 
 use crate::{
     models::{EdgeType, PathElement, Project, ViewBox},
-    services::grid::*,
-    services::svg::{detect_edge_type, parse_svg},
+    services::grid::grid_helper,
+    services::svg::{edge_detection, parser},
     views::Transform2D,
 };
 
@@ -420,7 +420,7 @@ impl CachedSegment {
                 let end = Self::initial_transform(*end_x, *end_y, viewbox, transform);
 
                 // no need to translate b/c rx, ry are relative measures
-                let (center, start_angle, sweep_angle) = calculate_arc_center(
+                let (center, start_angle, sweep_angle) = grid_helper::calculate_arc_center(
                     start,
                     end,
                     *rx,
@@ -431,7 +431,7 @@ impl CachedSegment {
                 );
 
                 // Calculate all points, scale radii
-                let points = generate_arc_points(
+                let points = grid_helper::generate_arc_points(
                     center,
                     *rx * transform.scale,
                     *ry * transform.scale,
@@ -505,11 +505,11 @@ pub struct CachedGrid {
 impl CachedGrid {
     pub fn new(project: &Project) -> Self {
         // Parse viewbox from SVG
-        let viewbox =
-            parse_viewbox(&project.svg_base_tile).expect("Failed to parse viewbox from SVG");
+        let viewbox = grid_helper::parse_viewbox(&project.svg_base_tile)
+            .expect("Failed to parse viewbox from SVG");
 
         // Parse the SVG & create basic grid elements
-        let elements = parse_svg(&project.svg_base_tile);
+        let elements = parser::parse_svg(&project.svg_base_tile);
         let grid_dims = (project.grid_x, project.grid_y);
         let mut segments = HashMap::new();
 
@@ -518,7 +518,7 @@ impl CachedGrid {
         for y in 1..=project.grid_y {
             for x in 1..=project.grid_x {
                 for element in &elements {
-                    let edge_type = detect_edge_type(&element.path, &viewbox);
+                    let edge_type = edge_detection::detect_edge_type(&element.path, &viewbox);
                     let element_id = format!("{},{} : {}", x, y, element.id);
                     let segment = CachedSegment::new(
                         element_id.clone(),
@@ -640,7 +640,7 @@ impl CachedGrid {
             }
 
             // Get potential neighbors based on edge type
-            if let Some((neighbor_x, neighbor_y)) = get_neighbor_coords(
+            if let Some((neighbor_x, neighbor_y)) = grid_helper::get_neighbor_coords(
                 segment.tile_coordinate.0,
                 segment.tile_coordinate.1,
                 segment.edge_type,
@@ -659,14 +659,14 @@ impl CachedGrid {
                         let mut should_keep = true;
 
                         for neighbor in neighbor_segments {
-                            let direction = get_neighbor_direction(
+                            let direction = grid_helper::get_neighbor_direction(
                                 segment.tile_coordinate.0,
                                 segment.tile_coordinate.1,
                                 neighbor_x,
                                 neighbor_y,
                             );
 
-                            if check_segment_alignment(segment, neighbor, direction) {
+                            if grid_helper::check_segment_alignment(segment, neighbor, direction) {
                                 should_keep = false;
                                 break;
                             }

@@ -348,12 +348,7 @@ impl CachedSegment {
     /**************************  Helper functions *************************************** */
 
     pub fn is_idle(&self) -> bool {
-        match self.state {
-            SegmentState::Idle { .. } => true,
-            SegmentState::Active { .. }
-            | SegmentState::PoweringOn { .. }
-            | SegmentState::PoweringOff { .. } => false,
-        }
+        matches!(self.state, SegmentState::Idle { .. })
     }
 
     fn exp_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, decay_rate: f32) -> Rgb<f32> {

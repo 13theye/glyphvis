@@ -122,33 +122,22 @@ impl GridInstance {
 
     /************************** Glyph System ********************************** */
 
+    // if the glyph exists in the show, retrieve the segments and stage
+    // in target_segments. Any anomalies result in no glyph
     pub fn stage_glyph_segments(&mut self, project: &Project, index: usize) {
-        // if the glyph exists in the show, retrieve the segments and stage
-        // in target_segments. Any anomalies result in no glyph.
-
-        if let Some(show) = project.get_show(&self.show) {
-            let show_order = &show.show_order;
-            let show_element = show_order.get(&(index as u32));
-
-            if let Some(show_element) = show_element {
-                let glyph_name = &show_element.name;
-
-                if let Some(glyph) = project.get_glyph(glyph_name) {
-                    self.current_glyph_index = index;
-
-                    self.target_segments = if glyph.segments.is_empty() {
-                        None
-                    } else {
-                        Some(glyph.segments.iter().cloned().collect())
-                    };
-                } else {
-                    self.no_glyph();
-                }
-            } else {
-                self.no_glyph();
-            }
-        } else {
-            self.no_glyph();
+        match project.get_show(&self.show) {
+            Some(show) => match show.show_order.get(&(index as u32)) {
+                Some(show_element) => match project.get_glyph(&show_element.name) {
+                    Some(glyph) => {
+                        self.current_glyph_index = index;
+                        self.target_segments = (!glyph.segments.is_empty())
+                            .then(|| glyph.segments.iter().cloned().collect());
+                    }
+                    None => self.no_glyph(),
+                },
+                None => self.no_glyph(),
+            },
+            None => self.no_glyph(),
         }
     }
 

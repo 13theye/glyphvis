@@ -163,6 +163,7 @@ pub enum SegmentState {
 }
 
 // A CachedSegment contains pre-processed draw commands for a segment
+// Acts like a virtual light fixture, responds to style update messages
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     // metadata
@@ -193,7 +194,7 @@ impl CachedSegment {
         let tile_transform =
             segment_utility::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
 
-        // Generate commands with combined transform
+        // Generate commands with tile transform
         let draw_commands = segment_utility::generate_draw_commands(path, viewbox, &tile_transform);
 
         Self {

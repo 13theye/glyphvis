@@ -63,14 +63,7 @@ pub struct GridInstance {
 }
 
 impl GridInstance {
-    pub fn new(
-        _app: &App,
-        id: String,
-        project: &Project,
-        show: &str,
-        position: Point2,
-        rotation: f32,
-    ) -> Self {
+    pub fn new(id: String, project: &Project, show: &str, position: Point2, rotation: f32) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {

@@ -533,7 +533,6 @@ fn launch_commands(app: &App, model: &mut Model) {
                 rotation,
             } => {
                 let grid = GridInstance::new(
-                    app,
                     name.clone(),
                     &model.project,
                     &show,

@@ -25,13 +25,13 @@ use std::time::Instant;
 
 use crate::{
     models::{EdgeType, PathElement, Project, ViewBox},
-    services::grid::*,
-    services::svg::{detect_edge_type, parse_svg},
+    services::svg::{edge_detection, parser},
+    utilities::{easing, grid_utility, segment_utility},
     views::Transform2D,
 };
 
 // TODO: USE ANIMATION DURATION CONFIG INSTEAD OF THESE CONSTANTS
-const ARC_RESOLUTION: usize = 25;
+pub const ARC_RESOLUTION: usize = 25;
 const FLASH_DURATION: f32 = 0.07;
 const FADE_DURATION: f32 = 0.15;
 const FLASH_FADE_DURATION: f32 = 0.12;
@@ -109,7 +109,7 @@ impl Default for DrawStyle {
     fn default() -> Self {
         Self {
             color: rgb(0.82, 0.0, 0.14),
-            stroke_weight: 5.0,
+            stroke_weight: 5.1,
         }
     }
 }
@@ -125,6 +125,7 @@ pub enum Layer {
 pub enum SegmentAction {
     On,
     Off,
+    BackboneUpdate,
 }
 
 #[derive(Debug, Clone)]
@@ -162,6 +163,7 @@ pub enum SegmentState {
 }
 
 // A CachedSegment contains pre-processed draw commands for a segment
+// Acts like a virtual light fixture, responds to style update messages
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     // metadata
@@ -189,10 +191,11 @@ impl CachedSegment {
         grid_dims: (u32, u32),
     ) -> Self {
         // create the transformation to this tile's position
-        let tile_transform = Self::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
+        let tile_transform =
+            segment_utility::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
 
-        // Generate commands with combined transform
-        let draw_commands = Self::generate_draw_commands(path, viewbox, &tile_transform);
+        // Generate commands with tile transform
+        let draw_commands = segment_utility::generate_draw_commands(path, viewbox, &tile_transform);
 
         Self {
             id: element_id,
@@ -270,7 +273,7 @@ impl CachedSegment {
                 } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
                     // Fade to target color
                     let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
-                    Self::exp_ease(flash_color, target_style.color, fade_progress, 6.0)
+                    easing::color_exp_ease(flash_color, target_style.color, fade_progress, 6.0)
                 } else {
                     // Animation complete
                     target_style.color
@@ -293,7 +296,7 @@ impl CachedSegment {
                 let color = if elapsed_time <= FADE_DURATION {
                     // Fade to target color
                     let fade_progress = elapsed_time / FADE_DURATION;
-                    Self::exp_ease(from_style.color, target_style.color, fade_progress, 6.0)
+                    easing::color_exp_ease(from_style.color, target_style.color, fade_progress, 6.0)
                 } else {
                     // Animation complete
                     target_style.color
@@ -327,6 +330,11 @@ impl CachedSegment {
                             target_style: target_style.clone(),
                         }
                     }
+                    SegmentAction::BackboneUpdate => {
+                        self.state = SegmentState::Idle {
+                            style: target_style.clone(),
+                        }
+                    }
                 }
             }
             (None, Some(target_style)) => {
@@ -342,44 +350,15 @@ impl CachedSegment {
     /**************************  Helper functions *************************************** */
 
     pub fn is_idle(&self) -> bool {
-        match self.state {
-            SegmentState::Idle { .. } => true,
-            SegmentState::Active { .. }
-            | SegmentState::PoweringOn { .. }
-            | SegmentState::PoweringOff { .. } => false,
-        }
+        matches!(self.state, SegmentState::Idle { .. })
     }
 
-    fn exp_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, decay_rate: f32) -> Rgb<f32> {
-        let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
-        let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
-        let hsl_end = Hsl::from(end);
-
-        let result = Hsl::new(
-            hsl_start.hue,
-            hsl_start.saturation
-                + (hsl_end.saturation - hsl_start.saturation)
-                    * (1.0 - (-adjusted_time * decay_rate).exp()),
-            hsl_start.lightness
-                + (hsl_end.lightness - hsl_start.lightness)
-                    * (1.0 - (-adjusted_time * decay_rate).exp()),
-        );
-        Rgb::from(result)
+    pub fn get_state(&self) -> &SegmentState {
+        &self.state
     }
 
-    fn _log_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, curve_strength: f32) -> Rgb<f32> {
-        let adjusted_time = (time * curve_strength + 1.0).ln() / (curve_strength + 1.0).ln(); // Logarithmic curve adjustment
-
-        let hsl_start = Hsl::from(start);
-        let hsl_end = Hsl::from(end);
-
-        let result = Hsl::new(
-            hsl_start.hue,
-            hsl_start.saturation + (hsl_end.saturation - hsl_start.saturation) * adjusted_time,
-            hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * adjusted_time,
-        );
-
-        Rgb::from(result)
+    pub fn set_state(&mut self, state: SegmentState) {
+        self.state = state;
     }
 
     /**************************  Transform functions *************************************** */
@@ -387,107 +366,6 @@ impl CachedSegment {
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         for command in &mut self.draw_commands {
             command.apply_transform(transform);
-        }
-    }
-
-    /**************************  Initialization functions *************************************** */
-
-    fn generate_draw_commands(
-        path: &PathElement,
-        viewbox: &ViewBox,
-        transform: &Transform2D,
-    ) -> Vec<DrawCommand> {
-        match path {
-            PathElement::Line { x1, y1, x2, y2 } => {
-                vec![DrawCommand::Line {
-                    start: Self::initial_transform(*x1, *y1, viewbox, transform),
-                    end: Self::initial_transform(*x2, *y2, viewbox, transform),
-                }]
-            }
-            PathElement::Arc {
-                start_x,
-                start_y,
-                rx,
-                ry,
-                x_axis_rotation,
-                large_arc,
-                sweep,
-                end_x,
-                end_y,
-            } => {
-                let start = Self::initial_transform(*start_x, *start_y, viewbox, transform);
-                let end = Self::initial_transform(*end_x, *end_y, viewbox, transform);
-
-                // no need to translate b/c rx, ry are relative measures
-                let (center, start_angle, sweep_angle) = calculate_arc_center(
-                    start,
-                    end,
-                    *rx,
-                    *ry,
-                    *x_axis_rotation,
-                    *large_arc,
-                    *sweep,
-                );
-
-                // Calculate all points, scale radii
-                let points = generate_arc_points(
-                    center,
-                    *rx * transform.scale,
-                    *ry * transform.scale,
-                    start_angle,
-                    sweep_angle,
-                    *x_axis_rotation,
-                    ARC_RESOLUTION,
-                );
-
-                vec![DrawCommand::Arc { points }]
-            }
-            PathElement::Circle { cx, cy, r } => {
-                vec![DrawCommand::Circle {
-                    center: Self::initial_transform(*cx, *cy, viewbox, transform),
-                    radius: *r * transform.scale,
-                }]
-            }
-        }
-    }
-
-    // Transform a point from SVG to Nannou Coordinates, then applies tile transform
-    fn initial_transform(
-        svg_x: f32,
-        svg_y: f32,
-        viewbox: &ViewBox,
-        transform: &Transform2D,
-    ) -> Point2 {
-        let center_x = viewbox.width / 2.0;
-        let center_y = viewbox.height / 2.0;
-        let local_x = svg_x - center_x;
-        let local_y = center_y - svg_y;
-        // return:
-        transform.apply_to_point(pt2(local_x, local_y))
-    }
-
-    // Translates a point to the correct Tile position
-    fn calculate_tile_transform(
-        viewbox: &ViewBox,
-        position: (u32, u32),
-        grid_dims: (u32, u32),
-    ) -> Transform2D {
-        let (x, y) = position;
-        let (grid_x, grid_y) = grid_dims;
-        let tile_width = viewbox.width;
-        let tile_height = viewbox.height;
-
-        let grid_width = grid_x as f32 * tile_width;
-        let grid_height = grid_y as f32 * tile_height;
-
-        let tile_center_x = (x as f32 - 1.0) * tile_width - grid_width / 2.0 + tile_width / 2.0;
-        let tile_center_y =
-            -((y as f32 - 1.0) * tile_height) + grid_height / 2.0 - tile_height / 2.0;
-
-        Transform2D {
-            translation: pt2(tile_center_x, tile_center_y),
-            scale: 1.0,
-            rotation: 0.0,
         }
     }
 }
@@ -504,11 +382,11 @@ pub struct CachedGrid {
 impl CachedGrid {
     pub fn new(project: &Project) -> Self {
         // Parse viewbox from SVG
-        let viewbox =
-            parse_viewbox(&project.svg_base_tile).expect("Failed to parse viewbox from SVG");
+        let viewbox = grid_utility::parse_viewbox(&project.svg_base_tile)
+            .expect("Failed to parse viewbox from SVG");
 
         // Parse the SVG & create basic grid elements
-        let elements = parse_svg(&project.svg_base_tile);
+        let elements = parser::parse_svg(&project.svg_base_tile);
         let grid_dims = (project.grid_x, project.grid_y);
         let mut segments = HashMap::new();
 
@@ -517,7 +395,7 @@ impl CachedGrid {
         for y in 1..=project.grid_y {
             for x in 1..=project.grid_x {
                 for element in &elements {
-                    let edge_type = detect_edge_type(&element.path, &viewbox);
+                    let edge_type = edge_detection::detect_edge_type(&element.path, &viewbox);
                     let element_id = format!("{},{} : {}", x, y, element.id);
                     let segment = CachedSegment::new(
                         element_id.clone(),
@@ -639,7 +517,7 @@ impl CachedGrid {
             }
 
             // Get potential neighbors based on edge type
-            if let Some((neighbor_x, neighbor_y)) = get_neighbor_coords(
+            if let Some((neighbor_x, neighbor_y)) = grid_utility::get_neighbor_coords(
                 segment.tile_coordinate.0,
                 segment.tile_coordinate.1,
                 segment.edge_type,
@@ -658,14 +536,14 @@ impl CachedGrid {
                         let mut should_keep = true;
 
                         for neighbor in neighbor_segments {
-                            let direction = get_neighbor_direction(
+                            let direction = grid_utility::get_neighbor_direction(
                                 segment.tile_coordinate.0,
                                 segment.tile_coordinate.1,
                                 neighbor_x,
                                 neighbor_y,
                             );
 
-                            if check_segment_alignment(segment, neighbor, direction) {
+                            if grid_utility::check_segment_alignment(segment, neighbor, direction) {
                                 should_keep = false;
                                 break;
                             }

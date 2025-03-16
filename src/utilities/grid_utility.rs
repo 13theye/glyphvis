@@ -1,5 +1,5 @@
-// src/services/grid/grid_helper.rs
-// a collection of helper functions for building the grid
+// src/utilities/grid_utility.rs
+// a collection of utility functions for building the grid
 // and calculating the positions of SVG elements
 //
 // Three categoies of functions:

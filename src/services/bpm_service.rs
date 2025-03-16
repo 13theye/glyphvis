@@ -1,5 +1,7 @@
 // src/services/bpm_service.rs
 
+// incomplete
+
 #[derive(Default, Debug)]
 pub struct BpmService {}
 

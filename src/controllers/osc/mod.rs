@@ -6,6 +6,13 @@ use std::error::Error;
 
 #[derive(Debug)]
 pub enum OscCommand {
+    BackboneFadeGrid {
+        name: String,
+        r: f32,
+        g: f32,
+        b: f32,
+        duration: f32,
+    },
     CreateGrid {
         name: String,
         show: String,
@@ -39,6 +46,12 @@ pub enum OscCommand {
         glyph_index: usize,
         immediate: bool,
     },
+    InstantGlyphColor {
+        grid_name: String,
+        r: f32,
+        g: f32,
+        b: f32,
+    },
     NextGlyph {
         grid_name: String,
         immediate: bool,
@@ -56,8 +69,16 @@ pub enum OscCommand {
     ToggleVisibility {
         grid_name: String,
     },
+    SetVisibility {
+        grid_name: String,
+        setting: bool,
+    },
     ToggleColorful {
         grid_name: String,
+    },
+    SetColorful {
+        grid_name: String,
+        setting: bool,
     },
     UpdateTransitionConfig {
         grid_name: String,
@@ -87,6 +108,19 @@ impl OscController {
         for (packet, _addr) in self.receiver.try_iter() {
             for message in packet.into_msgs() {
                 match message.addr.as_str() {
+                    "/grid/backbone_fade" => {
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(duration)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::BackboneFadeGrid {
+                                name: name.clone(),
+                                r: *r,
+                                g: *g,
+                                b: *b,
+                                duration: *duration,
+                            });
+                        }
+                    }
                     "/grid/create" => {
                         if let [osc::Type::String(name), osc::Type::String(show), osc::Type::Float(x), osc::Type::Float(y), osc::Type::Float(rot)] =
                             &message.args[..]
@@ -157,6 +191,18 @@ impl OscController {
                             });
                         }
                     }
+                    "/grid/instantglyphcolor" => {
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::InstantGlyphColor {
+                                grid_name: name.clone(),
+                                r: *r,
+                                g: *g,
+                                b: *b,
+                            });
+                        }
+                    }
                     "/grid/nextglyph" => {
                         if let [osc::Type::String(name), osc::Type::Int(immediately)] =
                             &message.args[..]
@@ -198,10 +244,32 @@ impl OscController {
                             });
                         }
                     }
+                    "/grid/setvisibility" => {
+                        if let [osc::Type::String(name), osc::Type::Int(setting)] =
+                            &message.args[..]
+                        {
+                            let setting_bool = *setting != 0;
+                            self.command_queue.push(OscCommand::SetVisibility {
+                                grid_name: name.clone(),
+                                setting: setting_bool,
+                            });
+                        }
+                    }
                     "/grid/togglecolorful" => {
                         if let [osc::Type::String(name)] = &message.args[..] {
                             self.command_queue.push(OscCommand::ToggleColorful {
                                 grid_name: name.clone(),
+                            });
+                        }
+                    }
+                    "/grid/setcolorful" => {
+                        if let [osc::Type::String(name), osc::Type::Int(setting)] =
+                            &message.args[..]
+                        {
+                            let setting_bool = *setting != 0;
+                            self.command_queue.push(OscCommand::SetColorful {
+                                grid_name: name.clone(),
+                                setting: setting_bool,
                             });
                         }
                     }
@@ -297,6 +365,20 @@ impl OscSender {
             .ok();
     }
 
+    pub fn send_grid_backbone_fade(&self, grid_name: &str, r: f32, g: f32, b: f32, duration: f32) {
+        let addr = "/grid/backbone_fade".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Float(r),
+            osc::Type::Float(g),
+            osc::Type::Float(b),
+            osc::Type::Float(duration),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
     pub fn send_glyph(&self, grid_name: &str, index: i32, immediate: i32) {
         let addr = "/grid/glyph".to_string();
         let args = vec![
@@ -314,6 +396,18 @@ impl OscSender {
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(immediate),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_instant_glyph_color(&self, grid_name: &str, r: f32, g: f32, b: f32) {
+        let addr = "/grid/instantglyphcolor".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Float(r),
+            osc::Type::Float(g),
+            osc::Type::Float(b),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

@@ -11,12 +11,16 @@ use nannou::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    animation::{Movement, MovementEngine, Transition, TransitionEngine},
+    animation::{
+        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine, TransitionUpdates,
+    },
     config::TransitionConfig,
-    effects::{fx_initialize, EffectsManager},
+    effects::BackboneEffect,
     models::Project,
     services::SegmentGraph,
-    views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
+    views::{
+        CachedGrid, DrawStyle, Layer, SegmentAction, SegmentState, StyleUpdateMsg, Transform2D,
+    },
 };
 
 pub struct GridInstance {
@@ -31,21 +35,26 @@ pub struct GridInstance {
     index_max: usize,
 
     // effects state
-    pub effects_manager: EffectsManager,
     pub active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
     pub immediately_change: bool,
+    pub colorful_flag: bool, // enables random-ish color effect target style
 
-    // update messages for an update frame
+    // update messages for a the next frame
+    // String is the segment_id
+    // StyleUpdateMsg is the update message for the segment
     pub update_batch: HashMap<String, StyleUpdateMsg>,
 
     // inside-grid state
     pub current_active_segments: HashSet<String>,
     pub target_segments: Option<HashSet<String>>,
-    pub effect_target_style: DrawStyle,
-    pub colorful_flag: bool, // enables random-ish color effect target style
+    pub target_style: DrawStyle,
 
-    // overall grid state
+    // backbone state
+    pub backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
+    pub backbone_style: DrawStyle,
+
+    // grid transform state
     pub spawn_location: Point2,
     pub spawn_rotation: f32,
     pub current_location: Point2,
@@ -56,14 +65,7 @@ pub struct GridInstance {
 }
 
 impl GridInstance {
-    pub fn new(
-        _app: &App,
-        id: String,
-        project: &Project,
-        show: &str,
-        position: Point2,
-        rotation: f32,
-    ) -> Self {
+    pub fn new(id: String, project: &Project, show: &str, position: Point2, rotation: f32) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {
@@ -88,13 +90,18 @@ impl GridInstance {
 
             current_active_segments: HashSet::new(),
             target_segments: None,
-            effect_target_style: DrawStyle::default(),
-            colorful_flag: false,
+            target_style: DrawStyle::default(),
 
-            effects_manager: fx_initialize(),
+            backbone_effects: HashMap::new(),
+            backbone_style: DrawStyle {
+                color: rgb(0.19, 0.19, 0.19),
+                stroke_weight: 5.1,
+            },
+
             active_transition: None,
             transition_config: None,
             immediately_change: false,
+            colorful_flag: false,
 
             update_batch: HashMap::new(),
 
@@ -110,33 +117,22 @@ impl GridInstance {
 
     /************************** Glyph System ********************************** */
 
-    pub fn stage_glyph_segments(&mut self, project: &Project, index: usize) {
-        // if the glyph exists in the show, retrieve the segments and stage
-        // in target_segments. Any anomalies result in no glyph.
-
-        if let Some(show) = project.get_show(&self.show) {
-            let show_order = &show.show_order;
-            let show_element = show_order.get(&(index as u32));
-
-            if let Some(show_element) = show_element {
-                let glyph_name = &show_element.name;
-
-                if let Some(glyph) = project.get_glyph(glyph_name) {
-                    self.current_glyph_index = index;
-
-                    self.target_segments = if glyph.segments.is_empty() {
-                        None
-                    } else {
-                        Some(glyph.segments.iter().cloned().collect())
-                    };
-                } else {
-                    self.no_glyph();
-                }
-            } else {
-                self.no_glyph();
-            }
-        } else {
-            self.no_glyph();
+    // if the glyph exists in the show, retrieve the segments and stage
+    // in target_segments. Any anomalies result in no glyph
+    pub fn stage_glyph_by_index(&mut self, project: &Project, index: usize) {
+        match project.get_show(&self.show) {
+            Some(show) => match show.show_order.get(&(index as u32)) {
+                Some(show_element) => match project.get_glyph(&show_element.name) {
+                    Some(glyph) => {
+                        self.current_glyph_index = index;
+                        self.target_segments = (!glyph.segments.is_empty())
+                            .then(|| glyph.segments.iter().cloned().collect());
+                    }
+                    None => self.no_glyph(),
+                },
+                None => self.no_glyph(),
+            },
+            None => self.no_glyph(),
         }
     }
 
@@ -144,9 +140,9 @@ impl GridInstance {
         self.target_segments = Some(HashSet::new());
     }
 
-    pub fn stage_next_glyph_segments(&mut self, project: &Project) {
+    pub fn stage_next_glyph(&mut self, project: &Project) {
         self.advance_index(self.current_glyph_index);
-        self.stage_glyph_segments(project, self.current_glyph_index);
+        self.stage_glyph_by_index(project, self.current_glyph_index);
     }
 
     fn advance_index(&mut self, index: usize) {
@@ -157,16 +153,51 @@ impl GridInstance {
         }
     }
 
-    /************************** New Update System ***************************** */
+    /************************** New Update Flow ***************************** */
 
-    pub fn update(&mut self, draw: &Draw, bg_style: &DrawStyle, time: f32, dt: f32) {
-        self.update_movement(dt);
-        self.update_transition_segments(bg_style, time, dt);
-        self.update_background_segments(bg_style, time);
+    // The highest level update orchestrator
+    pub fn update(&mut self, draw: &Draw, time: f32, dt: f32) {
+        // update Grid Instance State
+        self.update_movement_state(dt);
+        self.update_backbone_effects_state(time);
+
+        // push updates to segments & update graphics
+        self.create_segment_updates(dt);
         self.draw_grid_segments(draw);
     }
 
-    fn turn_on_segments(&mut self, segments: HashSet<String>, target_style: &DrawStyle) {
+    fn update_movement_state(&mut self, dt: f32) {
+        if let Some(update) = self.process_active_movement(dt) {
+            self.update_movement(&update);
+        }
+    }
+
+    fn update_backbone_effects_state(&mut self, time: f32) {
+        self.update_backbone_style(time);
+        self.cleanup_backbone_effects(time);
+    }
+
+    fn create_segment_updates(&mut self, dt: f32) {
+        self.update_transition_segments(dt);
+        self.update_backbone_segments();
+    }
+
+    fn update_transition_segments(&mut self, dt: f32) {
+        if let Some(updates) = self.process_active_transition(dt) {
+            self.update_active_segments(&updates);
+            self.create_transition_update_messages(&updates);
+        }
+    }
+
+    fn draw_grid_segments(&mut self, draw: &Draw) {
+        self.grid
+            .draw_grid_segments(draw, &self.update_batch, self.visible);
+        self.clear_update_batch();
+    }
+
+    /************************** Update messages and state ******************************/
+
+    fn turn_on_segments(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -178,19 +209,31 @@ impl GridInstance {
         }
     }
 
-    fn turn_off_segments(&mut self, segments: HashSet<String>, bg_style: &DrawStyle) {
+    fn turn_off_segments(&mut self, segments: &HashSet<String>, backbone_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
                 StyleUpdateMsg {
                     action: Some(SegmentAction::Off),
-                    target_style: Some(bg_style.clone()),
+                    target_style: Some(backbone_style.clone()),
                 },
             );
         }
     }
 
-    fn update_background_segments(&mut self, bg_style: &DrawStyle, time: f32) {
+    pub fn update_active_segment_styles(&mut self, target_style: &DrawStyle) {
+        for segment_id in &self.current_active_segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg {
+                    action: None,
+                    target_style: Some(target_style.clone()),
+                },
+            );
+        }
+    }
+
+    fn update_backbone_segments(&mut self) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].layer == Layer::Background
@@ -199,53 +242,10 @@ impl GridInstance {
                 self.update_batch.insert(
                     segment_id.clone(),
                     StyleUpdateMsg {
-                        action: None,
-                        target_style: Some(
-                            self.effects_manager
-                                .apply_grid_effects(bg_style.clone(), time),
-                        ),
+                        action: Some(SegmentAction::BackboneUpdate),
+                        target_style: Some(self.backbone_style.clone()),
                     },
                 );
-            }
-        }
-    }
-
-    fn update_transition_segments(&mut self, bg_style: &DrawStyle, _time: f32, dt: f32) {
-        // extract target style
-        let target_style = self.effect_target_style.clone();
-
-        // Get transition updates if any exist
-        let transition_updates = if let Some(transition) = &mut self.active_transition {
-            if transition.update(dt) {
-                // Get updates and check completion
-                let updates = transition.advance();
-                if transition.is_complete() {
-                    self.active_transition = None;
-                }
-                updates
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Then apply any transition updates we collected
-        if let Some(updates) = transition_updates {
-            for segment_id in &updates.segments_on {
-                self.current_active_segments.insert(segment_id.clone());
-            }
-            for segment_id in &updates.segments_off {
-                self.current_active_segments.remove(segment_id);
-            }
-
-            // Convert frame difference into on/off messages
-            if !updates.segments_on.is_empty() {
-                self.turn_on_segments(updates.segments_on, &target_style);
-            }
-
-            if !updates.segments_off.is_empty() {
-                self.turn_off_segments(updates.segments_off, bg_style);
             }
         }
     }
@@ -254,18 +254,13 @@ impl GridInstance {
         self.update_batch.clear();
     }
 
-    fn draw_grid_segments(&mut self, draw: &Draw) {
-        self.grid
-            .draw_grid_segments(draw, &self.update_batch, self.visible);
-        self.clear_update_batch();
-    }
-
     pub fn set_effect_target_style(&mut self, style: DrawStyle) {
-        self.effect_target_style = style;
+        self.target_style = style;
     }
 
     /*********************** Segment Transitions  *****************************/
 
+    // Build the transition
     pub fn start_transition(&mut self, engine: &TransitionEngine) {
         // Handle target segments
         let target_segments = {
@@ -291,6 +286,47 @@ impl GridInstance {
         self.target_segments = None;
     }
 
+    // Update Step 1: obtain TransitionUpdates by advancing the Transition
+    fn process_active_transition(&mut self, dt: f32) -> Option<TransitionUpdates> {
+        // Get transition updates if any exist
+        if let Some(transition) = &mut self.active_transition {
+            if transition.update(dt) {
+                // Get updates and check completion
+                let updates = transition.advance();
+                if transition.is_complete() {
+                    self.active_transition = None;
+                }
+                return updates;
+            }
+        }
+        None
+    }
+
+    // Update Step 2: Update the active segments state based on TransitionUpdates
+    fn update_active_segments(&mut self, updates: &TransitionUpdates) {
+        for segment_id in &updates.segments_on {
+            self.current_active_segments.insert(segment_id.clone());
+        }
+
+        for segment_id in &updates.segments_off {
+            self.current_active_segments.remove(segment_id);
+        }
+    }
+
+    // Update Step 3: Create style update messages
+    fn create_transition_update_messages(&mut self, updates: &TransitionUpdates) {
+        let target_style = self.target_style.clone();
+        let backbone_style = self.backbone_style.clone();
+
+        if !updates.segments_on.is_empty() {
+            self.turn_on_segments(&updates.segments_on, &target_style);
+        }
+
+        if !updates.segments_off.is_empty() {
+            self.turn_off_segments(&updates.segments_off, &backbone_style);
+        }
+    }
+
     pub fn update_transition_config(
         &mut self,
         steps: Option<usize>,
@@ -306,6 +342,54 @@ impl GridInstance {
             density: density.unwrap_or(default_config.density),
         };
         self.transition_config = Some(config);
+    }
+
+    // a pathway to bypass the transition system and flash effect.
+    // updates colors instantly for already active segments
+    pub fn instant_color_change(&mut self, new_color: Rgb<f32>) {
+        let new_style = DrawStyle {
+            color: new_color,
+            stroke_weight: self.target_style.stroke_weight,
+        };
+
+        // Update target style for future transitions
+        self.target_style = new_style.clone();
+
+        // Apply direct style updates to all currently active segments
+        for segment_id in &self.current_active_segments.clone() {
+            if let Some(segment) = self.grid.segments.get_mut(segment_id) {
+                match segment.get_state() {
+                    SegmentState::Active { .. } => {
+                        // For active segments, just update to new style
+                        segment.set_state(SegmentState::Active {
+                            style: new_style.clone(),
+                        });
+                        segment.layer = Layer::Foreground;
+                    }
+                    SegmentState::Idle { .. } => {
+                        // For idle segments in the active set, activate them
+                        segment.set_state(SegmentState::Active {
+                            style: new_style.clone(),
+                        });
+                        segment.layer = Layer::Foreground;
+                    }
+                    SegmentState::PoweringOn { .. } => {
+                        // For segments powering on, skip to active state
+                        segment.set_state(SegmentState::Active {
+                            style: new_style.clone(),
+                        });
+                        segment.layer = Layer::Foreground;
+                    }
+                    SegmentState::PoweringOff { target_style, .. } => {
+                        // For segments powering off, skip to idle state
+                        segment.set_state(SegmentState::Idle {
+                            style: target_style.clone(),
+                        });
+                        segment.layer = Layer::Background;
+                    }
+                }
+            }
+        }
     }
 
     /**************************** Grid movement **********************************/
@@ -380,26 +464,69 @@ impl GridInstance {
         self.active_movement = Some(Movement::new(changes, 1.0 / 60.0));
     }
 
-    fn update_movement(&mut self, dt: f32) {
-        // First get the transform update if any exists
-        let transform_update = if let Some(movement) = &mut self.active_movement {
+    fn process_active_movement(&mut self, dt: f32) -> Option<MovementUpdate> {
+        if let Some(movement) = &mut self.active_movement {
             if movement.update(dt) {
                 let update = movement.advance();
                 if movement.is_complete() {
                     self.active_movement = None;
                 }
-                update
-            } else {
-                None
+                return update;
             }
-        } else {
-            None
-        };
-
-        // Then apply the transform if we got one
-        if let Some(update) = transform_update {
-            self.apply_transform(&update.transform);
         }
+        None
+    }
+
+    fn update_movement(&mut self, update: &MovementUpdate) {
+        self.apply_transform(&update.transform);
+    }
+
+    /******************** Backbone style and effects **************************** */
+
+    fn apply_backbone_effects(&self, base_style: &DrawStyle, time: f32) -> DrawStyle {
+        if self.backbone_effects.is_empty() {
+            return base_style.clone();
+        }
+
+        let mut current_style = base_style.clone();
+
+        for effect in self.backbone_effects.values() {
+            if effect.is_finished(time) {
+                continue;
+            }
+
+            current_style = effect.update(&current_style, time);
+        }
+
+        current_style
+    }
+
+    fn cleanup_backbone_effects(&mut self, time: f32) {
+        for effect_type in self.get_finished_effects(time) {
+            println!("Removing effect {}", effect_type);
+            self.backbone_effects.remove(&effect_type);
+        }
+    }
+
+    fn get_finished_effects(&self, time: f32) -> Vec<String> {
+        let mut finished_effects = Vec::new();
+        for effect_type in self.backbone_effects.keys() {
+            if let Some(effect) = self.backbone_effects.get(effect_type) {
+                if effect.is_finished(time) {
+                    finished_effects.push(effect_type.clone());
+                }
+            }
+        }
+        finished_effects
+    }
+
+    pub fn init_backbone_effect(&mut self, effect_type: &str, effect: Box<dyn BackboneEffect>) {
+        self.backbone_effects
+            .insert(effect_type.to_string(), effect);
+    }
+
+    fn update_backbone_style(&mut self, time: f32) {
+        self.backbone_style = self.apply_backbone_effects(&self.backbone_style, time);
     }
 
     /*********************** Debug Helper ******************************* */
@@ -411,18 +538,5 @@ impl GridInstance {
         println!("Dimensions: {:?}", self.grid.dimensions);
         println!("Viewbox: {:?}", self.grid.viewbox);
         println!("Segment count: {}\n", self.grid.segments.len());
-
-        // Print first few segments for inspection
-        /*
-        for (i, (id, segment)) in self.grid.segments.iter().take(2).enumerate() {
-            println!("\nSegment {}: {}", i, id);
-            println!("Position: {:?}", segment.tile_pos);
-            println!("Edge type: {:?}", segment.edge_type);
-
-            for (j, cmd) in segment.draw_commands.iter().take(2).enumerate() {
-                println!("  Command {}: {:?}", j, cmd);
-            }
-
-        }*/
     }
 }

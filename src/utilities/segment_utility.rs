@@ -1,6 +1,6 @@
-// src/services/segment/segment_helper.rs
+// src/utilities/segment_utility.rs
 
-// Helper functions for initializing CachedSegments
+// Utility functions for initializing CachedSegments
 
 use crate::{
     models::{PathElement, ViewBox},

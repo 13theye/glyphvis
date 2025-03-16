@@ -26,7 +26,7 @@ use std::time::Instant;
 use crate::{
     models::{EdgeType, PathElement, Project, ViewBox},
     services::svg::{edge_detection, parser},
-    utilities::{grid_utility, segment_utility},
+    utilities::{easing, grid_utility, segment_utility},
     views::Transform2D,
 };
 
@@ -272,7 +272,7 @@ impl CachedSegment {
                 } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
                     // Fade to target color
                     let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
-                    Self::exp_ease(flash_color, target_style.color, fade_progress, 6.0)
+                    easing::color_exp_ease(flash_color, target_style.color, fade_progress, 6.0)
                 } else {
                     // Animation complete
                     target_style.color
@@ -295,7 +295,7 @@ impl CachedSegment {
                 let color = if elapsed_time <= FADE_DURATION {
                     // Fade to target color
                     let fade_progress = elapsed_time / FADE_DURATION;
-                    Self::exp_ease(from_style.color, target_style.color, fade_progress, 6.0)
+                    easing::color_exp_ease(from_style.color, target_style.color, fade_progress, 6.0)
                 } else {
                     // Animation complete
                     target_style.color
@@ -350,38 +350,6 @@ impl CachedSegment {
 
     pub fn is_idle(&self) -> bool {
         matches!(self.state, SegmentState::Idle { .. })
-    }
-
-    fn exp_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, decay_rate: f32) -> Rgb<f32> {
-        let adjusted_time = 1.0 - (1.0 - time).powf(2.0); // Exponentiness of curve
-        let hsl_start = Hsl::from(start); // Convert to HSL for easier manipulation
-        let hsl_end = Hsl::from(end);
-
-        let result = Hsl::new(
-            hsl_start.hue,
-            hsl_start.saturation
-                + (hsl_end.saturation - hsl_start.saturation)
-                    * (1.0 - (-adjusted_time * decay_rate).exp()),
-            hsl_start.lightness
-                + (hsl_end.lightness - hsl_start.lightness)
-                    * (1.0 - (-adjusted_time * decay_rate).exp()),
-        );
-        Rgb::from(result)
-    }
-
-    fn _log_ease(start: Rgb<f32>, end: Rgb<f32>, time: f32, curve_strength: f32) -> Rgb<f32> {
-        let adjusted_time = (time * curve_strength + 1.0).ln() / (curve_strength + 1.0).ln(); // Logarithmic curve adjustment
-
-        let hsl_start = Hsl::from(start);
-        let hsl_end = Hsl::from(end);
-
-        let result = Hsl::new(
-            hsl_start.hue,
-            hsl_start.saturation + (hsl_end.saturation - hsl_start.saturation) * adjusted_time,
-            hsl_start.lightness + (hsl_end.lightness - hsl_start.lightness) * adjusted_time,
-        );
-
-        Rgb::from(result)
     }
 
     /**************************  Transform functions *************************************** */

@@ -69,7 +69,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.1")
+        .title("glyphvis 0.1.2")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -575,7 +575,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 immediate,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.stage_glyph_segments(&model.project, glyph_index);
+                    grid.stage_glyph_by_index(&model.project, glyph_index);
                     grid.immediately_change = immediate;
                 }
             }
@@ -584,7 +584,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 immediate,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.stage_next_glyph_segments(&model.project);
+                    grid.stage_next_glyph(&model.project);
                     grid.immediately_change = immediate;
                 }
             }

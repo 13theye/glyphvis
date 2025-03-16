@@ -117,7 +117,7 @@ impl GridInstance {
 
     // if the glyph exists in the show, retrieve the segments and stage
     // in target_segments. Any anomalies result in no glyph
-    pub fn stage_glyph_segments(&mut self, project: &Project, index: usize) {
+    pub fn stage_glyph_by_index(&mut self, project: &Project, index: usize) {
         match project.get_show(&self.show) {
             Some(show) => match show.show_order.get(&(index as u32)) {
                 Some(show_element) => match project.get_glyph(&show_element.name) {
@@ -138,9 +138,9 @@ impl GridInstance {
         self.target_segments = Some(HashSet::new());
     }
 
-    pub fn stage_next_glyph_segments(&mut self, project: &Project) {
+    pub fn stage_next_glyph(&mut self, project: &Project) {
         self.advance_index(self.current_glyph_index);
-        self.stage_glyph_segments(project, self.current_glyph_index);
+        self.stage_glyph_by_index(project, self.current_glyph_index);
     }
 
     fn advance_index(&mut self, index: usize) {

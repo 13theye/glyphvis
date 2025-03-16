@@ -353,6 +353,14 @@ impl CachedSegment {
         matches!(self.state, SegmentState::Idle { .. })
     }
 
+    pub fn get_state(&self) -> &SegmentState {
+        &self.state
+    }
+
+    pub fn set_state(&mut self, state: SegmentState) {
+        self.state = state;
+    }
+
     /**************************  Transform functions *************************************** */
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {

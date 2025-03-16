@@ -245,6 +245,18 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 }
             }
         }
+        Key::I => {
+            for name in model.grids.keys() {
+                if name != "grid_2" {
+                    model.osc_sender.send_instant_glyph_color(
+                        name,
+                        model.random.gen(),
+                        model.random.gen(),
+                        model.random.gen(),
+                    );
+                }
+            }
+        }
         Key::J => {
             for name in model.grids.keys() {
                 if name != "grid_2" {
@@ -577,6 +589,11 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_by_index(&model.project, glyph_index);
                     grid.immediately_change = immediate;
+                }
+            }
+            OscCommand::InstantGlyphColor { grid_name, r, g, b } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.instant_color_change(rgb(r, g, b));
                 }
             }
             OscCommand::NextGlyph {

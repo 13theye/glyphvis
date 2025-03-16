@@ -18,7 +18,9 @@ use crate::{
     effects::BackboneEffect,
     models::Project,
     services::SegmentGraph,
-    views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
+    views::{
+        CachedGrid, DrawStyle, Layer, SegmentAction, SegmentState, StyleUpdateMsg, Transform2D,
+    },
 };
 
 pub struct GridInstance {
@@ -219,6 +221,18 @@ impl GridInstance {
         }
     }
 
+    pub fn update_active_segment_styles(&mut self, target_style: &DrawStyle) {
+        for segment_id in &self.current_active_segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg {
+                    action: None,
+                    target_style: Some(target_style.clone()),
+                },
+            );
+        }
+    }
+
     fn update_backbone_segments(&mut self) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
@@ -328,6 +342,54 @@ impl GridInstance {
             density: density.unwrap_or(default_config.density),
         };
         self.transition_config = Some(config);
+    }
+
+    // a pathway to bypass the transition system and flash effect.
+    // updates colors instantly for already active segments
+    pub fn instant_color_change(&mut self, new_color: Rgb<f32>) {
+        let new_style = DrawStyle {
+            color: new_color,
+            stroke_weight: self.target_style.stroke_weight,
+        };
+
+        // Update target style for future transitions
+        self.target_style = new_style.clone();
+
+        // Apply direct style updates to all currently active segments
+        for segment_id in &self.current_active_segments.clone() {
+            if let Some(segment) = self.grid.segments.get_mut(segment_id) {
+                match segment.get_state() {
+                    SegmentState::Active { .. } => {
+                        // For active segments, just update to new style
+                        segment.set_state(SegmentState::Active {
+                            style: new_style.clone(),
+                        });
+                        segment.layer = Layer::Foreground;
+                    }
+                    SegmentState::Idle { .. } => {
+                        // For idle segments in the active set, activate them
+                        segment.set_state(SegmentState::Active {
+                            style: new_style.clone(),
+                        });
+                        segment.layer = Layer::Foreground;
+                    }
+                    SegmentState::PoweringOn { .. } => {
+                        // For segments powering on, skip to active state
+                        segment.set_state(SegmentState::Active {
+                            style: new_style.clone(),
+                        });
+                        segment.layer = Layer::Foreground;
+                    }
+                    SegmentState::PoweringOff { target_style, .. } => {
+                        // For segments powering off, skip to idle state
+                        segment.set_state(SegmentState::Idle {
+                            style: target_style.clone(),
+                        });
+                        segment.layer = Layer::Background;
+                    }
+                }
+            }
+        }
     }
 
     /**************************** Grid movement **********************************/
@@ -476,18 +538,5 @@ impl GridInstance {
         println!("Dimensions: {:?}", self.grid.dimensions);
         println!("Viewbox: {:?}", self.grid.viewbox);
         println!("Segment count: {}\n", self.grid.segments.len());
-
-        // Print first few segments for inspection
-        /*
-        for (i, (id, segment)) in self.grid.segments.iter().take(2).enumerate() {
-            println!("\nSegment {}: {}", i, id);
-            println!("Position: {:?}", segment.tile_pos);
-            println!("Edge type: {:?}", segment.edge_type);
-
-            for (j, cmd) in segment.draw_commands.iter().take(2).enumerate() {
-                println!("  Command {}: {:?}", j, cmd);
-            }
-
-        }*/
     }
 }

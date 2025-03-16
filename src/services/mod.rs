@@ -1,7 +1,6 @@
 pub mod bpm_service;
 pub mod frame_recorder;
 pub mod grid;
-pub mod segment;
 pub mod svg;
 
 pub use bpm_service::BpmService;

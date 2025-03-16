@@ -5,4 +5,5 @@ pub mod controllers;
 pub mod effects;
 pub mod models;
 pub mod services;
+pub mod utilities;
 pub mod views;

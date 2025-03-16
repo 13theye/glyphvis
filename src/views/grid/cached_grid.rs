@@ -25,9 +25,8 @@ use std::time::Instant;
 
 use crate::{
     models::{EdgeType, PathElement, Project, ViewBox},
-    services::grid::grid_helper,
-    services::segment::segment_helper,
     services::svg::{edge_detection, parser},
+    utilities::{grid_utility, segment_utility},
     views::Transform2D,
 };
 
@@ -192,10 +191,10 @@ impl CachedSegment {
     ) -> Self {
         // create the transformation to this tile's position
         let tile_transform =
-            segment_helper::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
+            segment_utility::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
 
         // Generate commands with combined transform
-        let draw_commands = segment_helper::generate_draw_commands(path, viewbox, &tile_transform);
+        let draw_commands = segment_utility::generate_draw_commands(path, viewbox, &tile_transform);
 
         Self {
             id: element_id,
@@ -406,7 +405,7 @@ pub struct CachedGrid {
 impl CachedGrid {
     pub fn new(project: &Project) -> Self {
         // Parse viewbox from SVG
-        let viewbox = grid_helper::parse_viewbox(&project.svg_base_tile)
+        let viewbox = grid_utility::parse_viewbox(&project.svg_base_tile)
             .expect("Failed to parse viewbox from SVG");
 
         // Parse the SVG & create basic grid elements
@@ -541,7 +540,7 @@ impl CachedGrid {
             }
 
             // Get potential neighbors based on edge type
-            if let Some((neighbor_x, neighbor_y)) = grid_helper::get_neighbor_coords(
+            if let Some((neighbor_x, neighbor_y)) = grid_utility::get_neighbor_coords(
                 segment.tile_coordinate.0,
                 segment.tile_coordinate.1,
                 segment.edge_type,
@@ -560,14 +559,14 @@ impl CachedGrid {
                         let mut should_keep = true;
 
                         for neighbor in neighbor_segments {
-                            let direction = grid_helper::get_neighbor_direction(
+                            let direction = grid_utility::get_neighbor_direction(
                                 segment.tile_coordinate.0,
                                 segment.tile_coordinate.1,
                                 neighbor_x,
                                 neighbor_y,
                             );
 
-                            if grid_helper::check_segment_alignment(segment, neighbor, direction) {
+                            if grid_utility::check_segment_alignment(segment, neighbor, direction) {
                                 should_keep = false;
                                 break;
                             }

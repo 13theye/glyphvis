@@ -18,9 +18,7 @@ use crate::{
     effects::BackboneEffect,
     models::Project,
     services::SegmentGraph,
-    views::{
-        CachedGrid, DrawStyle, Layer, SegmentAction, SegmentState, StyleUpdateMsg, Transform2D,
-    },
+    views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
 };
 
 pub struct GridInstance {
@@ -94,7 +92,7 @@ impl GridInstance {
 
             backbone_effects: HashMap::new(),
             backbone_style: DrawStyle {
-                color: rgb(0.19, 0.19, 0.19),
+                color: rgba(0.19, 0.19, 0.19, 1.0),
                 stroke_weight: 5.1,
             },
 
@@ -346,7 +344,7 @@ impl GridInstance {
 
     // a pathway to bypass the transition system and flash effect.
     // updates colors instantly for already active segments
-    pub fn instant_color_change(&mut self, new_color: Rgb<f32>) {
+    pub fn instant_color_change(&mut self, new_color: Rgba<f32>) {
         let new_style = DrawStyle {
             color: new_color,
             stroke_weight: self.target_style.stroke_weight,

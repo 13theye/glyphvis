@@ -6,11 +6,12 @@ use std::error::Error;
 
 #[derive(Debug)]
 pub enum OscCommand {
-    BackboneFadeGrid {
+    BackboneColorFade {
         name: String,
         r: f32,
         g: f32,
         b: f32,
+        a: f32,
         duration: f32,
     },
     CreateGrid {
@@ -51,6 +52,7 @@ pub enum OscCommand {
         r: f32,
         g: f32,
         b: f32,
+        a: f32,
     },
     NextGlyph {
         grid_name: String,
@@ -61,6 +63,7 @@ pub enum OscCommand {
         r: f32,
         g: f32,
         b: f32,
+        a: f32,
     },
     NoGlyph {
         grid_name: String,
@@ -109,14 +112,15 @@ impl OscController {
             for message in packet.into_msgs() {
                 match message.addr.as_str() {
                     "/grid/backbone_fade" => {
-                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(duration)] =
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a), osc::Type::Float(duration)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::BackboneFadeGrid {
+                            self.command_queue.push(OscCommand::BackboneColorFade {
                                 name: name.clone(),
                                 r: *r,
                                 g: *g,
                                 b: *b,
+                                a: *a,
                                 duration: *duration,
                             });
                         }
@@ -192,7 +196,7 @@ impl OscController {
                         }
                     }
                     "/grid/instantglyphcolor" => {
-                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b)] =
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a)] =
                             &message.args[..]
                         {
                             self.command_queue.push(OscCommand::InstantGlyphColor {
@@ -200,6 +204,7 @@ impl OscController {
                                 r: *r,
                                 g: *g,
                                 b: *b,
+                                a: *a,
                             });
                         }
                     }
@@ -215,7 +220,7 @@ impl OscController {
                         }
                     }
                     "/grid/nextglyphcolor" => {
-                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b)] =
+                        if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a)] =
                             &message.args[..]
                         {
                             self.command_queue.push(OscCommand::NextGlyphColor {
@@ -223,6 +228,7 @@ impl OscController {
                                 r: *r,
                                 g: *g,
                                 b: *b,
+                                a: *a,
                             });
                         }
                     }
@@ -365,13 +371,22 @@ impl OscSender {
             .ok();
     }
 
-    pub fn send_grid_backbone_fade(&self, grid_name: &str, r: f32, g: f32, b: f32, duration: f32) {
+    pub fn send_grid_backbone_fade(
+        &self,
+        grid_name: &str,
+        r: f32,
+        g: f32,
+        b: f32,
+        a: f32,
+        duration: f32,
+    ) {
         let addr = "/grid/backbone_fade".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Float(r),
             osc::Type::Float(g),
             osc::Type::Float(b),
+            osc::Type::Float(a),
             osc::Type::Float(duration),
         ];
         self.sender
@@ -401,25 +416,27 @@ impl OscSender {
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
-    pub fn send_instant_glyph_color(&self, grid_name: &str, r: f32, g: f32, b: f32) {
+    pub fn send_instant_glyph_color(&self, grid_name: &str, r: f32, g: f32, b: f32, a: f32) {
         let addr = "/grid/instantglyphcolor".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Float(r),
             osc::Type::Float(g),
             osc::Type::Float(b),
+            osc::Type::Float(a),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
-    pub fn send_next_glyph_color(&self, grid_name: &str, r: f32, g: f32, b: f32) {
+    pub fn send_next_glyph_color(&self, grid_name: &str, r: f32, g: f32, b: f32, a: f32) {
         let addr = "/grid/nextglyphcolor".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Float(r),
             osc::Type::Float(g),
             osc::Type::Float(b),
+            osc::Type::Float(a),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

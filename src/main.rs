@@ -69,7 +69,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.3")
+        .title("glyphvis 0.1.4")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -293,12 +293,22 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Up => {
             for name in model.grids.keys() {
-                model.osc_sender.send_rotate_grid(name, 90.0);
+                model.osc_sender.send_scale_grid(name, 0.3);
             }
         }
         Key::Down => {
             for name in model.grids.keys() {
-                model.osc_sender.send_rotate_grid(name, -90.0);
+                model.osc_sender.send_scale_grid(name, 1.0);
+            }
+        }
+        Key::T => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_rotate_grid(name, 5.0);
+            }
+        }
+        Key::Y => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_rotate_grid(name, -5.0);
             }
         }
 
@@ -399,15 +409,17 @@ fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
         1.0,
     );
 
-    let colorful_style = DrawStyle {
-        color: Rgba::from(color_hsl),
-        stroke_weight: model.default_stroke_weight,
-    };
+    let color = Rgba::from(color_hsl);
 
     for grid_instance in model.grids.values_mut() {
         if grid_instance.target_segments.is_some() {
             if grid_instance.colorful_flag {
-                grid_instance.set_effect_target_style(colorful_style.clone());
+                grid_instance.set_effect_target_style(DrawStyle {
+                    color,
+
+                    // account for any grid scaling
+                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
+                });
             }
             grid_instance.start_transition(&model.transition_engine);
         }
@@ -576,6 +588,11 @@ fn launch_commands(app: &App, model: &mut Model) {
                     grid.rotate_in_place(angle);
                 }
             }
+            OscCommand::ScaleGrid { name, scale } => {
+                if let Some(grid) = model.grids.get_mut(&name) {
+                    grid.scale_in_place(scale);
+                }
+            }
             OscCommand::FlashBackground { r, g, b, duration } => {
                 model.background.flash(rgb(r, g, b), duration, app.time);
             }
@@ -624,7 +641,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     let style = DrawStyle {
                         color: rgba(r, g, b, a),
-                        stroke_weight: model.default_stroke_weight,
+                        stroke_weight: model.default_stroke_weight * grid.current_scale,
                     };
                     grid.set_effect_target_style(style);
                 }

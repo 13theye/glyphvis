@@ -1,4 +1,4 @@
-// src/animation/transition/mod.rs
+// src/animation/transition.rs
 //
 // The Glyph Transition Manager
 //

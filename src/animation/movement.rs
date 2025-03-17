@@ -1,4 +1,4 @@
-// src/animation/movement/mod.rs
+// src/animation/movement.rs
 //
 // The GridInstance movement manager
 // scaling and rotation are not currently supported
@@ -62,6 +62,14 @@ impl Movement {
 
     pub fn get_current_step(&self) -> usize {
         self.current_step
+    }
+
+    pub fn get_changes(&self) -> &Vec<MovementUpdate> {
+        &self.changes
+    }
+
+    pub fn get_frame_duration(&self) -> f32 {
+        self.frame_duration
     }
 }
 

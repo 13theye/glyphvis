@@ -355,40 +355,12 @@ impl GridInstance {
         // Update target style for future transitions
         self.target_style = new_style.clone();
 
-        // Apply direct style updates to all currently active segments
-        for segment_id in &self.current_active_segments.clone() {
-            if let Some(segment) = self.grid.segments.get_mut(segment_id) {
-                match segment.get_state() {
-                    SegmentState::Active { .. } => {
-                        // For active segments, just update to new style
-                        segment.set_state(SegmentState::Active {
-                            style: new_style.clone(),
-                        });
-                        segment.layer = Layer::Foreground;
-                    }
-                    SegmentState::Idle { .. } => {
-                        // For idle segments in the active set, activate them
-                        segment.set_state(SegmentState::Active {
-                            style: new_style.clone(),
-                        });
-                        segment.layer = Layer::Foreground;
-                    }
-                    SegmentState::PoweringOn { .. } => {
-                        // For segments powering on, skip to active state
-                        segment.set_state(SegmentState::Active {
-                            style: new_style.clone(),
-                        });
-                        segment.layer = Layer::Foreground;
-                    }
-                    SegmentState::PoweringOff { target_style, .. } => {
-                        // For segments powering off, skip to idle state
-                        segment.set_state(SegmentState::Idle {
-                            style: target_style.clone(),
-                        });
-                        segment.layer = Layer::Background;
-                    }
-                }
-            }
+        // create update messages for active segments
+        for segment_id in &self.current_active_segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg::new(SegmentAction::InstantStyleChange, new_style.clone()),
+            );
         }
     }
 

@@ -126,6 +126,7 @@ pub enum SegmentAction {
     On,
     Off,
     BackboneUpdate,
+    InstantStyleChange,
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +335,13 @@ impl CachedSegment {
                         self.state = SegmentState::Idle {
                             style: target_style.clone(),
                         }
+                    }
+                    SegmentAction::InstantStyleChange => {
+                        // instantly change to target style without animations or effects
+                        self.state = SegmentState::Active {
+                            style: target_style.clone(),
+                        };
+                        self.layer = Layer::Foreground;
                     }
                 }
             }

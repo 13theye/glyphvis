@@ -69,7 +69,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.2")
+        .title("glyphvis 0.1.3")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -207,14 +207,14 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             for name in model.grids.keys() {
                 model
                     .osc_sender
-                    .send_grid_backbone_fade(name, 0.0, 0.0, 0.0, 3.0);
+                    .send_grid_backbone_fade(name, 0.19, 0.19, 0.19, 0.0, 0.0);
             }
         }
         Key::Key0 => {
             for name in model.grids.keys() {
                 model
                     .osc_sender
-                    .send_grid_backbone_fade(name, 0.19, 0.19, 0.19, 3.0);
+                    .send_grid_backbone_fade(name, 0.19, 0.19, 0.19, 1.0, 3.0);
             }
         }
         Key::G => {
@@ -253,6 +253,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                         model.random.gen(),
                         model.random.gen(),
                         model.random.gen(),
+                        1.0,
                     );
                 }
             }
@@ -262,7 +263,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 if name != "grid_2" {
                     model
                         .osc_sender
-                        .send_next_glyph_color(name, 0.82, 0.0, 0.14);
+                        .send_next_glyph_color(name, 0.82, 0.0, 0.14, 1.0);
                 }
             }
         }
@@ -391,14 +392,15 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 // ************************ Multi-grid style coordination  *****************************
 
 fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
-    let color_hsl = hsl(
+    let color_hsl = hsla(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
         0.4,
+        1.0,
     );
 
     let colorful_style = DrawStyle {
-        color: Rgb::from(color_hsl),
+        color: Rgba::from(color_hsl),
         stroke_weight: model.default_stroke_weight,
     };
 
@@ -517,18 +519,19 @@ fn render_progress(app: &App, model: &mut Model) {
 fn launch_commands(app: &App, model: &mut Model) {
     for command in model.osc_controller.take_commands() {
         match command {
-            OscCommand::BackboneFadeGrid {
+            OscCommand::BackboneColorFade {
                 name,
                 r,
                 g,
                 b,
+                a,
                 duration,
             } => {
                 if let Some(grid) = model.grids.get_mut(&name) {
                     let effect = FadeEffect {
                         base_style: grid.backbone_style.clone(),
                         target_style: DrawStyle {
-                            color: rgb(r, g, b),
+                            color: rgba(r, g, b, a),
                             stroke_weight: grid.backbone_style.stroke_weight,
                         },
                         duration,
@@ -591,9 +594,15 @@ fn launch_commands(app: &App, model: &mut Model) {
                     grid.immediately_change = immediate;
                 }
             }
-            OscCommand::InstantGlyphColor { grid_name, r, g, b } => {
+            OscCommand::InstantGlyphColor {
+                grid_name,
+                r,
+                g,
+                b,
+                a,
+            } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.instant_color_change(rgb(r, g, b));
+                    grid.instant_color_change(rgba(r, g, b, a));
                 }
             }
             OscCommand::NextGlyph {
@@ -605,10 +614,16 @@ fn launch_commands(app: &App, model: &mut Model) {
                     grid.immediately_change = immediate;
                 }
             }
-            OscCommand::NextGlyphColor { grid_name, r, g, b } => {
+            OscCommand::NextGlyphColor {
+                grid_name,
+                r,
+                g,
+                b,
+                a,
+            } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     let style = DrawStyle {
-                        color: rgb(r, g, b),
+                        color: rgba(r, g, b, a),
                         stroke_weight: model.default_stroke_weight,
                     };
                     grid.set_effect_target_style(style);

@@ -19,10 +19,11 @@ impl BackboneEffect for PulseEffect {
 
         let color = start_style.color;
         DrawStyle {
-            color: rgb(
+            color: rgba(
                 color.red * brightness,
                 color.green * brightness,
                 color.blue * brightness,
+                color.alpha,
             ),
             stroke_weight: start_style.stroke_weight,
         }
@@ -38,13 +39,14 @@ pub struct ColorCycleEffect {
     pub frequency: f32,
     pub saturation: f32,
     pub brightness: f32,
+    pub alpha: f32,
 }
 
 impl BackboneEffect for ColorCycleEffect {
     fn update(&self, base_style: &DrawStyle, time: f32) -> DrawStyle {
         let hue = (time * self.frequency) % 1.0;
         DrawStyle {
-            color: hsl(hue, self.saturation, self.brightness).into(),
+            color: hsla(hue, self.saturation, self.brightness, self.alpha).into(),
             stroke_weight: base_style.stroke_weight,
         }
     }
@@ -64,25 +66,31 @@ pub struct FadeEffect {
 
 impl BackboneEffect for FadeEffect {
     fn update(&self, current_style: &DrawStyle, time: f32) -> DrawStyle {
+        // if time is 0.0, immediately change to target style.
+        if self.duration.abs() < 0.001 {
+            return self.target_style.clone();
+        }
+
         let elapsed = time - self.start_time;
         let t = (elapsed / self.duration).clamp(0.0, 1.0);
 
-        let base_color: Hsl<_, _> = Hsl::from(self.base_style.color);
+        let base_color: Hsla<_, _> = Hsla::from(self.base_style.color);
         let base_hue: f32 = base_color.hue.into();
 
-        let target_color = Hsl::from(self.target_style.color);
+        let target_color = Hsla::from(self.target_style.color);
         let target_hue: f32 = target_color.hue.into();
 
         let new_hue = nannou::color::RgbHue::from(base_hue + (target_hue - base_hue) * t);
 
-        let interpolated_color = Hsl::new(
+        let interpolated_color = Hsla::new(
             new_hue,
             base_color.saturation + (target_color.saturation - base_color.saturation) * t,
             base_color.lightness + (target_color.lightness - base_color.lightness) * t,
+            base_color.alpha + (target_color.alpha - base_color.alpha) * t,
         );
 
         DrawStyle {
-            color: Rgb::from(interpolated_color),
+            color: Rgba::from(interpolated_color),
             ..*current_style
         }
     }

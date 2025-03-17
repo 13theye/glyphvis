@@ -101,14 +101,14 @@ impl DrawCommand {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrawStyle {
-    pub color: Rgb<f32>,
+    pub color: Rgba<f32>,
     pub stroke_weight: f32,
 }
 
 impl Default for DrawStyle {
     fn default() -> Self {
         Self {
-            color: rgb(0.82, 0.0, 0.14),
+            color: rgba(0.82, 0.0, 0.14, 1.0),
             stroke_weight: 5.1,
         }
     }
@@ -126,6 +126,7 @@ pub enum SegmentAction {
     On,
     Off,
     BackboneUpdate,
+    InstantStyleChange,
 }
 
 #[derive(Debug, Clone)]
@@ -267,7 +268,7 @@ impl CachedSegment {
                 target_style,
             } => {
                 let elapsed_time = start_time.elapsed().as_secs_f32();
-                let flash_color = rgb(1.0, 1.0, 0.8);
+                let flash_color = rgba(1.0, 1.0, 0.8, 1.0);
                 let color = if elapsed_time <= FLASH_DURATION {
                     flash_color
                 } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
@@ -334,6 +335,13 @@ impl CachedSegment {
                         self.state = SegmentState::Idle {
                             style: target_style.clone(),
                         }
+                    }
+                    SegmentAction::InstantStyleChange => {
+                        // instantly change to target style without animations or effects
+                        self.state = SegmentState::Active {
+                            style: target_style.clone(),
+                        };
+                        self.layer = Layer::Foreground;
                     }
                 }
             }

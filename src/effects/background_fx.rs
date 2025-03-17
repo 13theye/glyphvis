@@ -102,6 +102,10 @@ impl BackgroundEffect for BackgroundColorFade {
             return None;
         }
 
+        if self.duration.abs() < 0.001 {
+            return Some(self.target_color);
+        }
+
         let elapsed = current_time - self.start_time;
         if elapsed > self.duration {
             self.is_active = false;

@@ -18,9 +18,7 @@ use crate::{
     effects::BackboneEffect,
     models::Project,
     services::SegmentGraph,
-    views::{
-        CachedGrid, DrawStyle, Layer, SegmentAction, SegmentState, StyleUpdateMsg, Transform2D,
-    },
+    views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
 };
 
 pub struct GridInstance {
@@ -94,7 +92,7 @@ impl GridInstance {
 
             backbone_effects: HashMap::new(),
             backbone_style: DrawStyle {
-                color: rgb(0.19, 0.19, 0.19),
+                color: rgba(0.19, 0.19, 0.19, 1.0),
                 stroke_weight: 5.1,
             },
 
@@ -346,7 +344,7 @@ impl GridInstance {
 
     // a pathway to bypass the transition system and flash effect.
     // updates colors instantly for already active segments
-    pub fn instant_color_change(&mut self, new_color: Rgb<f32>) {
+    pub fn instant_color_change(&mut self, new_color: Rgba<f32>) {
         let new_style = DrawStyle {
             color: new_color,
             stroke_weight: self.target_style.stroke_weight,
@@ -355,40 +353,12 @@ impl GridInstance {
         // Update target style for future transitions
         self.target_style = new_style.clone();
 
-        // Apply direct style updates to all currently active segments
-        for segment_id in &self.current_active_segments.clone() {
-            if let Some(segment) = self.grid.segments.get_mut(segment_id) {
-                match segment.get_state() {
-                    SegmentState::Active { .. } => {
-                        // For active segments, just update to new style
-                        segment.set_state(SegmentState::Active {
-                            style: new_style.clone(),
-                        });
-                        segment.layer = Layer::Foreground;
-                    }
-                    SegmentState::Idle { .. } => {
-                        // For idle segments in the active set, activate them
-                        segment.set_state(SegmentState::Active {
-                            style: new_style.clone(),
-                        });
-                        segment.layer = Layer::Foreground;
-                    }
-                    SegmentState::PoweringOn { .. } => {
-                        // For segments powering on, skip to active state
-                        segment.set_state(SegmentState::Active {
-                            style: new_style.clone(),
-                        });
-                        segment.layer = Layer::Foreground;
-                    }
-                    SegmentState::PoweringOff { target_style, .. } => {
-                        // For segments powering off, skip to idle state
-                        segment.set_state(SegmentState::Idle {
-                            style: target_style.clone(),
-                        });
-                        segment.layer = Layer::Background;
-                    }
-                }
-            }
+        // create update messages for active segments
+        for segment_id in &self.current_active_segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg::new(SegmentAction::InstantStyleChange, new_style.clone()),
+            );
         }
     }
 

@@ -366,7 +366,6 @@ impl GridInstance {
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         self.current_location += transform.translation;
-        self.current_scale = transform.scale;
         self.grid.apply_transform(transform);
     }
 
@@ -408,6 +407,44 @@ impl GridInstance {
 
         // Update location's rotation (but not position)
         self.current_rotation += angle;
+    }
+
+    pub fn scale_in_place(&mut self, new_scale: f32) {
+        let scale_factor = new_scale / self.current_scale;
+
+        // 1. Transform to pivot-relative space
+        let to_local = Transform2D {
+            translation: -self.current_location,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+
+        // 2. Just scaling
+        let scale = Transform2D {
+            translation: Vec2::ZERO,
+            scale: scale_factor,
+            rotation: 0.0,
+        };
+
+        // 3. Transform back
+        let to_world = Transform2D {
+            translation: self.current_location,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+
+        // Apply each transform in sequence
+        self.grid.apply_transform(&to_local);
+        self.grid.apply_transform(&scale);
+        self.grid.apply_transform(&to_world);
+
+        // Scale current and any future stroke weights
+        self.grid.scale_stroke_weights(scale_factor);
+        self.backbone_style.stroke_weight *= scale_factor;
+        self.target_style.stroke_weight *= scale_factor;
+
+        // Update scale state
+        self.current_scale = new_scale;
     }
 
     pub fn start_movement(

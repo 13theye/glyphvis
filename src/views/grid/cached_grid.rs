@@ -376,6 +376,25 @@ impl CachedSegment {
             command.apply_transform(transform);
         }
     }
+
+    pub fn scale_stroke_weight(&mut self, scale_factor: f32) {
+        match &mut self.state {
+            SegmentState::Idle { style } | SegmentState::Active { style } => {
+                style.stroke_weight *= scale_factor;
+            }
+            SegmentState::PoweringOn { target_style, .. } => {
+                target_style.stroke_weight *= scale_factor;
+            }
+            SegmentState::PoweringOff {
+                from_style,
+                target_style,
+                ..
+            } => {
+                from_style.stroke_weight *= scale_factor;
+                target_style.stroke_weight *= scale_factor;
+            }
+        }
+    }
 }
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
@@ -426,7 +445,7 @@ impl CachedGrid {
         }
 
         // Remove overlapping segments
-        segments = CachedGrid::eliminate_overlaps(segments, project.grid_x, project.grid_y);
+        segments = eliminate_overlaps(segments, project.grid_x, project.grid_y);
 
         Self {
             dimensions: (project.grid_x, project.grid_y),
@@ -436,7 +455,7 @@ impl CachedGrid {
         }
     }
 
-    /************************ Rendering methods ****************************/
+    /************************ Rendering & transform methods ****************************/
     pub fn draw_grid_segments(
         &mut self,
         draw: &Draw,
@@ -493,94 +512,10 @@ impl CachedGrid {
         }
     }
 
-    /************************ Init methods ****************************/
-
-    // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
-    // in Glyphvis we decide on whether to draw an element at the beginning.
-    fn eliminate_overlaps(
-        segments: HashMap<String, CachedSegment>,
-        grid_width: u32,
-        grid_height: u32,
-    ) -> HashMap<String, CachedSegment> {
-        let mut final_segments = HashMap::new();
-
-        // Group segments by position for easier overlap checking
-        let mut segments_by_pos: HashMap<(u32, u32), Vec<&CachedSegment>> = HashMap::new();
-        for segment in segments.values() {
-            segments_by_pos
-                .entry(segment.tile_coordinate)
-                .or_default()
-                .push(segment);
+    pub fn scale_stroke_weights(&mut self, scale_factor: f32) {
+        for segment in self.segments.values_mut() {
+            segment.scale_stroke_weight(scale_factor);
         }
-
-        // Check each segment against its potential neighbors
-        for segment in segments.values() {
-            // Skip if it's not an edge
-            if segment.edge_type == EdgeType::None {
-                final_segments.insert(
-                    segment.id.clone(),
-                    segments.get(&segment.id).unwrap().clone(),
-                );
-                continue;
-            }
-
-            // Get potential neighbors based on edge type
-            if let Some((neighbor_x, neighbor_y)) = grid_utility::get_neighbor_coords(
-                segment.tile_coordinate.0,
-                segment.tile_coordinate.1,
-                segment.edge_type,
-                grid_width,
-                grid_height,
-            ) {
-                // check if neighbor has priority
-                let neighbor_has_priority = neighbor_x < segment.tile_coordinate.0
-                    || (neighbor_x == segment.tile_coordinate.1
-                        && neighbor_y < segment.tile_coordinate.1);
-
-                if neighbor_has_priority {
-                    // Look for matching segments at neighbor position
-                    if let Some(neighbor_segments) = segments_by_pos.get(&(neighbor_x, neighbor_y))
-                    {
-                        let mut should_keep = true;
-
-                        for neighbor in neighbor_segments {
-                            let direction = grid_utility::get_neighbor_direction(
-                                segment.tile_coordinate.0,
-                                segment.tile_coordinate.1,
-                                neighbor_x,
-                                neighbor_y,
-                            );
-
-                            if grid_utility::check_segment_alignment(segment, neighbor, direction) {
-                                should_keep = false;
-                                break;
-                            }
-                        }
-
-                        if should_keep {
-                            final_segments.insert(
-                                segment.id.clone(),
-                                segments.get(&segment.id).unwrap().clone(),
-                            );
-                        }
-                    }
-                } else {
-                    // This segment has priority, keep it
-                    final_segments.insert(
-                        segment.id.clone(),
-                        segments.get(&segment.id).unwrap().clone(),
-                    );
-                }
-            } else {
-                // No valid neighbor position, keep the segment
-                final_segments.insert(
-                    segment.id.clone(),
-                    segments.get(&segment.id).unwrap().clone(),
-                );
-            }
-        }
-        // return:
-        final_segments
     }
 
     // Utility methods
@@ -627,6 +562,95 @@ impl CachedGrid {
         true
     }
     */
+}
+
+/************************ CachedGrid Initialization Helper ****************************/
+
+// Unlike Glyphmaker, where we draw all elements and then handle selection logic,
+// in Glyphvis we decide on whether to draw an element at the beginning.
+fn eliminate_overlaps(
+    segments: HashMap<String, CachedSegment>,
+    grid_width: u32,
+    grid_height: u32,
+) -> HashMap<String, CachedSegment> {
+    let mut final_segments = HashMap::new();
+
+    // Group segments by position for easier overlap checking
+    let mut segments_by_pos: HashMap<(u32, u32), Vec<&CachedSegment>> = HashMap::new();
+    for segment in segments.values() {
+        segments_by_pos
+            .entry(segment.tile_coordinate)
+            .or_default()
+            .push(segment);
+    }
+
+    // Check each segment against its potential neighbors
+    for segment in segments.values() {
+        // Skip if it's not an edge
+        if segment.edge_type == EdgeType::None {
+            final_segments.insert(
+                segment.id.clone(),
+                segments.get(&segment.id).unwrap().clone(),
+            );
+            continue;
+        }
+
+        // Get potential neighbors based on edge type
+        if let Some((neighbor_x, neighbor_y)) = grid_utility::get_neighbor_coords(
+            segment.tile_coordinate.0,
+            segment.tile_coordinate.1,
+            segment.edge_type,
+            grid_width,
+            grid_height,
+        ) {
+            // check if neighbor has priority
+            let neighbor_has_priority = neighbor_x < segment.tile_coordinate.0
+                || (neighbor_x == segment.tile_coordinate.1
+                    && neighbor_y < segment.tile_coordinate.1);
+
+            if neighbor_has_priority {
+                // Look for matching segments at neighbor position
+                if let Some(neighbor_segments) = segments_by_pos.get(&(neighbor_x, neighbor_y)) {
+                    let mut should_keep = true;
+
+                    for neighbor in neighbor_segments {
+                        let direction = grid_utility::get_neighbor_direction(
+                            segment.tile_coordinate.0,
+                            segment.tile_coordinate.1,
+                            neighbor_x,
+                            neighbor_y,
+                        );
+
+                        if grid_utility::check_segment_alignment(segment, neighbor, direction) {
+                            should_keep = false;
+                            break;
+                        }
+                    }
+
+                    if should_keep {
+                        final_segments.insert(
+                            segment.id.clone(),
+                            segments.get(&segment.id).unwrap().clone(),
+                        );
+                    }
+                }
+            } else {
+                // This segment has priority, keep it
+                final_segments.insert(
+                    segment.id.clone(),
+                    segments.get(&segment.id).unwrap().clone(),
+                );
+            }
+        } else {
+            // No valid neighbor position, keep the segment
+            final_segments.insert(
+                segment.id.clone(),
+                segments.get(&segment.id).unwrap().clone(),
+            );
+        }
+    }
+    // return:
+    final_segments
 }
 
 #[cfg(test)]

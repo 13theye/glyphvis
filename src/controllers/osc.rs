@@ -30,6 +30,10 @@ pub enum OscCommand {
         name: String,
         angle: f32,
     },
+    ScaleGrid {
+        name: String,
+        scale: f32,
+    },
     FlashBackground {
         r: f32,
         g: f32,
@@ -156,6 +160,16 @@ impl OscController {
                             self.command_queue.push(OscCommand::RotateGrid {
                                 name: name.clone(),
                                 angle: *angle,
+                            });
+                        }
+                    }
+                    "/grid/scale" => {
+                        if let [osc::Type::String(name), osc::Type::Float(scale)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::ScaleGrid {
+                                name: name.clone(),
+                                scale: *scale,
                             });
                         }
                     }
@@ -366,6 +380,14 @@ impl OscSender {
     pub fn send_rotate_grid(&self, name: &str, angle: f32) {
         let addr = "/grid/rotate".to_string();
         let args = vec![osc::Type::String(name.to_string()), osc::Type::Float(angle)];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_scale_grid(&self, name: &str, scale: f32) {
+        let addr = "/grid/scale".to_string();
+        let args = vec![osc::Type::String(name.to_string()), osc::Type::Float(scale)];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

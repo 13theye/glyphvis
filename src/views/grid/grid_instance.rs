@@ -379,6 +379,8 @@ impl GridInstance {
     }
 
     pub fn rotate_in_place(&mut self, angle: f32) {
+        let angle_delta = angle - self.current_rotation;
+
         // 1. Transform to pivot-relative space
         let to_local = Transform2D {
             translation: -self.current_location,
@@ -390,7 +392,7 @@ impl GridInstance {
         let rotate = Transform2D {
             translation: Vec2::ZERO,
             scale: 1.0,
-            rotation: angle,
+            rotation: angle_delta,
         };
 
         // 3. Transform back
@@ -406,7 +408,7 @@ impl GridInstance {
         self.grid.apply_transform(&to_world);
 
         // Update location's rotation (but not position)
-        self.current_rotation += angle;
+        self.current_rotation = angle;
     }
 
     pub fn scale_in_place(&mut self, new_scale: f32) {

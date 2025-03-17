@@ -301,6 +301,16 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model.osc_sender.send_scale_grid(name, 1.0);
             }
         }
+        Key::T => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_rotate_grid(name, 5.0);
+            }
+        }
+        Key::Y => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_rotate_grid(name, -5.0);
+            }
+        }
 
         /***************** Below functions aren't implemented in OSC ****************** */
         Key::P => {

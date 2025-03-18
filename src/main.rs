@@ -299,7 +299,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Up => {
             for name in model.grids.keys() {
-                model.osc_sender.send_scale_grid(name, 0.3);
+                model.osc_sender.send_scale_grid(name, 0.001);
             }
         }
         Key::Down => {

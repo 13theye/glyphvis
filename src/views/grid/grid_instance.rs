@@ -428,7 +428,10 @@ impl GridInstance {
     }
 
     pub fn scale_in_place(&mut self, new_scale: f32) {
-        let scale_factor = new_scale / self.current_scale;
+        // clamp scale value to a minimum of 0.001
+        let safe_scale = if new_scale < 0.001 { 0.001 } else { new_scale };
+
+        let scale_factor = safe_scale / self.current_scale;
 
         // 1. Transform to pivot-relative space
         let to_local = Transform2D {
@@ -462,7 +465,7 @@ impl GridInstance {
         self.target_style.stroke_weight *= scale_factor;
 
         // Update scale state
-        self.current_scale = new_scale;
+        self.current_scale = safe_scale;
     }
 
     pub fn start_movement(

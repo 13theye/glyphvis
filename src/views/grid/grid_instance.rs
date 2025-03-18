@@ -109,7 +109,7 @@ impl GridInstance {
             current_rotation: rotation,
             current_scale: 1.0,
             active_movement: None,
-            visible: true,
+            visible: false,
         }
     }
 

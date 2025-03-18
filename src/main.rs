@@ -222,13 +222,13 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 // Create three test grids via OSC
                 model
                     .osc_sender
-                    .send_create_grid("grid_1", "heol", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_1", "grid_1", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
-                    .send_create_grid("grid_2", "heol", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_2", "grid_1", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
-                    .send_create_grid("grid_3", "heol", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_3", "grid_1", 0.0, 0.0, 0.0);
                 model.osc_sender.send_toggle_visibility("grid_2");
             } else {
                 // Toggle visibility (you might want to add an OSC command for this)

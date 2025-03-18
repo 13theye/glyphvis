@@ -183,6 +183,42 @@ pub struct CachedSegment {
 }
 
 impl CachedSegment {
+    /**************************  Getters and Setters  *************************************** */
+
+    pub fn draw_commands(&self) -> &Vec<DrawCommand> {
+        &self.draw_commands
+    }
+
+    pub fn edge_type(&self) -> &EdgeType {
+        &self.edge_type
+    }
+
+    pub fn is_background(&self) -> bool {
+        matches!(self.layer, Layer::Background)
+    }
+
+    pub fn is_idle(&self) -> bool {
+        matches!(self.state, SegmentState::Idle { .. })
+    }
+
+    pub fn original_path(&self) -> &PathElement {
+        &self.original_path
+    }
+
+    pub fn set_state(&mut self, state: SegmentState) {
+        self.state = state;
+    }
+
+    pub fn state(&self) -> &SegmentState {
+        &self.state
+    }
+
+    pub fn tile_coordinate(&self) -> (u32, u32) {
+        self.tile_coordinate
+    }
+
+    /**************************  New  *************************************** */
+
     pub fn new(
         element_id: String,
         tile_coordinate: (u32, u32),
@@ -355,40 +391,6 @@ impl CachedSegment {
         }
     }
 
-    /**************************  Getters and Setters  *************************************** */
-
-    pub fn is_idle(&self) -> bool {
-        matches!(self.state, SegmentState::Idle { .. })
-    }
-
-    pub fn state(&self) -> &SegmentState {
-        &self.state
-    }
-
-    pub fn set_state(&mut self, state: SegmentState) {
-        self.state = state;
-    }
-
-    pub fn tile_coordinate(&self) -> (u32, u32) {
-        self.tile_coordinate
-    }
-
-    pub fn is_background(&self) -> bool {
-        matches!(self.layer, Layer::Background)
-    }
-
-    pub fn draw_commands(&self) -> &Vec<DrawCommand> {
-        &self.draw_commands
-    }
-
-    pub fn original_path(&self) -> &PathElement {
-        &self.original_path
-    }
-
-    pub fn edge_type(&self) -> &EdgeType {
-        &self.edge_type
-    }
-
     /**************************  Transform functions *************************************** */
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
@@ -426,6 +428,31 @@ pub struct CachedGrid {
 }
 
 impl CachedGrid {
+    /************************ Getters and Setters ****************************/
+    pub fn dimensions(&self) -> (u32, u32) {
+        self.dimensions
+    }
+
+    pub fn get_segments_at(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
+        self.segments
+            .values()
+            .filter(move |segment| segment.tile_coordinate == (x, y))
+    }
+
+    pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
+        self.segments.get(id)
+    }
+
+    pub fn segments(&self) -> &HashMap<String, CachedSegment> {
+        &self.segments
+    }
+
+    pub fn viewbox(&self) -> &ViewBox {
+        &self.viewbox
+    }
+
+    /************************ New ****************************/
+
     pub fn new(project: &Project) -> Self {
         // Parse viewbox from SVG
         let viewbox = grid_utility::parse_viewbox(&project.svg_base_tile)
@@ -534,29 +561,6 @@ impl CachedGrid {
         for segment in self.segments.values_mut() {
             segment.scale_stroke_weight(scale_factor);
         }
-    }
-
-    /************************ Getters and Setters ****************************/
-    pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
-        self.segments.get(id)
-    }
-
-    pub fn get_segments_at(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
-        self.segments
-            .values()
-            .filter(move |segment| segment.tile_coordinate == (x, y))
-    }
-
-    pub fn segments(&self) -> &HashMap<String, CachedSegment> {
-        &self.segments
-    }
-
-    pub fn dimensions(&self) -> (u32, u32) {
-        self.dimensions
-    }
-
-    pub fn viewbox(&self) -> &ViewBox {
-        &self.viewbox
     }
 
     /*

@@ -63,6 +63,54 @@ pub struct GridInstance {
 }
 
 impl GridInstance {
+    /*********************** Getters and Setters  *****************************/
+
+    pub fn current_active_segments(&self) -> &HashSet<String> {
+        &self.current_active_segments
+    }
+
+    pub fn current_scale(&self) -> f32 {
+        self.current_scale
+    }
+
+    pub fn graph(&self) -> &SegmentGraph {
+        &self.graph
+    }
+
+    pub fn grid(&self) -> &CachedGrid {
+        &self.grid
+    }
+
+    pub fn has_target_segments(&self) -> bool {
+        self.target_segments.is_some()
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    pub fn set_visibility(&mut self, setting: bool) {
+        self.visible = setting;
+    }
+
+    pub fn target_style(&self) -> &DrawStyle {
+        &self.target_style
+    }
+
+    pub fn toggle_visibility(&mut self) {
+        self.visible = !self.visible;
+    }
+
+    pub fn transition_config(&self) -> &Option<TransitionConfig> {
+        &self.transition_config
+    }
+
+    /*********************** New  *****************************/
+
     pub fn new(id: String, project: &Project, show: &str, position: Point2, rotation: f32) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
@@ -552,48 +600,6 @@ impl GridInstance {
 
     fn update_backbone_style(&mut self, time: f32) {
         self.backbone_style = self.apply_backbone_effects(&self.backbone_style, time);
-    }
-
-    /*********************** Getters and Setters  *****************************/
-
-    pub fn graph(&self) -> &SegmentGraph {
-        &self.graph
-    }
-
-    pub fn grid(&self) -> &CachedGrid {
-        &self.grid
-    }
-
-    pub fn current_scale(&self) -> f32 {
-        self.current_scale
-    }
-
-    pub fn is_visible(&self) -> bool {
-        self.visible
-    }
-
-    pub fn toggle_visibility(&mut self) {
-        self.visible = !self.visible;
-    }
-
-    pub fn set_visibility(&mut self, setting: bool) {
-        self.visible = setting;
-    }
-
-    pub fn target_style(&self) -> &DrawStyle {
-        &self.target_style
-    }
-
-    pub fn has_target_segments(&self) -> bool {
-        self.target_segments.is_some()
-    }
-
-    pub fn current_active_segments(&self) -> &HashSet<String> {
-        &self.current_active_segments
-    }
-
-    pub fn transition_config(&self) -> &Option<TransitionConfig> {
-        &self.transition_config
     }
 
     /*********************** Debug Helper ******************************* */

@@ -229,6 +229,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model
                     .osc_sender
                     .send_create_grid("grid_3", "heol", 0.0, 0.0, 0.0);
+                model.osc_sender.send_toggle_visibility("grid_2");
             } else {
                 // Toggle visibility (you might want to add an OSC command for this)
                 for name in model.grids.keys() {

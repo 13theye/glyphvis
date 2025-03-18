@@ -55,7 +55,6 @@ pub struct GridInstance {
 
     // grid transform state
     spawn_location: Point2,
-    spawn_rotation: f32,
     current_location: Point2,
     current_rotation: f32,
     current_scale: f32,
@@ -106,7 +105,6 @@ impl GridInstance {
             update_batch: HashMap::new(),
 
             spawn_location: position,
-            spawn_rotation: rotation,
             current_location: position,
             current_rotation: rotation,
             current_scale: 1.0,

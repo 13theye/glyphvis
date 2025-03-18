@@ -236,6 +236,11 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 }
             }
         }
+        Key::E => {
+            for (name, _) in model.grids.iter() {
+                model.osc_sender.send_set_power_effect(name, 1);
+            }
+        }
         Key::H => {
             for name in model.grids.keys() {
                 if name != "grid_2" {
@@ -671,6 +676,11 @@ fn launch_commands(app: &App, model: &mut Model) {
             OscCommand::SetColorful { grid_name, setting } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.colorful_flag = setting;
+                }
+            }
+            OscCommand::SetPowerEffect { grid_name, setting } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.use_power_on_effect = setting;
                 }
             }
             OscCommand::UpdateTransitionConfig {

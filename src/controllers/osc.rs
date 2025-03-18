@@ -87,6 +87,10 @@ pub enum OscCommand {
         grid_name: String,
         setting: bool,
     },
+    SetPowerEffect {
+        grid_name: String,
+        setting: bool,
+    },
     UpdateTransitionConfig {
         grid_name: String,
         steps: Option<usize>,
@@ -293,6 +297,17 @@ impl OscController {
                             });
                         }
                     }
+                    "/grid/setpowereffect" => {
+                        if let [osc::Type::String(name), osc::Type::Int(setting)] =
+                            &message.args[..]
+                        {
+                            let setting_bool = *setting != 0;
+                            self.command_queue.push(OscCommand::SetPowerEffect {
+                                grid_name: name.clone(),
+                                setting: setting_bool,
+                            });
+                        }
+                    }
                     "/transition/update" => {
                         let mut grid_name = String::new();
                         let mut steps = None;
@@ -489,7 +504,16 @@ impl OscSender {
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
-
+    pub fn send_set_power_effect(&self, grid_name: &str, setting: i32) {
+        let addr = "/grid/setpowereffect".to_string();
+        let args = vec![
+            osc::Type::String(grid_name.to_string()),
+            osc::Type::Int(setting),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
     pub fn send_background_flash(&self, r: f32, g: f32, b: f32, duration: f32) {
         let addr = "/background/flash".to_string();
         let args = vec![

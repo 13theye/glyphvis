@@ -242,8 +242,8 @@ pub fn check_segment_alignment(
     segment2: &CachedSegment,
     direction: Option<&str>,
 ) -> bool {
-    let edge_type1 = segment1.edge_type();
-    let edge_type2 = segment2.edge_type();
+    let edge_type1 = &segment1.edge_type;
+    let edge_type2 = &segment2.edge_type;
 
     // Check if segments align based on their edge types and positions
     let types_match = match edge_type1 {
@@ -281,8 +281,8 @@ pub fn check_segment_alignment(
     if !types_match {
         false
     } else {
-        let path1 = segment1.original_path();
-        let path2 = segment2.original_path();
+        let path1 = &segment1.original_path;
+        let path2 = &segment2.original_path;
         // then check coordinate alignment
         match (path1, path2) {
             (

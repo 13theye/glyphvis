@@ -229,7 +229,9 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model
                     .osc_sender
                     .send_create_grid("grid_3", "grid_1", 0.0, 0.0, 0.0);
+                model.osc_sender.send_toggle_visibility("grid_1");
                 model.osc_sender.send_toggle_visibility("grid_2");
+                model.osc_sender.send_toggle_visibility("grid_3");
             } else {
                 // Toggle visibility (you might want to add an OSC command for this)
                 for name in model.grids.keys() {
@@ -422,7 +424,7 @@ fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
                     color,
 
                     // account for any grid scaling
-                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale(),
+                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
                 });
             }
             grid_instance.start_transition(&model.transition_engine);
@@ -645,7 +647,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     let style = DrawStyle {
                         color: rgba(r, g, b, a),
-                        stroke_weight: model.default_stroke_weight * grid.current_scale(),
+                        stroke_weight: model.default_stroke_weight * grid.current_scale,
                     };
                     grid.set_effect_target_style(style);
                 }
@@ -661,12 +663,12 @@ fn launch_commands(app: &App, model: &mut Model) {
             }
             OscCommand::ToggleVisibility { grid_name } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.toggle_visibility();
+                    grid.is_visible = !grid.is_visible;
                 }
             }
             OscCommand::SetVisibility { grid_name, setting } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.set_visibility(setting);
+                    grid.is_visible = setting;
                 }
             }
             OscCommand::ToggleColorful { grid_name } => {

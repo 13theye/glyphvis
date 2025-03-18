@@ -166,6 +166,7 @@ impl GridInstance {
     // if the glyph exists in the show, retrieve the segments and stage
     // in target_segments. Any anomalies result in no glyph
     pub fn stage_glyph_by_index(&mut self, project: &Project, index: usize) {
+        println!("Staging glyph #{} in show {}", index, self.show);
         match project.get_show(&self.show) {
             Some(show) => match show.show_order.get(&(index as u32)) {
                 Some(show_element) => match project.get_glyph(&show_element.name) {
@@ -173,6 +174,7 @@ impl GridInstance {
                         self.current_glyph_index = index;
                         self.target_segments = (!glyph.segments.is_empty())
                             .then(|| glyph.segments.iter().cloned().collect());
+                        println!("{}: Current index: {}", self.id, self.current_glyph_index);
                     }
                     None => self.no_glyph(),
                 },

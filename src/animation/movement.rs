@@ -81,7 +81,7 @@ pub struct MovementEngine {
 impl MovementEngine {
     pub fn new(config: MovementConfig) -> Self {
         let steps = if config.duration == 0.0 {
-            2
+            1
         } else {
             (config.duration * 60.0).floor() as usize
         };
@@ -97,7 +97,11 @@ impl MovementEngine {
         //let total_scale_change = end.scale - start.scale;
 
         for step in 0..self.steps {
-            let t = step as f32 / (self.steps - 1) as f32;
+            let t = if self.steps > 1 {
+                step as f32 / (self.steps - 1) as f32
+            } else {
+                1.0
+            };
             let eased_t = match self.config.easing {
                 EasingType::Linear => t,
                 EasingType::EaseInOut => ease_in_out(t),

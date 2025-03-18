@@ -232,9 +232,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             } else {
                 // Toggle visibility (you might want to add an OSC command for this)
                 for name in model.grids.keys() {
-                    if name != "grid_2" {
-                        model.osc_sender.send_toggle_visibility(name);
-                    }
+                    model.osc_sender.send_toggle_visibility(name);
                 }
             }
         }
@@ -412,13 +410,13 @@ fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
     let color = Rgba::from(color_hsl);
 
     for grid_instance in model.grids.values_mut() {
-        if grid_instance.target_segments.is_some() {
+        if grid_instance.has_target_segments() {
             if grid_instance.colorful_flag {
                 grid_instance.set_effect_target_style(DrawStyle {
                     color,
 
                     // account for any grid scaling
-                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
+                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale(),
                 });
             }
             grid_instance.start_transition(&model.transition_engine);
@@ -608,7 +606,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_by_index(&model.project, glyph_index);
-                    grid.immediately_change = immediate;
+                    grid.next_change_is_immediate = immediate;
                 }
             }
             OscCommand::InstantGlyphColor {
@@ -628,7 +626,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph(&model.project);
-                    grid.immediately_change = immediate;
+                    grid.next_change_is_immediate = immediate;
                 }
             }
             OscCommand::NextGlyphColor {
@@ -641,7 +639,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     let style = DrawStyle {
                         color: rgba(r, g, b, a),
-                        stroke_weight: model.default_stroke_weight * grid.current_scale,
+                        stroke_weight: model.default_stroke_weight * grid.current_scale(),
                     };
                     grid.set_effect_target_style(style);
                 }
@@ -652,17 +650,17 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.no_glyph();
-                    grid.immediately_change = immediate;
+                    grid.next_change_is_immediate = immediate;
                 }
             }
             OscCommand::ToggleVisibility { grid_name } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.visible = !grid.visible;
+                    grid.toggle_visibility();
                 }
             }
             OscCommand::SetVisibility { grid_name, setting } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.visible = setting;
+                    grid.set_visibility(setting);
                 }
             }
             OscCommand::ToggleColorful { grid_name } => {

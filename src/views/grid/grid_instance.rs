@@ -18,48 +18,49 @@ use crate::{
     effects::BackboneEffect,
     models::Project,
     services::SegmentGraph,
-    views::{CachedGrid, DrawStyle, Layer, SegmentAction, StyleUpdateMsg, Transform2D},
+    views::{CachedGrid, DrawStyle, SegmentAction, StyleUpdateMsg, Transform2D},
 };
 
 pub struct GridInstance {
     // grid data
-    pub id: String,
-    pub grid: CachedGrid,
-    pub graph: SegmentGraph,
+    id: String,
+    grid: CachedGrid,
+    graph: SegmentGraph,
 
     // glyph state
-    pub show: String,
-    pub current_glyph_index: usize,
+    show: String,
+    current_glyph_index: usize,
     index_max: usize,
 
     // effects state
-    pub active_transition: Option<Transition>,
-    pub transition_config: Option<TransitionConfig>,
-    pub immediately_change: bool,
+    active_transition: Option<Transition>,
+    transition_config: Option<TransitionConfig>,
+    pub next_change_is_immediate: bool,
+    pub use_power_on_effect: bool,
     pub colorful_flag: bool, // enables random-ish color effect target style
 
     // update messages for a the next frame
     // String is the segment_id
     // StyleUpdateMsg is the update message for the segment
-    pub update_batch: HashMap<String, StyleUpdateMsg>,
+    update_batch: HashMap<String, StyleUpdateMsg>,
 
     // inside-grid state
-    pub current_active_segments: HashSet<String>,
-    pub target_segments: Option<HashSet<String>>,
-    pub target_style: DrawStyle,
+    current_active_segments: HashSet<String>,
+    target_segments: Option<HashSet<String>>,
+    target_style: DrawStyle,
 
     // backbone state
     pub backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
     pub backbone_style: DrawStyle,
 
     // grid transform state
-    pub spawn_location: Point2,
-    pub spawn_rotation: f32,
-    pub current_location: Point2,
-    pub current_rotation: f32,
-    pub current_scale: f32,
-    pub active_movement: Option<Movement>,
-    pub visible: bool,
+    spawn_location: Point2,
+    spawn_rotation: f32,
+    current_location: Point2,
+    current_rotation: f32,
+    current_scale: f32,
+    active_movement: Option<Movement>,
+    visible: bool,
 }
 
 impl GridInstance {
@@ -98,7 +99,8 @@ impl GridInstance {
 
             active_transition: None,
             transition_config: None,
-            immediately_change: false,
+            next_change_is_immediate: false,
+            use_power_on_effect: false,
             colorful_flag: false,
 
             update_batch: HashMap::new(),
@@ -195,12 +197,24 @@ impl GridInstance {
 
     /************************** Update messages and state ******************************/
 
-    fn turn_on_segments(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
+    fn power_on_segments(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
                 StyleUpdateMsg {
                     action: Some(SegmentAction::On),
+                    target_style: Some(target_style.clone()),
+                },
+            );
+        }
+    }
+
+    fn instant_on_segments(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
+        for segment_id in segments {
+            self.update_batch.insert(
+                segment_id.clone(),
+                StyleUpdateMsg {
+                    action: Some(SegmentAction::InstantStyleChange),
                     target_style: Some(target_style.clone()),
                 },
             );
@@ -232,9 +246,9 @@ impl GridInstance {
     }
 
     fn update_backbone_segments(&mut self) {
-        for (segment_id, segment) in self.grid.segments.iter() {
+        for (segment_id, segment) in self.grid.segments().iter() {
             if !self.update_batch.contains_key(segment_id)
-                && self.grid.segments[segment_id].layer == Layer::Background
+                && self.grid.segments()[segment_id].is_background()
                 && segment.is_idle()
             {
                 self.update_batch.insert(
@@ -272,7 +286,7 @@ impl GridInstance {
         let changes = engine.generate_changes(
             self,
             target_segments,
-            self.immediately_change, // when true, all segments change at once
+            self.next_change_is_immediate, // when true, all segments change at once
         );
 
         self.active_transition = Some(Transition::new(
@@ -317,7 +331,11 @@ impl GridInstance {
         let backbone_style = self.backbone_style.clone();
 
         if !updates.segments_on.is_empty() {
-            self.turn_on_segments(&updates.segments_on, &target_style);
+            if self.use_power_on_effect {
+                self.power_on_segments(&updates.segments_on, &target_style);
+            } else {
+                self.instant_on_segments(&updates.segments_on, &target_style);
+            }
         }
 
         if !updates.segments_off.is_empty() {
@@ -538,14 +556,56 @@ impl GridInstance {
         self.backbone_style = self.apply_backbone_effects(&self.backbone_style, time);
     }
 
+    /*********************** Getters and Setters  *****************************/
+
+    pub fn graph(&self) -> &SegmentGraph {
+        &self.graph
+    }
+
+    pub fn grid(&self) -> &CachedGrid {
+        &self.grid
+    }
+
+    pub fn current_scale(&self) -> f32 {
+        self.current_scale
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    pub fn toggle_visibility(&mut self) {
+        self.visible = !self.visible;
+    }
+
+    pub fn set_visibility(&mut self, setting: bool) {
+        self.visible = setting;
+    }
+
+    pub fn target_style(&self) -> &DrawStyle {
+        &self.target_style
+    }
+
+    pub fn has_target_segments(&self) -> bool {
+        self.target_segments.is_some()
+    }
+
+    pub fn current_active_segments(&self) -> &HashSet<String> {
+        &self.current_active_segments
+    }
+
+    pub fn transition_config(&self) -> &Option<TransitionConfig> {
+        &self.transition_config
+    }
+
     /*********************** Debug Helper ******************************* */
 
     pub fn print_grid_info(&self) {
         println!("<====== Grid Instance: {} ======>", self.id);
         println!("\nGrid Info:");
         println!("Location: {:?}", self.current_location);
-        println!("Dimensions: {:?}", self.grid.dimensions);
-        println!("Viewbox: {:?}", self.grid.viewbox);
-        println!("Segment count: {}\n", self.grid.segments.len());
+        println!("Dimensions: {:?}", self.grid.dimensions());
+        println!("Viewbox: {:?}", self.grid.viewbox());
+        println!("Segment count: {}\n", self.grid.segments().len());
     }
 }

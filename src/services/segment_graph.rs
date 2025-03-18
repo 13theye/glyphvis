@@ -11,16 +11,16 @@ const VERBOSE: bool = true;
 
 #[derive(Debug, Clone)]
 pub struct SegmentConnection {
-    pub segment_id: String,
-    pub connection_point: Point2,
+    segment_id: String,
+    connection_point: Point2,
 }
 
 #[derive(Debug)]
 pub struct SegmentNode {
-    pub id: String,
-    pub tile_pos: (u32, u32),
-    pub commands: Vec<DrawCommand>,
-    pub connections: Vec<SegmentConnection>,
+    id: String,
+    tile_pos: (u32, u32),
+    commands: Vec<DrawCommand>,
+    connections: Vec<SegmentConnection>,
 }
 
 impl SegmentNode {
@@ -61,13 +61,13 @@ impl SegmentGraph {
         let mut nodes = HashMap::new();
 
         // First create nodes for each segment
-        for (id, segment) in &grid.segments {
+        for (id, segment) in grid.segments() {
             nodes.insert(
                 id.clone(),
                 SegmentNode {
                     id: id.clone(),
-                    tile_pos: segment.tile_coordinate,
-                    commands: segment.draw_commands.clone(),
+                    tile_pos: segment.tile_coordinate(),
+                    commands: segment.draw_commands().clone(),
                     connections: Vec::new(),
                 },
             );

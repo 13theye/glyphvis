@@ -102,12 +102,12 @@ impl TransitionEngine {
         target_segments: &HashSet<String>,
         immediate: bool, // when true, all segments change at once
     ) -> Vec<Vec<SegmentChange>> {
-        let grid = &grid_instance.grid;
-        let start_segments = &grid_instance.current_active_segments;
-        let target_style = &grid_instance.target_style;
-        let segment_graph = &grid_instance.graph;
+        let grid = grid_instance.grid();
+        let start_segments = grid_instance.current_active_segments();
+        let target_style = grid_instance.target_style();
+        let segment_graph = grid_instance.graph();
 
-        let config = if let Some(config) = &grid_instance.transition_config {
+        let config = if let Some(config) = grid_instance.transition_config() {
             config
         } else {
             &self.default_config
@@ -131,7 +131,7 @@ impl TransitionEngine {
         // Filter out segments that are already in the target state and have the same style
         if !immediate {
             filtered_segments.retain(|seg| {
-                let current_style = grid.segments[seg].get_current_style();
+                let current_style = grid.segments()[seg].get_current_style();
                 if current_style == *target_style {
                     false // Remove if styles match
                 } else {

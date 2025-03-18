@@ -168,17 +168,17 @@ pub enum SegmentState {
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     // metadata
-    pub id: String,
-    pub tile_coordinate: (u32, u32),
-    pub layer: Layer,
+    id: String,
+    tile_coordinate: (u32, u32),
+    layer: Layer,
 
     // style state
     state: SegmentState,
 
     // draw commands cache
-    pub draw_commands: Vec<DrawCommand>,
-    pub original_path: PathElement,
-    pub edge_type: EdgeType,
+    draw_commands: Vec<DrawCommand>,
+    original_path: PathElement,
+    edge_type: EdgeType,
     //pub transform: Transform2D,
 }
 
@@ -355,18 +355,38 @@ impl CachedSegment {
         }
     }
 
-    /**************************  Helper functions *************************************** */
+    /**************************  Getters and Setters  *************************************** */
 
     pub fn is_idle(&self) -> bool {
         matches!(self.state, SegmentState::Idle { .. })
     }
 
-    pub fn get_state(&self) -> &SegmentState {
+    pub fn state(&self) -> &SegmentState {
         &self.state
     }
 
     pub fn set_state(&mut self, state: SegmentState) {
         self.state = state;
+    }
+
+    pub fn tile_coordinate(&self) -> (u32, u32) {
+        self.tile_coordinate
+    }
+
+    pub fn is_background(&self) -> bool {
+        matches!(self.layer, Layer::Background)
+    }
+
+    pub fn draw_commands(&self) -> &Vec<DrawCommand> {
+        &self.draw_commands
+    }
+
+    pub fn original_path(&self) -> &PathElement {
+        &self.original_path
+    }
+
+    pub fn edge_type(&self) -> &EdgeType {
+        &self.edge_type
     }
 
     /**************************  Transform functions *************************************** */
@@ -400,10 +420,9 @@ impl CachedSegment {
 // CachedGrid stores the pre-processed drawing commands for an entire grid
 #[derive(Debug, Clone)]
 pub struct CachedGrid {
-    pub dimensions: (u32, u32), // number of tiles in x and y
-    pub segments: HashMap<String, CachedSegment>,
-    pub viewbox: ViewBox,
-    pub transform: Transform2D,
+    dimensions: (u32, u32), // number of tiles in x and y
+    segments: HashMap<String, CachedSegment>,
+    viewbox: ViewBox,
 }
 
 impl CachedGrid {
@@ -451,7 +470,6 @@ impl CachedGrid {
             dimensions: (project.grid_x, project.grid_y),
             segments,
             viewbox,
-            transform: Transform2D::default(),
         }
     }
 
@@ -518,7 +536,7 @@ impl CachedGrid {
         }
     }
 
-    // Utility methods
+    /************************ Getters and Setters ****************************/
     pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
         self.segments.get(id)
     }
@@ -527,6 +545,18 @@ impl CachedGrid {
         self.segments
             .values()
             .filter(move |segment| segment.tile_coordinate == (x, y))
+    }
+
+    pub fn segments(&self) -> &HashMap<String, CachedSegment> {
+        &self.segments
+    }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        self.dimensions
+    }
+
+    pub fn viewbox(&self) -> &ViewBox {
+        &self.viewbox
     }
 
     /*

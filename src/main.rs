@@ -365,12 +365,14 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return; // Important: return here to not continue with normal rendering
     }
 
-    // Main update loop for grids
+    /*********************  Main update method for grids **********************/
     for (_, grid_instance) in model.grids.iter_mut() {
         let dt = duration.as_secs_f32();
         grid_instance.update(&model.draw, &model.transition_engine, app.time, dt);
     }
+    /*************************************************************************/
 
+    // Handle FPS and origin display
     if model.debug_flag {
         // Draw (+,+) axes
         let draw = &model.draw;
@@ -389,7 +391,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             .color(RED);
     }
 
-    // Rnder to texture and handle frame recording
+    // Render to texture and handle frame recording
     render_and_capture(app, model);
 
     //let total_duration = start_time.elapsed();

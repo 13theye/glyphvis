@@ -156,7 +156,7 @@ impl GridInstance {
         }
     }
 
-    /************************** New Update Flow ***************************** */
+    /****************************** Update Flow ***************************** */
 
     // The highest level update orchestrator
     pub fn update(
@@ -247,18 +247,6 @@ impl GridInstance {
         }
     }
 
-    pub fn message_active_segment_quiet_style_update(&mut self, target_style: &DrawStyle) {
-        for segment_id in &self.current_active_segments {
-            self.update_batch.insert(
-                segment_id.clone(),
-                StyleUpdateMsg {
-                    action: None,
-                    target_style: Some(target_style.clone()),
-                },
-            );
-        }
-    }
-
     fn message_backbone_updates(&mut self) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
@@ -284,7 +272,7 @@ impl GridInstance {
         self.target_style = style;
     }
 
-    /*********************** Segment Transitions  *****************************/
+    /*********************** Segment Transitions ******************************/
 
     // Build the transition
     pub fn build_transition(&mut self, engine: &TransitionEngine) {
@@ -405,6 +393,8 @@ impl GridInstance {
     /**************************** Grid movement **********************************/
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
+        // update self.current_location here only.
+        // the rotation and and scale states aren't as straightforward.
         self.current_location += transform.translation;
         self.grid.apply_transform(transform);
     }

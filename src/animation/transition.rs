@@ -45,7 +45,7 @@ impl Transition {
         }
     }
 
-    pub fn auto_update(&mut self, dt: f32) -> bool {
+    pub fn should_auto_advance(&mut self, dt: f32) -> bool {
         self.frame_timer += dt;
         if self.frame_timer >= self.frame_duration {
             self.frame_timer -= self.frame_duration;
@@ -86,6 +86,7 @@ impl Transition {
     }
 }
 
+// Generates the frames of the Transition
 pub struct TransitionEngine {
     pub default_config: TransitionConfig,
 }

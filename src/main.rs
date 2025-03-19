@@ -317,6 +317,10 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model.osc_sender.send_rotate_grid(name, -5.0);
             }
         }
+        Key::RShift => {
+            let grid = model.grids.get_mut("grid_2").unwrap();
+            grid.receive_transition_trigger();
+        }
 
         /***************** Below functions aren't implemented in OSC ****************** */
         Key::P => {

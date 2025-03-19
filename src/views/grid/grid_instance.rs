@@ -37,6 +37,7 @@ pub struct GridInstance {
     active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
     pub transition_trigger_type: TransitionTrigger,
+    pub transition_trigger_received: bool,
     pub next_glyph_change_is_immediate: bool,
     pub use_power_on_effect: bool,
     pub colorful_flag: bool, // enables random-ish color effect target style
@@ -100,7 +101,8 @@ impl GridInstance {
 
             active_transition: None,
             transition_config: None,
-            transition_trigger_type: TransitionTrigger::Auto,
+            transition_trigger_type: TransitionTrigger::Manual,
+            transition_trigger_received: false,
             next_glyph_change_is_immediate: false,
             use_power_on_effect: false,
             colorful_flag: false,
@@ -301,18 +303,32 @@ impl GridInstance {
 
     // Update Step 1: obtain TransitionUpdates by advancing the Transition
     fn process_active_transition(&mut self, dt: f32) -> Option<TransitionUpdates> {
-        // Get transition updates if any exist
-        if let Some(transition) = &mut self.active_transition {
-            if transition.auto_update(dt) {
-                // Get updates and check completion
-                let updates = transition.advance();
-                if transition.is_complete() {
-                    self.active_transition = None;
-                }
-                return updates;
-            }
+        // Early return if no active transition
+        let transition = self.active_transition.as_mut()?;
+
+        // Determine if transition should advance based on trigger type
+        let should_advance = self.next_glyph_change_is_immediate
+            || match self.transition_trigger_type {
+                TransitionTrigger::Auto => transition.should_auto_advance(dt),
+                TransitionTrigger::Manual => self.transition_trigger_received,
+            };
+
+        if !should_advance {
+            return None;
         }
-        None
+
+        // Get updates
+        let updates = transition.advance();
+
+        // Reset trigger flag
+        self.transition_trigger_received = false;
+
+        // Clear transition if complete
+        if transition.is_complete() {
+            self.active_transition = None;
+        }
+
+        updates
     }
 
     // Update Step 2: Update the active segments state based on TransitionUpdates
@@ -564,6 +580,16 @@ impl GridInstance {
 
     pub fn has_target_segments(&self) -> bool {
         self.target_segments.is_some()
+    }
+
+    pub fn has_active_transition(&self) -> bool {
+        self.active_transition.is_some()
+    }
+
+    pub fn receive_transition_trigger(&mut self) {
+        if self.has_active_transition() {
+            self.transition_trigger_received = true;
+        }
     }
 
     /*********************** Debug Helper ******************************* */

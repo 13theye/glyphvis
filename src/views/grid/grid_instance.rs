@@ -38,6 +38,7 @@ pub struct GridInstance {
     pub transition_config: Option<TransitionConfig>,
     pub transition_trigger_type: TransitionTrigger,
     pub transition_trigger_received: bool,
+    pub transition_use_stroke_order: bool,
     pub next_glyph_change_is_immediate: bool,
     pub use_power_on_effect: bool,
     pub colorful_flag: bool, // enables random-ish color effect target style
@@ -101,8 +102,9 @@ impl GridInstance {
 
             active_transition: None,
             transition_config: None,
-            transition_trigger_type: TransitionTrigger::Manual,
+            transition_trigger_type: TransitionTrigger::Auto,
             transition_trigger_received: false,
+            transition_use_stroke_order: true,
             next_glyph_change_is_immediate: false,
             use_power_on_effect: false,
             colorful_flag: false,
@@ -279,11 +281,15 @@ impl GridInstance {
         // Handle target segments
         let target_segments = self.target_segments.as_ref().unwrap();
 
-        let changes = engine.generate_changes(
-            self,
-            target_segments,
-            self.next_glyph_change_is_immediate, // when true, all segments change at once
-        );
+        let changes = if self.transition_use_stroke_order {
+            engine.generate_stroke_order_transitions(self, target_segments)
+        } else {
+            engine.generate_changes(
+                self,
+                target_segments,
+                self.next_glyph_change_is_immediate, // when true, all segments change at once
+            )
+        };
 
         self.active_transition = Some(Transition::new(
             changes,

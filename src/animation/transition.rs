@@ -7,7 +7,12 @@
 // It doesn't need to finish to smoothly start transitioning to
 // the next glyph.
 
-use crate::{config::TransitionConfig, services::SegmentGraph, views::GridInstance};
+use crate::{
+    animation::stroke_order,
+    config::TransitionConfig,
+    services::SegmentGraph,
+    views::{CachedGrid, GridInstance, SegmentType},
+};
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
 
@@ -223,6 +228,15 @@ impl TransitionEngine {
             changes_by_step.pop();
         }
         changes_by_step
+    }
+
+    pub fn generate_stroke_order_transitions(
+        &self,
+        grid_instance: &GridInstance,
+        target_segments: &HashSet<String>,
+    ) -> Vec<Vec<SegmentChange>> {
+        // Call the stroke order module
+        stroke_order::generate_stroke_order_changes(grid_instance, target_segments)
     }
 
     fn find_nearest_connected(

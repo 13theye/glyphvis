@@ -1,4 +1,4 @@
-// src/views/grid/cached_grid.rs
+// src/views/grid/grid_generic.rs
 
 // The SVG grid data structures are converted to draw commands and
 // cached in the structures in this module.
@@ -163,6 +163,17 @@ pub enum SegmentState {
     },
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum SegmentType {
+    Horizontal,
+    Vertical,
+    ArcTopLeft,     // arc-1
+    ArcTopRight,    // arc-2
+    ArcBottomLeft,  // arc-3
+    ArcBottomRight, // arc-4
+    Unknown,
+}
+
 // A CachedSegment contains pre-processed draw commands for a segment
 // Acts like a virtual light fixture, responds to style update messages
 #[derive(Debug, Clone)]
@@ -170,6 +181,7 @@ pub struct CachedSegment {
     // metadata
     pub id: String,
     pub tile_coordinate: (u32, u32),
+    pub segment_type: SegmentType,
     pub layer: Layer,
 
     // style state
@@ -198,9 +210,31 @@ impl CachedSegment {
         // Generate commands with tile transform
         let draw_commands = segment_utility::generate_draw_commands(path, viewbox, &tile_transform);
 
+        // Determine SegmentType from PathElement
+        let segment_type = match &path {
+            PathElement::Line { x1, y1, x2, y2 } => {
+                let dx = (x2 - x1).abs();
+                let dy = (y2 - y1).abs();
+                if dx > dy {
+                    SegmentType::Horizontal
+                } else {
+                    SegmentType::Vertical
+                }
+            }
+            PathElement::Arc {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                ..
+            } => grid_utility::classify_arc(start_x, start_y, end_x, end_y),
+            PathElement::Circle { .. } => SegmentType::Unknown,
+        };
+
         Self {
             id: element_id,
             tile_coordinate,
+            segment_type,
             layer: Layer::Background,
 
             // segment starts out in the Idle state

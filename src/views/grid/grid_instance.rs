@@ -12,7 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine, TransitionUpdates,
+        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine, TransitionTrigger,
+        TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
@@ -35,7 +36,8 @@ pub struct GridInstance {
     // effects state
     active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
-    pub next_change_is_immediate: bool,
+    pub transition_trigger_type: TransitionTrigger,
+    pub next_glyph_change_is_immediate: bool,
     pub use_power_on_effect: bool,
     pub colorful_flag: bool, // enables random-ish color effect target style
 
@@ -98,7 +100,8 @@ impl GridInstance {
 
             active_transition: None,
             transition_config: None,
-            next_change_is_immediate: false,
+            transition_trigger_type: TransitionTrigger::Auto,
+            next_glyph_change_is_immediate: false,
             use_power_on_effect: false,
             colorful_flag: false,
 
@@ -284,7 +287,7 @@ impl GridInstance {
         let changes = engine.generate_changes(
             self,
             target_segments,
-            self.next_change_is_immediate, // when true, all segments change at once
+            self.next_glyph_change_is_immediate, // when true, all segments change at once
         );
 
         self.active_transition = Some(Transition::new(
@@ -300,7 +303,7 @@ impl GridInstance {
     fn process_active_transition(&mut self, dt: f32) -> Option<TransitionUpdates> {
         // Get transition updates if any exist
         if let Some(transition) = &mut self.active_transition {
-            if transition.update(dt) {
+            if transition.auto_update(dt) {
                 // Get updates and check completion
                 let updates = transition.advance();
                 if transition.is_complete() {

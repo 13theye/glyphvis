@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use glyphvis::{
-    animation::{EasingType, MovementEngine, TransitionEngine},
+    animation::{EasingType, MovementEngine, TransitionEngine, TransitionTrigger},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
@@ -614,7 +614,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_by_index(&model.project, glyph_index);
-                    grid.next_change_is_immediate = immediate;
+                    grid.next_glyph_change_is_immediate = immediate;
                 }
             }
             OscCommand::InstantGlyphColor {
@@ -634,7 +634,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph(&model.project);
-                    grid.next_change_is_immediate = immediate;
+                    grid.next_glyph_change_is_immediate = immediate;
                 }
             }
             OscCommand::NextGlyphColor {
@@ -658,7 +658,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.no_glyph();
-                    grid.next_change_is_immediate = immediate;
+                    grid.next_glyph_change_is_immediate = immediate;
                 }
             }
             OscCommand::ToggleVisibility { grid_name } => {

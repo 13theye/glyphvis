@@ -29,6 +29,12 @@ pub struct Transition {
     frame_duration: f32,
 }
 
+#[derive(Clone)]
+pub enum TransitionTrigger {
+    Auto,
+    Manual,
+}
+
 impl Transition {
     pub fn new(changes: Vec<Vec<SegmentChange>>, frame_duration: f32) -> Self {
         Self {
@@ -39,7 +45,7 @@ impl Transition {
         }
     }
 
-    pub fn update(&mut self, dt: f32) -> bool {
+    pub fn auto_update(&mut self, dt: f32) -> bool {
         self.frame_timer += dt;
         if self.frame_timer >= self.frame_duration {
             self.frame_timer -= self.frame_duration;

@@ -49,7 +49,7 @@ pub struct GridInstance {
     update_batch: HashMap<String, StyleUpdateMsg>,
 
     // inside-grid state
-    target_segments: Option<HashSet<String>>,
+    pub target_segments: Option<HashSet<String>>,
     pub current_active_segments: HashSet<String>,
     pub target_style: DrawStyle,
 
@@ -282,7 +282,7 @@ impl GridInstance {
         let target_segments = self.target_segments.as_ref().unwrap();
 
         let changes = if self.transition_use_stroke_order {
-            engine.generate_stroke_order_transitions(self, target_segments)
+            engine.generate_stroke_order_changes(self, target_segments)
         } else {
             engine.generate_changes(
                 self,

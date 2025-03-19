@@ -1,4 +1,7 @@
 // src/animation/stroke_order.rs
+//
+// extension to TransitionEngine that creates Transitions that follow
+// a natural writing style
 
 use crate::{
     animation::transition::SegmentChange,
@@ -9,70 +12,95 @@ use crate::{
 use nannou::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+#[derive(Clone)]
 struct Stroke {
     segments: Vec<String>,
     start_segment: String,
+    end_segment: String,
     primary_type: SegmentType,
     start_position: Point2,
 }
 
-pub fn generate_stroke_order_changes(
+pub fn generate_stroke_order(
     grid_instance: &GridInstance,
     target_segments: &HashSet<String>,
-) -> Vec<Vec<SegmentChange>> {
+) -> Vec<String> {
     let grid = &grid_instance.grid;
     let graph = &grid_instance.graph;
     let start_segments = &grid_instance.current_active_segments;
 
-    // Find segments that need to be activated or deactivated
+    // Find segments to turn on
     let segments_to_turn_on: HashSet<_> = target_segments
         .difference(start_segments)
         .cloned()
         .collect();
-    let segments_to_turn_off: HashSet<_> = start_segments
+
+    if segments_to_turn_on.is_empty() {
+        return Vec::new();
+    }
+
+    // Step 1: Group segments into strokes
+    let strokes = group_segments_into_strokes(&segments_to_turn_on, grid, graph);
+
+    // Step 2: For each stroke, order the segments within it to follow writing direction
+    let mut ordered_strokes = Vec::new();
+    for stroke in strokes {
+        let (ordered_segments, end_segment) = order_segments_in_stroke(&stroke, grid, graph);
+        ordered_strokes.push(Stroke {
+            segments: ordered_segments,
+            start_segment: stroke.start_segment.clone(),
+            end_segment,
+            primary_type: stroke.primary_type,
+            start_position: stroke.start_position,
+        });
+    }
+
+    // Step 3: Identify connections between strokes
+    let stroke_connections = identify_connections(&ordered_strokes, graph);
+
+    // Step 4: Order the strokes considering connections and quadrants
+    ordered_strokes = order_strokes_by_position(ordered_strokes, &stroke_connections, grid);
+
+    // Step 5: Process strokes in order, with special handling for connected strokes
+    order_strokes_with_connections(ordered_strokes, &stroke_connections)
+}
+
+pub fn convert_to_transition_changes(
+    ordered_segments: Vec<String>,
+    grid_instance: &GridInstance,
+) -> Vec<Vec<SegmentChange>> {
+    let start_segments = &grid_instance.current_active_segments;
+    let target_segments = grid_instance.target_segments.as_ref().unwrap();
+
+    // First, handle segments that need to be turned on
+    let mut changes = Vec::new();
+
+    // Create a change for each segment to be turned on (one at a time)
+    for segment_id in ordered_segments {
+        changes.push(vec![SegmentChange {
+            segment_id,
+            turn_on: true,
+        }]);
+    }
+
+    // Now handle segments that need to be turned off
+    let segments_to_turn_off: Vec<_> = start_segments
         .difference(target_segments)
         .cloned()
         .collect();
 
-    // if nothing to turn on, just turn off remaining segments
-    if segments_to_turn_on.is_empty() {
-        return generate_turn_off_changes(&segments_to_turn_off);
-    }
-
-    // Group segments into strokes
-    let strokes = group_segments_into_strokes(&segments_to_turn_on, grid, graph);
-
-    // Order strokes according to Hangeul rules
-    let ordered_strokes = order_strokes_by_position(strokes);
-
-    // Creates changes for each segment in each stroke, one at a time
-    let mut changes = Vec::new();
-
-    // Process each stroke
-    for stroke in ordered_strokes {
-        let segments_in_order = order_segments_in_stroke(&stroke, grid, graph);
-
-        // Add each segment in the stroke as an individual step
-        for segment_id in segments_in_order {
-            let change = SegmentChange {
-                segment_id,
-                turn_on: true,
-            };
-            changes.push(vec![change]);
-        }
-    }
-
-    // Add turn-off changes at the end (all at once)
     if !segments_to_turn_off.is_empty() {
-        let mut turn_off_changes = Vec::new();
-        for segment_id in segments_to_turn_off {
-            turn_off_changes.push(SegmentChange {
+        let turn_off_changes = segments_to_turn_off
+            .into_iter()
+            .map(|segment_id| SegmentChange {
                 segment_id,
                 turn_on: false,
-            });
-        }
+            })
+            .collect();
+
         changes.push(turn_off_changes);
     }
+
     changes
 }
 
@@ -128,6 +156,7 @@ fn group_segments_into_strokes(
             strokes.push(Stroke {
                 segments: stroke_segments,
                 start_segment,
+                end_segment: "".to_string(),
                 primary_type,
                 start_position,
             });
@@ -138,8 +167,29 @@ fn group_segments_into_strokes(
 
 // Check if two segments should be part of the same stroke
 fn are_compatible_segments(seg1: &CachedSegment, seg2: &CachedSegment) -> bool {
-    // need to refine rules
-    seg1.segment_type == seg2.segment_type
+    if seg1.segment_type == seg2.segment_type {
+        return true;
+    }
+
+    // Special handling for arcs that form a circle
+    if is_arc_type(&seg1.segment_type) && is_arc_type(&seg2.segment_type) {
+        // Check if these arcs are adjacent in a circular pattern
+        // For example: ArcTopLeft followed by ArcTopRight forms the top half of a circle
+        match (&seg1.segment_type, &seg2.segment_type) {
+            (SegmentType::ArcTopLeft, SegmentType::ArcTopRight) => return true,
+            (SegmentType::ArcTopRight, SegmentType::ArcBottomRight) => return true,
+            (SegmentType::ArcBottomRight, SegmentType::ArcBottomLeft) => return true,
+            (SegmentType::ArcBottomLeft, SegmentType::ArcTopLeft) => return true,
+            // Also allow the reverse connections
+            (SegmentType::ArcTopRight, SegmentType::ArcTopLeft) => return true,
+            (SegmentType::ArcBottomRight, SegmentType::ArcTopRight) => return true,
+            (SegmentType::ArcBottomLeft, SegmentType::ArcBottomRight) => return true,
+            (SegmentType::ArcTopLeft, SegmentType::ArcBottomLeft) => return true,
+            _ => {}
+        }
+    }
+    // Default
+    false
 }
 
 // Get the most common segment type in a stroke
@@ -339,38 +389,6 @@ fn find_rightmost_point(commands: &[DrawCommand]) -> Point2 {
     rightmost
 }
 
-fn find_bottommost_point(commands: &[DrawCommand]) -> Point2 {
-    let mut bottommost = Point2::new(0.0, f32::MIN);
-
-    for cmd in commands {
-        match cmd {
-            DrawCommand::Line { start, end } => {
-                // Note: Higher y value is lower in screen coordinates
-                if start.y > bottommost.y {
-                    bottommost = *start;
-                }
-                if end.y > bottommost.y {
-                    bottommost = *end;
-                }
-            }
-            DrawCommand::Arc { points } => {
-                for point in points {
-                    if point.y > bottommost.y {
-                        bottommost = *point;
-                    }
-                }
-            }
-            DrawCommand::Circle { center, .. } => {
-                if center.y > bottommost.y {
-                    bottommost = *center;
-                }
-            }
-        }
-    }
-
-    bottommost
-}
-
 fn find_average_point(commands: &[DrawCommand]) -> Point2 {
     let mut sum = Point2::new(0.0, 0.0);
     let mut count = 0;
@@ -425,7 +443,7 @@ fn determine_arc_start(segments: &[String], grid: &CachedGrid, arc_type: &Segmen
             // Start at top for top-right arc
             segments
                 .iter()
-                .min_by(|a, b| {
+                .max_by(|a, b| {
                     let pos_a = get_segment_position(a, grid);
                     let pos_b = get_segment_position(b, grid);
                     pos_a
@@ -440,7 +458,7 @@ fn determine_arc_start(segments: &[String], grid: &CachedGrid, arc_type: &Segmen
             // Start at left for bottom-left arc
             segments
                 .iter()
-                .max_by(|a, b| {
+                .min_by(|a, b| {
                     let pos_a = get_segment_position(a, grid);
                     let pos_b = get_segment_position(b, grid);
                     pos_a
@@ -470,49 +488,178 @@ fn determine_arc_start(segments: &[String], grid: &CachedGrid, arc_type: &Segmen
     }
 }
 
-fn order_strokes_by_position(mut strokes: Vec<Stroke>) -> Vec<Stroke> {
-    // First, identify connected horizontal and vertical strokes
-    let connected_pairs = identify_horizontal_vertical_connections(&strokes);
+fn order_strokes_with_connections(
+    strokes: Vec<Stroke>,
+    connections: &HashMap<String, Vec<String>>,
+) -> Vec<String> {
+    // Now we'll reorder based on connected strokes
+    let mut final_order = Vec::new();
+    let mut processed_strokes: HashSet<String> = HashSet::new();
+    let mut remaining_strokes: HashSet<String> =
+        strokes.iter().map(|s| s.start_segment.clone()).collect();
 
-    // Sort strokes by position using quadrant-based prioritization
-    strokes.sort_by(|a, b| {
-        // Check if strokes are connected in a horizontal-to-vertical sequence
-        if let Some((horizontal_id, vertical_id)) = connected_pairs.iter().find(|(h, v)| {
-            (*h == a.start_segment && *v == b.start_segment)
-                || (*h == b.start_segment && *v == a.start_segment)
-        }) {
-            // If a is the horizontal and b is the vertical, a comes first
-            if &a.start_segment == horizontal_id && &b.start_segment == vertical_id {
-                return std::cmp::Ordering::Less;
-            }
-            // If b is the horizontal and a is the vertical, b comes first
-            if &b.start_segment == horizontal_id && &a.start_segment == vertical_id {
-                return std::cmp::Ordering::Greater;
-            }
+    while !remaining_strokes.is_empty() {
+        // Get the next stroke based on our ordering
+        let next_stroke_id = find_next_stroke(&strokes, &remaining_strokes);
+        let next_stroke = strokes
+            .iter()
+            .find(|s| s.start_segment == next_stroke_id)
+            .unwrap();
+
+        // Add all segments from this stroke to the final order
+        for segment_id in &next_stroke.segments {
+            final_order.push(segment_id.clone());
         }
 
+        // Mark this stroke as processed
+        processed_strokes.insert(next_stroke_id.clone());
+        remaining_strokes.remove(&next_stroke_id);
+
+        // Check for connected strokes
+        if let Some(connected_stroke_ids) = connections.get(&next_stroke_id) {
+            let mut sorted_connected_ids = connected_stroke_ids.clone();
+            sorted_connected_ids.sort();
+            // Find unprocessed connected strokes
+            let available_connected: Vec<&String> = sorted_connected_ids
+                .iter()
+                .filter(|id| !processed_strokes.contains(*id))
+                .collect();
+
+            if !available_connected.is_empty() {
+                // Get the corresponding stroke objects
+                let connected_strokes: Vec<&Stroke> = strokes
+                    .iter()
+                    .filter(|s| available_connected.contains(&&s.start_segment))
+                    .collect();
+
+                // Sort by our specified priority
+                let sorted_connected = sort_connected_strokes(connected_strokes);
+
+                if !sorted_connected.is_empty() {
+                    // Process the highest priority connected stroke next
+                    let next_connected = sorted_connected[0];
+
+                    // Add all segments from this connected stroke
+                    for segment_id in &next_connected.segments {
+                        final_order.push(segment_id.clone());
+                    }
+
+                    // Mark as processed
+                    processed_strokes.insert(next_connected.start_segment.clone());
+                    remaining_strokes.remove(&next_connected.start_segment);
+                }
+            }
+        }
+    }
+
+    final_order
+}
+
+// Helper to find the next stroke from remaining strokes
+fn find_next_stroke(ordered_strokes: &[Stroke], remaining: &HashSet<String>) -> String {
+    for stroke in ordered_strokes {
+        if remaining.contains(&stroke.start_segment) {
+            return stroke.start_segment.clone();
+        }
+    }
+    // Fallback if something goes wrong
+    remaining.iter().next().unwrap().clone()
+}
+
+// Sort connected strokes using basic rules
+fn sort_connected_strokes(strokes: Vec<&Stroke>) -> Vec<&Stroke> {
+    let mut sorted = strokes.clone();
+    sorted.sort_by(|a, b| {
+        // First prioritize by segment type according to specified order
+        let type_a_priority = get_type_priority(&a.primary_type);
+        let type_b_priority = get_type_priority(&b.primary_type);
+
+        if type_a_priority != type_b_priority {
+            return type_a_priority.cmp(&type_b_priority);
+        }
+
+        // Then by horizontal position (left to right)
+        if (a.start_position.x - b.start_position.x).abs() > 1.0 {
+            return a
+                .start_position
+                .x
+                .partial_cmp(&b.start_position.x)
+                .unwrap_or(std::cmp::Ordering::Equal);
+        }
+        // If same type priority, sort by vertical position (top to bottom)
+        if (a.start_position.y - b.start_position.y).abs() > 1.0 {
+            return b
+                .start_position
+                .y
+                .partial_cmp(&a.start_position.y)
+                .unwrap_or(std::cmp::Ordering::Equal);
+        }
+
+        std::cmp::Ordering::Equal
+    });
+
+    sorted
+}
+
+// Helper function to assign priority to segment types
+fn get_type_priority(segment_type: &SegmentType) -> u8 {
+    match segment_type {
+        SegmentType::ArcTopLeft => 1, // Highest priority
+        SegmentType::ArcTopRight => 2,
+        SegmentType::ArcBottomLeft => 3,
+        SegmentType::ArcBottomRight => 4,
+        SegmentType::Horizontal => 5,
+        SegmentType::Vertical => 6,
+        SegmentType::Unknown => 7, // Lowest priority
+    }
+}
+
+fn order_strokes_by_position(
+    mut strokes: Vec<Stroke>,
+    connections: &HashMap<String, Vec<String>>,
+    grid: &CachedGrid,
+) -> Vec<Stroke> {
+    let mut result = Vec::new();
+    let mut remaining: HashSet<String> = strokes.iter().map(|s| s.start_segment.clone()).collect();
+
+    strokes.sort_by(|a, b| a.start_segment.cmp(&b.start_segment));
+
+    // Sort strokes by quadrant and position for initial ordering
+    strokes.sort_by(|a, b| {
         // Define quadrant boundaries
-        let mid_x = 2.5; // Horizontal middle of the grid
-        let mid_y = 2.0; // Vertical middle of the grid
+        let mid_x = 2.4; // Horizontal middle of the grid
+        let mid_y = 2.4; // Vertical middle of the grid
+
+        // Get start segment tile
+        let a_start_tile = grid.get_segment(&a.start_segment).unwrap().tile_coordinate;
+        let b_start_tile = grid.get_segment(&b.start_segment).unwrap().tile_coordinate;
 
         // Determine which quadrant each stroke starts in
-        let a_quadrant = get_quadrant(a.start_position.x, a.start_position.y, mid_x, mid_y);
-        let b_quadrant = get_quadrant(b.start_position.x, b.start_position.y, mid_x, mid_y);
+        let a_quadrant = get_quadrant(a_start_tile.0 as f32, a_start_tile.1 as f32, mid_x, mid_y);
+        let b_quadrant = get_quadrant(b_start_tile.0 as f32, b_start_tile.1 as f32, mid_x, mid_y);
 
         // Rule 1: Quadrant 1 (top-left) before all others
         if a_quadrant == 1 && b_quadrant != 1 {
-            return std::cmp::Ordering::Greater;
+            return std::cmp::Ordering::Less;
         }
         if a_quadrant != 1 && b_quadrant == 1 {
-            return std::cmp::Ordering::Less;
+            return std::cmp::Ordering::Greater;
         }
 
         // Rule 2: Quadrant 2 (top-right) before bottom half
         if a_quadrant == 2 && (b_quadrant == 3 || b_quadrant == 4) {
-            return std::cmp::Ordering::Greater;
+            return std::cmp::Ordering::Less;
         }
         if (a_quadrant == 3 || a_quadrant == 4) && b_quadrant == 2 {
+            return std::cmp::Ordering::Greater;
+        }
+
+        // Rule 3: Quadrant 3 (bottom-left) before quadrant 4
+        if a_quadrant == 3 && b_quadrant == 4 {
             return std::cmp::Ordering::Less;
+        }
+        if a_quadrant == 4 && b_quadrant == 3 {
+            return std::cmp::Ordering::Greater;
         }
 
         // For all areas, prioritize top to bottom
@@ -535,9 +682,9 @@ fn order_strokes_by_position(mut strokes: Vec<Stroke>) -> Vec<Stroke> {
 
         // If positions are very close, use segment type priority
         match (&a.primary_type, &b.primary_type) {
-            // Horizontal before vertical
-            (SegmentType::Horizontal, SegmentType::Vertical) => std::cmp::Ordering::Less,
-            (SegmentType::Vertical, SegmentType::Horizontal) => std::cmp::Ordering::Greater,
+            // Vertical before Horizontal
+            (SegmentType::Vertical, SegmentType::Horizontal) => std::cmp::Ordering::Less,
+            (SegmentType::Horizontal, SegmentType::Vertical) => std::cmp::Ordering::Greater,
 
             // Right-to-left arcs before left-to-right arcs
             (SegmentType::ArcTopLeft, SegmentType::ArcTopRight) => std::cmp::Ordering::Less,
@@ -547,78 +694,157 @@ fn order_strokes_by_position(mut strokes: Vec<Stroke>) -> Vec<Stroke> {
                 std::cmp::Ordering::Greater
             }
 
-            // Horizontal before any arc
+            // !Horizontal before any arc
             (SegmentType::Horizontal, _) if is_arc_type(&b.primary_type) => {
-                std::cmp::Ordering::Less
+                std::cmp::Ordering::Greater
             }
             (_, SegmentType::Horizontal) if is_arc_type(&a.primary_type) => {
+                std::cmp::Ordering::Less
+            }
+            // !Vertical before any arc
+            (SegmentType::Vertical, _) if is_arc_type(&b.primary_type) => {
                 std::cmp::Ordering::Greater
             }
-
-            // Vertical before any arc
-            (SegmentType::Vertical, _) if is_arc_type(&b.primary_type) => std::cmp::Ordering::Less,
-            (_, SegmentType::Vertical) if is_arc_type(&a.primary_type) => {
-                std::cmp::Ordering::Greater
-            }
+            (_, SegmentType::Vertical) if is_arc_type(&a.primary_type) => std::cmp::Ordering::Less,
 
             // Default equal if no other rule applies
             _ => std::cmp::Ordering::Equal,
         }
     });
 
-    strokes
+    // Build the result by walking through the strokes in position order
+    // but prioritizing connected strokes
+    while !remaining.is_empty() {
+        // Get the next stroke from those remaining, by position order
+        let next_stroke_opt = strokes
+            .iter()
+            .find(|s| remaining.contains(&s.start_segment));
+
+        if let Some(next_stroke) = next_stroke_opt {
+            let stroke_id = next_stroke.start_segment.clone();
+            result.push(next_stroke.clone());
+            remaining.remove(&stroke_id);
+
+            // Process all connected strokes immediately
+            let mut connected_chain = vec![stroke_id.clone()];
+            let mut i = 0;
+
+            // Process the chain of connections
+            while i < connected_chain.len() {
+                let current_id = &connected_chain[i];
+
+                // Find strokes connected to the current one
+                if let Some(connected_ids) = connections.get(current_id) {
+                    for connected_id in connected_ids {
+                        if remaining.contains(connected_id)
+                            && !connected_chain.contains(connected_id)
+                        {
+                            // Add to the chain and to the result
+                            connected_chain.push(connected_id.clone());
+
+                            if let Some(connected_stroke) =
+                                strokes.iter().find(|s| &s.start_segment == connected_id)
+                            {
+                                result.push(connected_stroke.clone());
+                                remaining.remove(connected_id);
+                            }
+                        }
+                    }
+                }
+
+                i += 1;
+            }
+        } else {
+            // Fallback - shouldn't happen with correct data
+            break;
+        }
+    }
+
+    result
 }
 
-// Function to identify connected horizontal-vertical segments
-fn identify_horizontal_vertical_connections(strokes: &[Stroke]) -> Vec<(String, String)> {
-    let mut connections = Vec::new();
+// Function to identify connections between different segment types
+fn identify_connections(strokes: &[Stroke], graph: &SegmentGraph) -> HashMap<String, Vec<String>> {
+    let mut connections: HashMap<String, Vec<String>> = HashMap::new();
 
-    for (i, stroke_a) in strokes.iter().enumerate() {
-        if stroke_a.primary_type != SegmentType::Horizontal {
-            continue;
+    // Sort strokes by ID for deterministic processing
+    let sorted_strokes = {
+        let mut s = strokes.to_vec();
+        s.sort_by(|a, b| a.start_segment.cmp(&b.start_segment));
+        s
+    };
+
+    for stroke in &sorted_strokes {
+        // For regular strokes, check connections at the end segment
+        if !stroke.end_segment.is_empty() {
+            add_connections_from_segment(
+                &stroke.end_segment,
+                &stroke.start_segment,
+                strokes,
+                graph,
+                &mut connections,
+            );
         }
 
-        // Find the end point of this horizontal stroke
-        let end_point = find_rightmost_point_for_stroke(stroke_a);
+        // For arcs, also check connections at ALL segments in the stroke
+        if is_arc_type(&stroke.primary_type) {
+            for segment_id in &stroke.segments {
+                // Skip the end segment which we already processed
+                if segment_id == &stroke.end_segment {
+                    continue;
+                }
 
-        // Look for vertical strokes that start at this end point
-        for stroke_b in strokes.iter().skip(i + 1) {
-            if stroke_b.primary_type != SegmentType::Vertical {
-                continue;
-            }
-
-            // Find the start point of this vertical stroke
-            let start_point = find_topmost_point_for_stroke(stroke_b);
-
-            // Check if they're connected (within a small threshold)
-            if (end_point.x - start_point.x).abs() < 1.0
-                && (end_point.y - start_point.y).abs() < 1.0
-            {
-                connections.push((
-                    stroke_a.start_segment.clone(),
-                    stroke_b.start_segment.clone(),
-                ));
+                add_connections_from_segment(
+                    segment_id,
+                    &stroke.start_segment,
+                    strokes,
+                    graph,
+                    &mut connections,
+                );
             }
         }
+    }
+
+    // Remove duplicates in the connection lists
+    for connected_list in connections.values_mut() {
+        connected_list.sort();
+        connected_list.dedup();
     }
 
     connections
 }
 
-// Helper to find the rightmost point for a horizontal stroke
-fn find_rightmost_point_for_stroke(stroke: &Stroke) -> Point2 {
-    // Implementation would access all segments in the stroke
-    // and find the rightmost point across all of them
-    // This is a simplified implementation:
-    Point2::new(stroke.start_position.x + 10.0, stroke.start_position.y)
-}
+// Helper function to add connections from a specific segment
+fn add_connections_from_segment(
+    segment_id: &str,
+    source_stroke_id: &str,
+    strokes: &[Stroke],
+    graph: &SegmentGraph,
+    connections: &mut HashMap<String, Vec<String>>,
+) {
+    // Find all segments connected to this segment
+    let mut connected_segments = graph.get_neighbors(segment_id);
+    connected_segments.sort();
 
-// Helper to find the topmost point for a vertical stroke
-fn find_topmost_point_for_stroke(stroke: &Stroke) -> Point2 {
-    // Implementation would access all segments in the stroke
-    // and find the topmost point across all of them
-    // This is a simplified implementation:
-    Point2::new(stroke.start_position.x, stroke.start_position.y)
+    // Find which strokes these segments belong to
+    let connected_stroke_ids: Vec<String> = connected_segments
+        .into_iter()
+        .filter_map(|connected_segment| {
+            // Find which stroke this segment belongs to
+            strokes
+                .iter()
+                .find(|s| s.segments.contains(&connected_segment))
+                .map(|s| s.start_segment.clone())
+        })
+        .filter(|id| id != source_stroke_id) // Don't include self-connections
+        .collect();
+
+    if !connected_stroke_ids.is_empty() {
+        connections
+            .entry(source_stroke_id.to_string())
+            .or_default()
+            .extend(connected_stroke_ids);
+    }
 }
 
 // Helper function to determine quadrant
@@ -629,12 +855,10 @@ fn get_quadrant(x: f32, y: f32, mid_x: f32, mid_y: f32) -> u8 {
         } else {
             2 // Top-right
         }
+    } else if x < mid_x {
+        3 // Bottom-left
     } else {
-        if x < mid_x {
-            3 // Bottom-left
-        } else {
-            4 // Bottom-right
-        }
+        4 // Bottom-right
     }
 }
 
@@ -648,44 +872,13 @@ fn is_arc_type(segment_type: &SegmentType) -> bool {
             | SegmentType::ArcBottomRight
     )
 }
-// Order strokes based on position for Hangeul writing flow
-fn order_strokes_by_position_old(mut strokes: Vec<Stroke>) -> Vec<Stroke> {
-    // Sort strokes by position using Hangeul-like principles
-    strokes.sort_by(|a, b| {
-        // Sort by vertical position first (top to bottom)
-        if (a.start_position.y - b.start_position.y).abs() > 1.0 {
-            return b
-                .start_position
-                .y
-                .partial_cmp(&a.start_position.y)
-                .unwrap_or(std::cmp::Ordering::Equal);
-        }
-        // Then by horizontal position (left to right)
-        if (a.start_position.x - b.start_position.x).abs() > 1.0 {
-            return a
-                .start_position
-                .x
-                .partial_cmp(&b.start_position.x)
-                .unwrap_or(std::cmp::Ordering::Equal);
-        }
-
-        // If positions are very close, use type priority
-        match (a.primary_type, b.primary_type) {
-            (SegmentType::Horizontal, SegmentType::Vertical) => std::cmp::Ordering::Less,
-            (SegmentType::Vertical, SegmentType::Horizontal) => std::cmp::Ordering::Greater,
-            _ => std::cmp::Ordering::Equal,
-        }
-    });
-
-    strokes
-}
 
 // Order segments within a stroke in natural writing order
 fn order_segments_in_stroke(
     stroke: &Stroke,
     grid: &CachedGrid,
     graph: &SegmentGraph,
-) -> Vec<String> {
+) -> (Vec<String>, String) {
     let mut ordered = Vec::new();
     let mut visited = HashSet::new();
 
@@ -727,8 +920,9 @@ fn order_segments_in_stroke(
             }
         }
     }
+    let end_segment = ordered.last().unwrap().clone();
 
-    ordered
+    (ordered, end_segment)
 }
 
 // Score next segment based on natural writing flow
@@ -740,6 +934,27 @@ fn score_next_segment(
 ) -> f32 {
     let current_pos = get_segment_position(current, grid);
     let next_pos = get_segment_position(next, grid);
+
+    // Special handling for arc segments that form a circle
+    if is_arc_type(primary_type) {
+        let current_segment = grid.get_segment(current).unwrap();
+        let next_segment = grid.get_segment(next).unwrap();
+
+        // Determine if these are adjacent arcs in a circle
+        match (&current_segment.segment_type, &next_segment.segment_type) {
+            // Prioritize circular patterns (clockwise or counter-clockwise)
+            (SegmentType::ArcTopLeft, SegmentType::ArcTopRight) => return 0.0,
+            (SegmentType::ArcTopRight, SegmentType::ArcBottomRight) => return 0.0,
+            (SegmentType::ArcBottomRight, SegmentType::ArcBottomLeft) => return 0.0,
+            (SegmentType::ArcBottomLeft, SegmentType::ArcTopLeft) => return 0.0,
+            // Second priority: reverse circular patterns
+            (SegmentType::ArcTopRight, SegmentType::ArcTopLeft) => return 3.0,
+            (SegmentType::ArcBottomRight, SegmentType::ArcTopRight) => return 3.0,
+            (SegmentType::ArcBottomLeft, SegmentType::ArcBottomRight) => return 3.0,
+            (SegmentType::ArcTopLeft, SegmentType::ArcBottomLeft) => return 3.0,
+            _ => return 100.0, // Non-adjacent arcs get a higher score
+        }
+    }
 
     match primary_type {
         SegmentType::Horizontal => {
@@ -760,24 +975,17 @@ fn score_next_segment(
                     0.0
                 }
         }
-        SegmentType::ArcTopLeft => {
+        SegmentType::ArcTopLeft
+        | SegmentType::ArcTopRight
+        | SegmentType::ArcBottomLeft
+        | SegmentType::ArcBottomRight => {
             // For top-left arc, prefer counter-clockwise motion
             let dx = next_pos.x - current_pos.x;
             let dy = next_pos.y - current_pos.y;
-            if current_pos.y < next_pos.y {
+            if current_pos.y > next_pos.y {
                 dx.abs() // Moving down, prefer smaller horizontal change
             } else {
                 dy.abs() // Moving horizontally, prefer smaller vertical change
-            }
-        }
-        SegmentType::ArcTopRight => {
-            // Similar logic for other arc types
-            let dx = next_pos.x - current_pos.x;
-            let dy = next_pos.y - current_pos.y;
-            if current_pos.y < next_pos.y {
-                dx.abs()
-            } else {
-                dy.abs()
             }
         }
         _ => {
@@ -785,21 +993,4 @@ fn score_next_segment(
             (next_pos - current_pos).length()
         }
     }
-}
-
-// Generate changes to turn off segments
-fn generate_turn_off_changes(segments: &HashSet<String>) -> Vec<Vec<SegmentChange>> {
-    if segments.is_empty() {
-        return Vec::new();
-    }
-
-    let changes = segments
-        .iter()
-        .map(|id| SegmentChange {
-            segment_id: id.clone(),
-            turn_on: false,
-        })
-        .collect();
-
-    vec![changes]
 }

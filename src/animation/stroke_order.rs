@@ -622,8 +622,6 @@ fn order_strokes_by_position(
     let mut result = Vec::new();
     let mut remaining: HashSet<String> = strokes.iter().map(|s| s.start_segment.clone()).collect();
 
-    strokes.sort_by(|a, b| a.start_segment.cmp(&b.start_segment));
-
     // Sort strokes by quadrant and position for initial ordering
     strokes.sort_by(|a, b| {
         // Define quadrant boundaries

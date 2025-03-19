@@ -354,13 +354,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     launch_commands(app, model);
 
     // Coordinate simulataneous style changes on multiple grids
-    handle_coordinated_grid_styles(app, model);
-
-    // Set up Draw
-    let draw = &model.draw;
+    coordinate_colorful_grid_styles(app, model);
 
     // Handle the background
-    model.background.draw(draw, app.time);
+    model.background.draw(&model.draw, app.time);
 
     // Frames processing progress bar:
     if model.exit_requested {
@@ -371,7 +368,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Main update loop for grids
     for (_, grid_instance) in model.grids.iter_mut() {
         let dt = duration.as_secs_f32();
-        grid_instance.update(draw, app.time, dt);
+        grid_instance.update(&model.draw, &model.transition_engine, app.time, dt);
     }
 
     if model.debug_flag {
@@ -411,7 +408,7 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 // ************************ Multi-grid style coordination  *****************************
 
-fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
+fn coordinate_colorful_grid_styles(_app: &App, model: &mut Model) {
     let color_hsl = hsla(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
@@ -422,16 +419,12 @@ fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
     let color = Rgba::from(color_hsl);
 
     for grid_instance in model.grids.values_mut() {
-        if grid_instance.has_target_segments() {
-            if grid_instance.colorful_flag {
-                grid_instance.set_effect_target_style(DrawStyle {
-                    color,
-
-                    // account for any grid scaling
-                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
-                });
-            }
-            grid_instance.start_transition(&model.transition_engine);
+        if grid_instance.has_target_segments() && grid_instance.colorful_flag {
+            grid_instance.set_effect_target_style(DrawStyle {
+                color,
+                // account for any grid scaling
+                stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
+            });
         }
     }
 }
@@ -590,7 +583,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                         easing: EasingType::Linear,
                     };
                     let movement_engine = MovementEngine::new(movement_config);
-                    grid.start_movement(x, y, &movement_engine);
+                    grid.build_movement(x, y, &movement_engine);
                 }
             }
             OscCommand::RotateGrid { name, angle } => {

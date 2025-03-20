@@ -58,8 +58,15 @@ pub struct GridInstance {
     pub backbone_style: DrawStyle,
 
     // grid transform state
-    active_movement: Option<Movement>,
+    pub active_movement: Option<Movement>,
     spawn_location: Point2,
+
+    // state for "instantaneous" movements
+    last_position: Point2,
+    target_position: Point2,
+    position_update_time: f64,
+    movement_duration: f64,
+
     pub current_location: Point2,
     pub current_rotation: f32,
     pub current_scale: f32,
@@ -112,6 +119,11 @@ impl GridInstance {
             update_batch: HashMap::new(),
 
             active_movement: None,
+            target_position: position,
+            last_position: position,
+            position_update_time: 0.0,
+            movement_duration: 1.0 / 60.0,
+
             spawn_location: position,
             current_location: position,
             current_rotation: rotation,
@@ -168,12 +180,57 @@ impl GridInstance {
         time: f32,
         dt: f32,
     ) {
+        // 0. Update position
+        // Handle time-based position interpolation
+        if self.last_position != self.target_position {
+            let elapsed = time as f64 - self.position_update_time;
+            let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
+
+            if progress < 1.0 {
+                // Calculate the interpolated position
+                let interp_x = self.last_position.x
+                    + (self.target_position.x - self.last_position.x) * progress as f32;
+                let interp_y = self.last_position.y
+                    + (self.target_position.y - self.last_position.y) * progress as f32;
+                let interp_position = pt2(interp_x, interp_y);
+
+                // Calculate the delta from current position
+                let delta = interp_position - self.current_location;
+
+                // Apply the transform
+                if delta.length() > 0.01 {
+                    let transform = Transform2D {
+                        translation: delta,
+                        scale: 1.0,
+                        rotation: 0.0,
+                    };
+                    self.apply_transform(&transform);
+                }
+            } else {
+                // We've reached the end of the interpolation
+                // Set exact position to avoid floating point errors
+                let delta = self.target_position - self.current_location;
+                if delta.length() > 0.01 {
+                    let transform = Transform2D {
+                        translation: delta,
+                        scale: 1.0,
+                        rotation: 0.0,
+                    };
+                    self.apply_transform(&transform);
+                }
+
+                // Mark interpolation as complete
+                self.last_position = self.target_position;
+            }
+        }
+
+        // Continue with existing update logic
         // 1. Generate new transitions
         if self.has_target_segments() {
             self.build_transition(transition_engine);
         }
 
-        // 2. Update positioning
+        // 2. Update positioning from MovementEngine (for duration > 0)
         if self.has_active_movement() {
             if let Some(update) = self.process_active_movement(dt) {
                 self.apply_movement_update(&update);
@@ -492,24 +549,36 @@ impl GridInstance {
         &mut self,
         target_x: f32,
         target_y: f32,
-        //target_scale: f32,
-        //target_rotation: f32,
+        duration: f32,
         engine: &MovementEngine,
+        time: f64,
     ) {
-        let start_transform = Transform2D {
-            translation: self.current_location,
-            scale: self.current_scale,
-            rotation: self.current_rotation,
-        };
+        // Create target point from coordinates
+        let target_position = pt2(target_x, target_y);
 
-        let end_transform = Transform2D {
-            translation: pt2(target_x, target_y),
-            scale: self.current_scale,
-            rotation: self.current_rotation,
-        };
+        // If duration is specified, use the existing MovementEngine
+        if duration > 0.0 {
+            let start_transform = Transform2D {
+                translation: self.current_location,
+                scale: self.current_scale,
+                rotation: self.current_rotation,
+            };
 
-        let changes = engine.generate_movement(start_transform, end_transform);
-        self.active_movement = Some(Movement::new(changes, 1.0 / 60.0));
+            let end_transform = Transform2D {
+                translation: target_position,
+                scale: self.current_scale,
+                rotation: self.current_rotation,
+            };
+
+            let changes = engine.generate_movement(start_transform, end_transform);
+            self.active_movement = Some(Movement::new(changes, 1.0 / 60.0));
+        } else {
+            // For immediate movements (duration = 0.0), use time-based interpolation
+            self.last_position = self.current_location;
+            self.target_position = target_position;
+            self.position_update_time = time;
+            self.movement_duration = 1.0 / 60.0;
+        }
     }
 
     fn process_active_movement(&mut self, dt: f32) -> Option<MovementUpdate> {

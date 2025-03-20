@@ -299,7 +299,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Up => {
             for name in model.grids.keys() {
-                model.osc_sender.send_scale_grid(name, 0.001);
+                model.osc_sender.send_scale_grid(name, 0.2);
             }
         }
         Key::Down => {
@@ -573,6 +573,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 );
                 model.grids.insert(name, grid);
             }
+
             OscCommand::MoveGrid {
                 name,
                 x,
@@ -585,7 +586,8 @@ fn launch_commands(app: &App, model: &mut Model) {
                         easing: EasingType::Linear,
                     };
                     let movement_engine = MovementEngine::new(movement_config);
-                    grid.build_movement(x, y, &movement_engine);
+                    grid.active_movement = None;
+                    grid.build_movement(x, y, duration, &movement_engine, app.time as f64);
                 }
             }
             OscCommand::RotateGrid { name, angle } => {

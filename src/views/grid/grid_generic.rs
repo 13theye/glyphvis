@@ -1,4 +1,4 @@
-// src/views/grid/cached_grid.rs
+// src/views/grid/grid_generic.rs
 
 // The SVG grid data structures are converted to draw commands and
 // cached in the structures in this module.
@@ -163,22 +163,34 @@ pub enum SegmentState {
     },
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum SegmentType {
+    Horizontal,
+    Vertical,
+    ArcTopLeft,     // arc-1
+    ArcTopRight,    // arc-2
+    ArcBottomLeft,  // arc-3
+    ArcBottomRight, // arc-4
+    Unknown,
+}
+
 // A CachedSegment contains pre-processed draw commands for a segment
 // Acts like a virtual light fixture, responds to style update messages
 #[derive(Debug, Clone)]
 pub struct CachedSegment {
     // metadata
-    id: String,
-    tile_coordinate: (u32, u32),
-    layer: Layer,
+    pub id: String,
+    pub tile_coordinate: (u32, u32),
+    pub segment_type: SegmentType,
+    pub layer: Layer,
 
     // style state
     state: SegmentState,
 
     // draw commands cache
-    draw_commands: Vec<DrawCommand>,
-    original_path: PathElement,
-    edge_type: EdgeType,
+    pub draw_commands: Vec<DrawCommand>,
+    pub original_path: PathElement,
+    pub edge_type: EdgeType,
     //pub transform: Transform2D,
 }
 
@@ -198,9 +210,31 @@ impl CachedSegment {
         // Generate commands with tile transform
         let draw_commands = segment_utility::generate_draw_commands(path, viewbox, &tile_transform);
 
+        // Determine SegmentType from PathElement
+        let segment_type = match &path {
+            PathElement::Line { x1, y1, x2, y2 } => {
+                let dx = (x2 - x1).abs();
+                let dy = (y2 - y1).abs();
+                if dx > dy {
+                    SegmentType::Horizontal
+                } else {
+                    SegmentType::Vertical
+                }
+            }
+            PathElement::Arc {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                ..
+            } => grid_utility::classify_arc(start_x, start_y, end_x, end_y),
+            PathElement::Circle { .. } => SegmentType::Unknown,
+        };
+
         Self {
             id: element_id,
             tile_coordinate,
+            segment_type,
             layer: Layer::Background,
 
             // segment starts out in the Idle state
@@ -355,40 +389,6 @@ impl CachedSegment {
         }
     }
 
-    /**************************  Getters and Setters  *************************************** */
-
-    pub fn is_idle(&self) -> bool {
-        matches!(self.state, SegmentState::Idle { .. })
-    }
-
-    pub fn state(&self) -> &SegmentState {
-        &self.state
-    }
-
-    pub fn set_state(&mut self, state: SegmentState) {
-        self.state = state;
-    }
-
-    pub fn tile_coordinate(&self) -> (u32, u32) {
-        self.tile_coordinate
-    }
-
-    pub fn is_background(&self) -> bool {
-        matches!(self.layer, Layer::Background)
-    }
-
-    pub fn draw_commands(&self) -> &Vec<DrawCommand> {
-        &self.draw_commands
-    }
-
-    pub fn original_path(&self) -> &PathElement {
-        &self.original_path
-    }
-
-    pub fn edge_type(&self) -> &EdgeType {
-        &self.edge_type
-    }
-
     /**************************  Transform functions *************************************** */
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
@@ -415,14 +415,24 @@ impl CachedSegment {
             }
         }
     }
+
+    /************************ Utility Methods ****************************/
+
+    pub fn is_background(&self) -> bool {
+        matches!(self.layer, Layer::Background)
+    }
+
+    pub fn is_idle(&self) -> bool {
+        matches!(self.state, SegmentState::Idle { .. })
+    }
 }
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
 #[derive(Debug, Clone)]
 pub struct CachedGrid {
-    dimensions: (u32, u32), // number of tiles in x and y
-    segments: HashMap<String, CachedSegment>,
-    viewbox: ViewBox,
+    pub dimensions: (u32, u32), // number of tiles in x and y
+    pub segments: HashMap<String, CachedSegment>,
+    pub viewbox: ViewBox,
 }
 
 impl CachedGrid {
@@ -536,10 +546,7 @@ impl CachedGrid {
         }
     }
 
-    /************************ Getters and Setters ****************************/
-    pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
-        self.segments.get(id)
-    }
+    /************************ Utility Methods ****************************/
 
     pub fn get_segments_at(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
         self.segments
@@ -547,16 +554,8 @@ impl CachedGrid {
             .filter(move |segment| segment.tile_coordinate == (x, y))
     }
 
-    pub fn segments(&self) -> &HashMap<String, CachedSegment> {
-        &self.segments
-    }
-
-    pub fn dimensions(&self) -> (u32, u32) {
-        self.dimensions
-    }
-
-    pub fn viewbox(&self) -> &ViewBox {
-        &self.viewbox
+    pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
+        self.segments.get(id)
     }
 
     /*

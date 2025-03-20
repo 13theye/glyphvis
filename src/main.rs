@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use glyphvis::{
-    animation::{EasingType, MovementEngine, TransitionEngine},
+    animation::{EasingType, MovementEngine, TransitionEngine, TransitionTrigger},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
@@ -69,7 +69,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.5")
+        .title("glyphvis 0.1.6 unstable")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -222,13 +222,16 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 // Create three test grids via OSC
                 model
                     .osc_sender
-                    .send_create_grid("grid_1", "heol", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_1", "grid_1", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
-                    .send_create_grid("grid_2", "heol", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_2", "grid_1", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
-                    .send_create_grid("grid_3", "heol", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_3", "grid_1", 0.0, 0.0, 0.0);
+                model.osc_sender.send_toggle_visibility("grid_1");
+                model.osc_sender.send_toggle_visibility("grid_2");
+                model.osc_sender.send_toggle_visibility("grid_3");
             } else {
                 // Toggle visibility (you might want to add an OSC command for this)
                 for name in model.grids.keys() {
@@ -296,7 +299,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Up => {
             for name in model.grids.keys() {
-                model.osc_sender.send_scale_grid(name, 0.3);
+                model.osc_sender.send_scale_grid(name, 0.2);
             }
         }
         Key::Down => {
@@ -313,6 +316,10 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             for name in model.grids.keys() {
                 model.osc_sender.send_rotate_grid(name, -5.0);
             }
+        }
+        Key::RShift => {
+            let grid = model.grids.get_mut("grid_2").unwrap();
+            grid.receive_transition_trigger();
         }
 
         /***************** Below functions aren't implemented in OSC ****************** */
@@ -347,13 +354,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     launch_commands(app, model);
 
     // Coordinate simulataneous style changes on multiple grids
-    handle_coordinated_grid_styles(app, model);
-
-    // Set up Draw
-    let draw = &model.draw;
+    coordinate_colorful_grid_styles(app, model);
 
     // Handle the background
-    model.background.draw(draw, app.time);
+    model.background.draw(&model.draw, app.time);
 
     // Frames processing progress bar:
     if model.exit_requested {
@@ -361,12 +365,14 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         return; // Important: return here to not continue with normal rendering
     }
 
-    // Main update loop for grids
+    /*********************  Main update method for grids **********************/
     for (_, grid_instance) in model.grids.iter_mut() {
         let dt = duration.as_secs_f32();
-        grid_instance.update(draw, app.time, dt);
+        grid_instance.update(&model.draw, &model.transition_engine, app.time, dt);
     }
+    /*************************************************************************/
 
+    // Handle FPS and origin display
     if model.debug_flag {
         // Draw (+,+) axes
         let draw = &model.draw;
@@ -385,7 +391,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             .color(RED);
     }
 
-    // Rnder to texture and handle frame recording
+    // Render to texture and handle frame recording
     render_and_capture(app, model);
 
     //let total_duration = start_time.elapsed();
@@ -404,7 +410,7 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 
 // ************************ Multi-grid style coordination  *****************************
 
-fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
+fn coordinate_colorful_grid_styles(_app: &App, model: &mut Model) {
     let color_hsl = hsla(
         model.random.gen_range(0.0..=1.0),
         model.random.gen_range(0.2..=1.0),
@@ -415,16 +421,12 @@ fn handle_coordinated_grid_styles(_app: &App, model: &mut Model) {
     let color = Rgba::from(color_hsl);
 
     for grid_instance in model.grids.values_mut() {
-        if grid_instance.has_target_segments() {
-            if grid_instance.colorful_flag {
-                grid_instance.set_effect_target_style(DrawStyle {
-                    color,
-
-                    // account for any grid scaling
-                    stroke_weight: model.default_stroke_weight * grid_instance.current_scale(),
-                });
-            }
-            grid_instance.start_transition(&model.transition_engine);
+        if grid_instance.has_target_segments() && grid_instance.colorful_flag {
+            grid_instance.set_effect_target_style(DrawStyle {
+                color,
+                // account for any grid scaling
+                stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
+            });
         }
     }
 }
@@ -571,6 +573,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 );
                 model.grids.insert(name, grid);
             }
+
             OscCommand::MoveGrid {
                 name,
                 x,
@@ -583,7 +586,8 @@ fn launch_commands(app: &App, model: &mut Model) {
                         easing: EasingType::Linear,
                     };
                     let movement_engine = MovementEngine::new(movement_config);
-                    grid.start_movement(x, y, &movement_engine);
+                    grid.active_movement = None;
+                    grid.build_movement(x, y, duration, &movement_engine, app.time as f64);
                 }
             }
             OscCommand::RotateGrid { name, angle } => {
@@ -611,7 +615,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_by_index(&model.project, glyph_index);
-                    grid.next_change_is_immediate = immediate;
+                    grid.next_glyph_change_is_immediate = immediate;
                 }
             }
             OscCommand::InstantGlyphColor {
@@ -631,7 +635,7 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph(&model.project);
-                    grid.next_change_is_immediate = immediate;
+                    grid.next_glyph_change_is_immediate = immediate;
                 }
             }
             OscCommand::NextGlyphColor {
@@ -644,7 +648,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     let style = DrawStyle {
                         color: rgba(r, g, b, a),
-                        stroke_weight: model.default_stroke_weight * grid.current_scale(),
+                        stroke_weight: model.default_stroke_weight * grid.current_scale,
                     };
                     grid.set_effect_target_style(style);
                 }
@@ -655,17 +659,17 @@ fn launch_commands(app: &App, model: &mut Model) {
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.no_glyph();
-                    grid.next_change_is_immediate = immediate;
+                    grid.next_glyph_change_is_immediate = immediate;
                 }
             }
             OscCommand::ToggleVisibility { grid_name } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.toggle_visibility();
+                    grid.is_visible = !grid.is_visible;
                 }
             }
             OscCommand::SetVisibility { grid_name, setting } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.set_visibility(setting);
+                    grid.is_visible = setting;
                 }
             }
             OscCommand::ToggleColorful { grid_name } => {

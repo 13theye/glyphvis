@@ -61,13 +61,13 @@ impl SegmentGraph {
         let mut nodes = HashMap::new();
 
         // First create nodes for each segment
-        for (id, segment) in grid.segments() {
+        for (id, segment) in &grid.segments {
             nodes.insert(
                 id.clone(),
                 SegmentNode {
                     id: id.clone(),
-                    tile_pos: segment.tile_coordinate(),
-                    commands: segment.draw_commands().clone(),
+                    tile_pos: segment.tile_coordinate,
+                    commands: segment.draw_commands.clone(),
                     connections: Vec::new(),
                 },
             );

@@ -4,9 +4,9 @@ pub mod background;
 pub mod grid;
 
 pub use background::BackgroundManager;
-pub use grid::cached_grid::{
+pub use grid::grid_generic::{
     CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, SegmentAction, SegmentState,
-    StyleUpdateMsg,
+    SegmentType, StyleUpdateMsg,
 };
 pub use grid::grid_instance::GridInstance;
 pub use grid::transform::Transform2D;

@@ -5,7 +5,7 @@
 use crate::{
     models::{PathElement, ViewBox},
     utilities::grid_utility,
-    views::grid::cached_grid::ARC_RESOLUTION,
+    views::grid::grid_generic::ARC_RESOLUTION,
     views::{DrawCommand, Transform2D},
 };
 use nannou::prelude::*;

@@ -10,7 +10,7 @@ use nannou::prelude::*;
 #[derive(Debug, Default)]
 pub struct BackgroundFlash {
     start_color: Rgb,
-    target_color: Rgb,
+    pub target_color: Rgb,
     start_time: f32,
     duration: f32,
     is_active: bool,

@@ -22,8 +22,14 @@ impl BackgroundManager {
     }
 
     pub fn flash(&mut self, flash_color: Rgb, duration: f32, current_time: f32) {
-        self.flasher
-            .start(flash_color, self.current_color, duration, current_time);
+        if !self.flasher.is_active() {
+            self.flasher
+                .start(flash_color, self.current_color, duration, current_time);
+        } else {
+            let target_color = self.flasher.target_color;
+            self.flasher
+                .start(flash_color, target_color, duration, current_time);
+        }
     }
 
     pub fn color_fade(&mut self, target_color: Rgb, duration: f32, current_time: f32) {

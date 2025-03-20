@@ -9,7 +9,7 @@
 
 use crate::{
     models::{EdgeType, PathElement, ViewBox},
-    views::CachedSegment,
+    views::{CachedSegment, SegmentType},
 };
 
 use nannou::prelude::*;
@@ -242,8 +242,8 @@ pub fn check_segment_alignment(
     segment2: &CachedSegment,
     direction: Option<&str>,
 ) -> bool {
-    let edge_type1 = segment1.edge_type();
-    let edge_type2 = segment2.edge_type();
+    let edge_type1 = &segment1.edge_type;
+    let edge_type2 = &segment2.edge_type;
 
     // Check if segments align based on their edge types and positions
     let types_match = match edge_type1 {
@@ -281,8 +281,8 @@ pub fn check_segment_alignment(
     if !types_match {
         false
     } else {
-        let path1 = segment1.original_path();
-        let path2 = segment2.original_path();
+        let path1 = &segment1.original_path;
+        let path2 = &segment2.original_path;
         // then check coordinate alignment
         match (path1, path2) {
             (
@@ -395,6 +395,27 @@ pub fn get_neighbor_direction(
         (-1, 0) => Some("West"),
         _ => None,
     }
+}
+
+// Determine the SegmentType of a given Arc element
+pub fn classify_arc(start_x: &f32, start_y: &f32, end_x: &f32, end_y: &f32) -> SegmentType {
+    // Top-left arc: starts high, ends left
+    if *start_y < *end_y && *end_x < *start_x {
+        return SegmentType::ArcTopLeft;
+    }
+    // Top-right arc: starts high, ends right
+    else if *start_y < *end_y && *end_x > *start_x {
+        return SegmentType::ArcTopRight;
+    }
+    // Bottom-left arc: starts low, ends left
+    else if *start_y > *end_y && *end_x < *start_x {
+        return SegmentType::ArcBottomLeft;
+    }
+    // Bottom-right arc: starts low, ends right
+    else if *start_y > *end_y && *end_x > *start_x {
+        return SegmentType::ArcBottomRight;
+    }
+    SegmentType::Unknown
 }
 
 #[cfg(test)]

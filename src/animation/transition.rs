@@ -7,7 +7,9 @@
 // It doesn't need to finish to smoothly start transitioning to
 // the next glyph.
 
-use crate::{config::TransitionConfig, services::SegmentGraph, views::GridInstance};
+use crate::{
+    animation::stroke_order, config::TransitionConfig, services::SegmentGraph, views::GridInstance,
+};
 use rand::{thread_rng, Rng};
 use std::collections::{HashSet, VecDeque};
 
@@ -29,6 +31,12 @@ pub struct Transition {
     frame_duration: f32,
 }
 
+#[derive(Clone)]
+pub enum TransitionTrigger {
+    Auto,
+    Manual,
+}
+
 impl Transition {
     pub fn new(changes: Vec<Vec<SegmentChange>>, frame_duration: f32) -> Self {
         Self {
@@ -39,7 +47,7 @@ impl Transition {
         }
     }
 
-    pub fn update(&mut self, dt: f32) -> bool {
+    pub fn should_auto_advance(&mut self, dt: f32) -> bool {
         self.frame_timer += dt;
         if self.frame_timer >= self.frame_duration {
             self.frame_timer -= self.frame_duration;
@@ -80,6 +88,7 @@ impl Transition {
     }
 }
 
+// Generates the frames of the Transition
 pub struct TransitionEngine {
     pub default_config: TransitionConfig,
 }
@@ -102,12 +111,12 @@ impl TransitionEngine {
         target_segments: &HashSet<String>,
         immediate: bool, // when true, all segments change at once
     ) -> Vec<Vec<SegmentChange>> {
-        let grid = grid_instance.grid();
-        let start_segments = grid_instance.current_active_segments();
-        let target_style = grid_instance.target_style();
-        let segment_graph = grid_instance.graph();
+        let grid = &grid_instance.grid;
+        let start_segments = &grid_instance.current_active_segments;
+        let target_style = &grid_instance.target_style;
+        let segment_graph = &grid_instance.graph;
 
-        let config = if let Some(config) = grid_instance.transition_config() {
+        let config = if let Some(config) = &grid_instance.transition_config {
             config
         } else {
             &self.default_config
@@ -131,7 +140,7 @@ impl TransitionEngine {
         // Filter out segments that are already in the target state and have the same style
         if !immediate {
             filtered_segments.retain(|seg| {
-                let current_style = grid.segments()[seg].get_current_style();
+                let current_style = grid.segments[seg].get_current_style();
                 if current_style == *target_style {
                     false // Remove if styles match
                 } else {
@@ -216,6 +225,18 @@ impl TransitionEngine {
             changes_by_step.pop();
         }
         changes_by_step
+    }
+
+    pub fn generate_stroke_order_changes(
+        &self,
+        grid_instance: &GridInstance,
+        target_segments: &HashSet<String>,
+    ) -> Vec<Vec<SegmentChange>> {
+        // Call into our stroke order module
+        let ordered_segments = stroke_order::generate_stroke_order(grid_instance, target_segments);
+
+        // Convert ordered segments to transition changes
+        stroke_order::convert_to_transition_changes(ordered_segments, grid_instance)
     }
 
     fn find_nearest_connected(

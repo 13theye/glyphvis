@@ -587,7 +587,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                     };
                     let movement_engine = MovementEngine::new(movement_config);
                     grid.active_movement = None;
-                    grid.build_movement(x, y, duration, &movement_engine, app.time as f64);
+                    grid.build_movement(x, y, duration, &movement_engine, app.time);
                 }
             }
             OscCommand::RotateGrid { name, angle } => {

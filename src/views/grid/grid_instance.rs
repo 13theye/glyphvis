@@ -64,8 +64,8 @@ pub struct GridInstance {
     // state for "instantaneous" movements
     last_position: Point2,
     target_position: Point2,
-    position_update_time: f64,
-    movement_duration: f64,
+    position_update_time: f32,
+    movement_duration: f32,
 
     pub current_location: Point2,
     pub current_rotation: f32,
@@ -183,15 +183,15 @@ impl GridInstance {
         // 0. Update position
         // Handle time-based position interpolation
         if self.last_position != self.target_position {
-            let elapsed = time as f64 - self.position_update_time;
+            let elapsed = time - self.position_update_time;
             let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
 
             if progress < 1.0 {
                 // Calculate the interpolated position
                 let interp_x = self.last_position.x
-                    + (self.target_position.x - self.last_position.x) * progress as f32;
+                    + (self.target_position.x - self.last_position.x) * progress;
                 let interp_y = self.last_position.y
-                    + (self.target_position.y - self.last_position.y) * progress as f32;
+                    + (self.target_position.y - self.last_position.y) * progress;
                 let interp_position = pt2(interp_x, interp_y);
 
                 // Calculate the delta from current position
@@ -551,7 +551,7 @@ impl GridInstance {
         target_y: f32,
         duration: f32,
         engine: &MovementEngine,
-        time: f64,
+        time: f32,
     ) {
         // Create target point from coordinates
         let target_position = pt2(target_x, target_y);

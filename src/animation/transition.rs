@@ -38,6 +38,21 @@ pub enum TransitionTrigger {
     Manual,
 }
 
+#[derive(Default, Clone, Copy)]
+pub enum TransitionEffect {
+    #[default]
+    Normal,
+    PowerOn,
+}
+
+#[derive(Default, Clone, Copy)]
+pub enum TransitionType {
+    #[default]
+    Random,
+    Writing,
+    Overwrite,
+}
+
 impl Transition {
     pub fn new(changes: Vec<Vec<SegmentChange>>, frame_duration: f32) -> Self {
         Self {

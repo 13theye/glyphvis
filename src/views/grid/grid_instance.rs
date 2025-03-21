@@ -670,8 +670,18 @@ impl GridInstance {
     }
 
     pub fn receive_transition_trigger(&mut self) {
-        if self.has_active_transition() {
-            self.transition_trigger_received = true;
+        match self.transition_trigger_type {
+            TransitionTrigger::Auto => {
+                self.transition_trigger_type = TransitionTrigger::Manual;
+                if self.has_active_transition() {
+                    self.transition_trigger_received = true;
+                }
+            }
+            TransitionTrigger::Manual => {
+                if self.has_active_transition() {
+                    self.transition_trigger_received = true;
+                }
+            }
         }
     }
 

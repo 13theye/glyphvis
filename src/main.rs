@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use glyphvis::{
     animation::{
-        EasingType, MovementEngine, TransitionAnimationType, TransitionEngine,
+        EasingType, MovementEngine, Transition, TransitionAnimationType, TransitionEngine,
         TransitionTriggerType,
     },
     config::*,
@@ -198,7 +198,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Key1 => {
             for name in model.grids.keys() {
-                model.osc_sender.send_glyph(name, 1, 3);
+                model.osc_sender.send_grid_overwrite(name);
             }
         }
         Key::Key2 => {
@@ -676,6 +676,14 @@ fn launch_commands(app: &App, model: &mut Model) {
                     grid.no_glyph();
                     grid.transition_next_animation_type =
                         transition_next_animation_type(animation_type_msg);
+                }
+            }
+            OscCommand::GridOverwrite { grid_name } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    let index = grid.current_glyph_index;
+                    grid.use_power_on_effect = true;
+                    grid.stage_glyph_by_index(&model.project, index);
+                    grid.transition_next_animation_type = TransitionAnimationType::Overwrite;
                 }
             }
             OscCommand::GridToggleVisibility { grid_name } => {

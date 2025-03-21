@@ -73,6 +73,9 @@ pub enum OscCommand {
         grid_name: String,
         animation_type_msg: i32,
     },
+    GridOverwrite {
+        grid_name: String,
+    },
     GridToggleVisibility {
         grid_name: String,
     },
@@ -261,6 +264,13 @@ impl OscController {
                             self.command_queue.push(OscCommand::GridNoGlyph {
                                 grid_name: name.clone(),
                                 animation_type_msg: *animation_type,
+                            });
+                        }
+                    }
+                    "/grid/overwrite" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::GridOverwrite {
+                                grid_name: name.clone(),
                             });
                         }
                     }
@@ -502,6 +512,13 @@ impl OscSender {
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(animation_type_msg),
         ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_grid_overwrite(&self, grid_name: &str) {
+        let addr = "/grid/overwrite".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

@@ -29,7 +29,7 @@ pub struct Transition {
     current_step: usize,
     frame_timer: f32,
     frame_duration: f32,
-    animation_type: TransitionAnimationType,
+    pub animation_type: TransitionAnimationType,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -46,7 +46,7 @@ pub enum TransitionEffect {
     PowerOn,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq)]
 pub enum TransitionAnimationType {
     #[default]
     Immediate,

@@ -30,7 +30,7 @@ pub struct GridInstance {
 
     // glyph state
     show: String,
-    current_glyph_index: usize,
+    pub current_glyph_index: usize,
     index_max: usize,
 
     // effects state
@@ -346,9 +346,10 @@ impl GridInstance {
         // Reset trigger flag
         self.transition_trigger_received = false;
 
-        // Clear transition if complete
+        // Clear transition if complete; reset Power On effect
         if transition.is_complete() {
             self.active_transition = None;
+            self.use_power_on_effect = false;
         }
 
         updates

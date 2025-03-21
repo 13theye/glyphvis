@@ -180,57 +180,19 @@ impl GridInstance {
         time: f32,
         dt: f32,
     ) {
-        // 0. Update position
-        // Handle time-based position interpolation
-        if self.last_position != self.target_position {
-            let elapsed = time - self.position_update_time;
-            let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
-
-            if progress < 1.0 {
-                // Calculate the interpolated position
-                let interp_x = self.last_position.x
-                    + (self.target_position.x - self.last_position.x) * progress;
-                let interp_y = self.last_position.y
-                    + (self.target_position.y - self.last_position.y) * progress;
-                let interp_position = pt2(interp_x, interp_y);
-
-                // Calculate the delta from current position
-                let delta = interp_position - self.current_location;
-
-                // Apply the transform
-                if delta.length() > 0.01 {
-                    let transform = Transform2D {
-                        translation: delta,
-                        scale: 1.0,
-                        rotation: 0.0,
-                    };
-                    self.apply_transform(&transform);
-                }
-            } else {
-                // We've reached the end of the interpolation
-                // Set exact position to avoid floating point errors
-                let delta = self.target_position - self.current_location;
-                if delta.length() > 0.01 {
-                    let transform = Transform2D {
-                        translation: delta,
-                        scale: 1.0,
-                        rotation: 0.0,
-                    };
-                    self.apply_transform(&transform);
-                }
-
-                // Mark interpolation as complete
-                self.last_position = self.target_position;
-            }
-        }
-
         // Continue with existing update logic
         // 1. Generate new transitions
         if self.has_target_segments() {
             self.build_transition(transition_engine);
         }
 
-        // 2. Update positioning from MovementEngine (for duration > 0)
+        // 2. Update positioning
+        // Handle time-based position interpolation (duration = 0.0)
+        if self.has_zero_duration_movement() {
+            self.apply_zero_duration_movement(time);
+        }
+
+        // handle duration > 0.0 movements
         if self.has_active_movement() {
             if let Some(update) = self.process_active_movement(dt) {
                 self.apply_movement_update(&update);
@@ -453,7 +415,7 @@ impl GridInstance {
         }
     }
 
-    /**************************** Grid movement **********************************/
+    /**************************** Grid movement & transform **********************************/
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         // update self.current_location here only.
@@ -599,6 +561,48 @@ impl GridInstance {
         self.apply_transform(&update.transform);
     }
 
+    fn apply_zero_duration_movement(&mut self, time: f32) {
+        let elapsed = time - self.position_update_time;
+        let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
+
+        if progress < 1.0 {
+            // Calculate the interpolated position
+            let interp_x =
+                self.last_position.x + (self.target_position.x - self.last_position.x) * progress;
+            let interp_y =
+                self.last_position.y + (self.target_position.y - self.last_position.y) * progress;
+            let interp_position = pt2(interp_x, interp_y);
+
+            // Calculate the delta from current position
+            let delta = interp_position - self.current_location;
+
+            // Apply the transform
+            if delta.length() > 0.01 {
+                let transform = Transform2D {
+                    translation: delta,
+                    scale: 1.0,
+                    rotation: 0.0,
+                };
+                self.apply_transform(&transform);
+            }
+        } else {
+            // We've reached the end of the interpolation
+            // Set exact position to avoid floating point errors
+            let delta = self.target_position - self.current_location;
+            if delta.length() > 0.01 {
+                let transform = Transform2D {
+                    translation: delta,
+                    scale: 1.0,
+                    rotation: 0.0,
+                };
+                self.apply_transform(&transform);
+            }
+
+            // Mark interpolation as complete
+            self.last_position = self.target_position;
+        }
+    }
+
     /******************** Backbone style and effects **************************** */
 
     fn generate_backbone_style(&self, time: f32) -> DrawStyle {
@@ -651,6 +655,10 @@ impl GridInstance {
 
     pub fn has_active_movement(&self) -> bool {
         self.active_movement.is_some()
+    }
+
+    pub fn has_zero_duration_movement(&self) -> bool {
+        self.last_position != self.target_position
     }
 
     pub fn has_backbone_effects(&self) -> bool {

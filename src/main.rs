@@ -72,7 +72,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.7")
+        .title("glyphvis 0.2.0")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -175,7 +175,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             }
         }
         Key::Backslash => {
-            // Send glyph change for each grid
+            // Move to original position
             for name in model.grids.keys() {
                 model.osc_sender.send_move_grid(name, 0.0, 0.0, 0.0)
             }
@@ -339,7 +339,13 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::P => {
             model.debug_flag = !model.debug_flag;
         }
-        Key::R => model.frame_recorder.toggle_recording(),
+        Key::R => {
+            if !model.frame_recorder.is_recording() {
+                model.osc_sender.send_recorder_start();
+            } else {
+                model.osc_sender.send_recorder_stop();
+            }
+        }
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {
             let (processed, total) = model.frame_recorder.get_queue_status();
@@ -549,6 +555,16 @@ fn render_progress(app: &App, model: &mut Model) {
 fn launch_commands(app: &App, model: &mut Model) {
     for command in model.osc_controller.take_commands() {
         match command {
+            OscCommand::RecorderStart {} => {
+                if !model.frame_recorder.is_recording() {
+                    model.frame_recorder.toggle_recording();
+                }
+            }
+            OscCommand::RecorderStop {} => {
+                if model.frame_recorder.is_recording() {
+                    model.frame_recorder.toggle_recording();
+                }
+            }
             OscCommand::BackgroundFlash { r, g, b, duration } => {
                 model.background.flash(rgb(r, g, b), duration, app.time);
             }

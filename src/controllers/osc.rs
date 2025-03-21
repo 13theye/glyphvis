@@ -6,6 +6,8 @@ use std::error::Error;
 
 #[derive(Debug)]
 pub enum OscCommand {
+    RecorderStart {},
+    RecorderStop {},
     GridBackboneFade {
         name: String,
         r: f32,
@@ -128,6 +130,12 @@ impl OscController {
         for (packet, _addr) in self.receiver.try_iter() {
             for message in packet.into_msgs() {
                 match message.addr.as_str() {
+                    "/recorder/start" => {
+                        self.command_queue.push(OscCommand::RecorderStart {});
+                    }
+                    "/recorder/stop" => {
+                        self.command_queue.push(OscCommand::RecorderStop {});
+                    }
                     "/grid/backbone_fade" => {
                         if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a), osc::Type::Float(duration)] =
                             &message.args[..]
@@ -390,6 +398,22 @@ impl OscSender {
             target_addr,
             target_port,
         })
+    }
+
+    pub fn send_recorder_start(&self) {
+        let addr = "/recorder/start".to_string();
+        let args = Vec::new();
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_recorder_stop(&self) {
+        let addr = "/recorder/stop".to_string();
+        let args = Vec::new();
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
     }
 
     pub fn send_create_grid(&self, name: &str, show: &str, x: f32, y: f32, rotation: f32) {

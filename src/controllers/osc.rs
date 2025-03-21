@@ -6,7 +6,7 @@ use std::error::Error;
 
 #[derive(Debug)]
 pub enum OscCommand {
-    BackboneColorFade {
+    GridBackboneFade {
         name: String,
         r: f32,
         g: f32,
@@ -14,84 +14,93 @@ pub enum OscCommand {
         a: f32,
         duration: f32,
     },
-    CreateGrid {
+    GridCreate {
         name: String,
         show: String,
         position: (f32, f32),
         rotation: f32,
     },
-    MoveGrid {
+    GridMove {
         name: String,
         x: f32,
         y: f32,
         duration: f32,
     },
-    RotateGrid {
+    GridRotate {
         name: String,
         angle: f32,
     },
-    ScaleGrid {
+    GridScale {
         name: String,
         scale: f32,
     },
-    FlashBackground {
+    BackgroundFlash {
         r: f32,
         g: f32,
         b: f32,
         duration: f32,
     },
-    ColorFadeBackground {
+    BackgroundColorFade {
         r: f32,
         g: f32,
         b: f32,
         duration: f32,
     },
-    DisplayGlyph {
+    GridGlyph {
         grid_name: String,
         glyph_index: usize,
-        immediate: bool,
+        animation_type_msg: i32,
     },
-    InstantGlyphColor {
+    GridInstantGlyphColor {
         grid_name: String,
         r: f32,
         g: f32,
         b: f32,
         a: f32,
     },
-    NextGlyph {
+    GridNextGlyph {
         grid_name: String,
-        immediate: bool,
+        animation_type_msg: i32,
     },
-    NextGlyphColor {
+    GridNextGlyphColor {
         grid_name: String,
         r: f32,
         g: f32,
         b: f32,
         a: f32,
     },
-    NoGlyph {
+    GridNoGlyph {
         grid_name: String,
-        immediate: bool,
+        animation_type_msg: i32,
     },
-    ToggleVisibility {
-        grid_name: String,
-    },
-    SetVisibility {
-        grid_name: String,
-        setting: bool,
-    },
-    ToggleColorful {
+    GridOverwrite {
         grid_name: String,
     },
-    SetColorful {
+    GridToggleVisibility {
+        grid_name: String,
+    },
+    GridSetVisibility {
         grid_name: String,
         setting: bool,
     },
-    SetPowerEffect {
+    GridToggleColorful {
+        grid_name: String,
+    },
+    GridSetColorful {
         grid_name: String,
         setting: bool,
     },
-    UpdateTransitionConfig {
+    GridSetPowerEffect {
+        grid_name: String,
+        setting: bool,
+    },
+    GridTransitionTrigger {
+        grid_name: String,
+    },
+    GridTransitionAuto {
+        grid_name: String,
+    },
+    TransitionUpdate {
         grid_name: String,
         steps: Option<usize>,
         frame_duration: Option<f32>,
@@ -123,7 +132,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a), osc::Type::Float(duration)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::BackboneColorFade {
+                            self.command_queue.push(OscCommand::GridBackboneFade {
                                 name: name.clone(),
                                 r: *r,
                                 g: *g,
@@ -137,7 +146,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::String(show), osc::Type::Float(x), osc::Type::Float(y), osc::Type::Float(rot)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::CreateGrid {
+                            self.command_queue.push(OscCommand::GridCreate {
                                 name: name.clone(),
                                 show: show.clone(),
                                 position: (*x, *y),
@@ -149,7 +158,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::Float(x), osc::Type::Float(y), osc::Type::Float(duration)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::MoveGrid {
+                            self.command_queue.push(OscCommand::GridMove {
                                 name: name.clone(),
                                 x: *x,
                                 y: *y,
@@ -161,7 +170,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::Float(angle)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::RotateGrid {
+                            self.command_queue.push(OscCommand::GridRotate {
                                 name: name.clone(),
                                 angle: *angle,
                             });
@@ -171,7 +180,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::Float(scale)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::ScaleGrid {
+                            self.command_queue.push(OscCommand::GridScale {
                                 name: name.clone(),
                                 scale: *scale,
                             });
@@ -181,7 +190,7 @@ impl OscController {
                         if let [osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(duration)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::FlashBackground {
+                            self.command_queue.push(OscCommand::BackgroundFlash {
                                 r: *r,
                                 g: *g,
                                 b: *b,
@@ -193,7 +202,7 @@ impl OscController {
                         if let [osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(duration)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::ColorFadeBackground {
+                            self.command_queue.push(OscCommand::BackgroundColorFade {
                                 r: *r,
                                 g: *g,
                                 b: *b,
@@ -202,14 +211,13 @@ impl OscController {
                         }
                     }
                     "/grid/glyph" => {
-                        if let [osc::Type::String(name), osc::Type::Int(index), osc::Type::Int(immediately)] =
+                        if let [osc::Type::String(name), osc::Type::Int(index), osc::Type::Int(animation_type)] =
                             &message.args[..]
                         {
-                            let immediate = *immediately != 0;
-                            self.command_queue.push(OscCommand::DisplayGlyph {
+                            self.command_queue.push(OscCommand::GridGlyph {
                                 grid_name: name.clone(),
                                 glyph_index: *index as usize,
-                                immediate,
+                                animation_type_msg: *animation_type,
                             });
                         }
                     }
@@ -217,7 +225,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::InstantGlyphColor {
+                            self.command_queue.push(OscCommand::GridInstantGlyphColor {
                                 grid_name: name.clone(),
                                 r: *r,
                                 g: *g,
@@ -227,13 +235,12 @@ impl OscController {
                         }
                     }
                     "/grid/nextglyph" => {
-                        if let [osc::Type::String(name), osc::Type::Int(immediately)] =
+                        if let [osc::Type::String(name), osc::Type::Int(animation_type)] =
                             &message.args[..]
                         {
-                            let immediate = *immediately != 0;
-                            self.command_queue.push(OscCommand::NextGlyph {
+                            self.command_queue.push(OscCommand::GridNextGlyph {
                                 grid_name: name.clone(),
-                                immediate,
+                                animation_type_msg: *animation_type,
                             });
                         }
                     }
@@ -241,7 +248,7 @@ impl OscController {
                         if let [osc::Type::String(name), osc::Type::Float(r), osc::Type::Float(g), osc::Type::Float(b), osc::Type::Float(a)] =
                             &message.args[..]
                         {
-                            self.command_queue.push(OscCommand::NextGlyphColor {
+                            self.command_queue.push(OscCommand::GridNextGlyphColor {
                                 grid_name: name.clone(),
                                 r: *r,
                                 g: *g,
@@ -251,19 +258,39 @@ impl OscController {
                         }
                     }
                     "/grid/noglyph" => {
-                        if let [osc::Type::String(name), osc::Type::Int(immediately)] =
+                        if let [osc::Type::String(name), osc::Type::Int(animation_type)] =
                             &message.args[..]
                         {
-                            let immediate = *immediately != 0;
-                            self.command_queue.push(OscCommand::NoGlyph {
+                            self.command_queue.push(OscCommand::GridNoGlyph {
                                 grid_name: name.clone(),
-                                immediate,
+                                animation_type_msg: *animation_type,
+                            });
+                        }
+                    }
+                    "/grid/overwrite" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::GridOverwrite {
+                                grid_name: name.clone(),
+                            });
+                        }
+                    }
+                    "/grid/transitiontrigger" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::GridTransitionTrigger {
+                                grid_name: name.clone(),
+                            });
+                        }
+                    }
+                    "/grid/transitionauto" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::GridTransitionAuto {
+                                grid_name: name.clone(),
                             });
                         }
                     }
                     "/grid/togglevisibility" => {
                         if let [osc::Type::String(name)] = &message.args[..] {
-                            self.command_queue.push(OscCommand::ToggleVisibility {
+                            self.command_queue.push(OscCommand::GridToggleVisibility {
                                 grid_name: name.clone(),
                             });
                         }
@@ -273,7 +300,7 @@ impl OscController {
                             &message.args[..]
                         {
                             let setting_bool = *setting != 0;
-                            self.command_queue.push(OscCommand::SetVisibility {
+                            self.command_queue.push(OscCommand::GridSetVisibility {
                                 grid_name: name.clone(),
                                 setting: setting_bool,
                             });
@@ -281,7 +308,7 @@ impl OscController {
                     }
                     "/grid/togglecolorful" => {
                         if let [osc::Type::String(name)] = &message.args[..] {
-                            self.command_queue.push(OscCommand::ToggleColorful {
+                            self.command_queue.push(OscCommand::GridToggleColorful {
                                 grid_name: name.clone(),
                             });
                         }
@@ -291,7 +318,7 @@ impl OscController {
                             &message.args[..]
                         {
                             let setting_bool = *setting != 0;
-                            self.command_queue.push(OscCommand::SetColorful {
+                            self.command_queue.push(OscCommand::GridSetColorful {
                                 grid_name: name.clone(),
                                 setting: setting_bool,
                             });
@@ -302,7 +329,7 @@ impl OscController {
                             &message.args[..]
                         {
                             let setting_bool = *setting != 0;
-                            self.command_queue.push(OscCommand::SetPowerEffect {
+                            self.command_queue.push(OscCommand::GridSetPowerEffect {
                                 grid_name: name.clone(),
                                 setting: setting_bool,
                             });
@@ -326,7 +353,7 @@ impl OscController {
                             }
                         }
 
-                        self.command_queue.push(OscCommand::UpdateTransitionConfig {
+                        self.command_queue.push(OscCommand::TransitionUpdate {
                             grid_name,
                             steps,
                             frame_duration,
@@ -431,23 +458,23 @@ impl OscSender {
             .ok();
     }
 
-    pub fn send_glyph(&self, grid_name: &str, index: i32, immediate: i32) {
+    pub fn send_glyph(&self, grid_name: &str, index: i32, animation_type_msg: i32) {
         let addr = "/grid/glyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(index),
-            osc::Type::Int(immediate),
+            osc::Type::Int(animation_type_msg),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
 
-    pub fn send_next_glyph(&self, grid_name: &str, immediate: i32) {
+    pub fn send_next_glyph(&self, grid_name: &str, animation_type_msg: i32) {
         let addr = "/grid/nextglyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
-            osc::Type::Int(immediate),
+            osc::Type::Int(animation_type_msg),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
@@ -479,12 +506,35 @@ impl OscSender {
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
-    pub fn send_no_glyph(&self, grid_name: &str, immediate: i32) {
+    pub fn send_no_glyph(&self, grid_name: &str, animation_type_msg: i32) {
         let addr = "/grid/noglyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
-            osc::Type::Int(immediate),
+            osc::Type::Int(animation_type_msg),
         ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+    pub fn send_grid_overwrite(&self, grid_name: &str) {
+        let addr = "/grid/overwrite".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_transition_trigger(&self, grid_name: &str) {
+        let addr = "/grid/transitiontrigger".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_transition_auto(&self, grid_name: &str) {
+        let addr = "/grid/transitionauto".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

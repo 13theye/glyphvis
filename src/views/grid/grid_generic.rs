@@ -447,7 +447,6 @@ impl CachedGrid {
         let mut segments = HashMap::new();
 
         // Create grid elements and detect edges
-        println!("\n=== Generating Grid Elements ===");
         for y in 1..=project.grid_y {
             for x in 1..=project.grid_x {
                 for element in &elements {

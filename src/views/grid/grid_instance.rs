@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine, TransitionTrigger,
-        TransitionUpdates,
+        Movement, MovementEngine, MovementUpdate, Transition, TransitionAnimationType,
+        TransitionEngine, TransitionTriggerType, TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
@@ -30,16 +30,16 @@ pub struct GridInstance {
 
     // glyph state
     show: String,
-    current_glyph_index: usize,
+    pub current_glyph_index: usize,
     index_max: usize,
 
     // effects state
     active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
-    pub transition_trigger_type: TransitionTrigger,
+    pub transition_trigger_type: TransitionTriggerType,
+    pub transition_next_animation_type: TransitionAnimationType,
     pub transition_trigger_received: bool,
     pub transition_use_stroke_order: bool,
-    pub next_glyph_change_is_immediate: bool,
     pub use_power_on_effect: bool,
     pub colorful_flag: bool, // enables random-ish color effect target style
 
@@ -64,8 +64,8 @@ pub struct GridInstance {
     // state for "instantaneous" movements
     last_position: Point2,
     target_position: Point2,
-    position_update_time: f64,
-    movement_duration: f64,
+    position_update_time: f32,
+    movement_duration: f32,
 
     pub current_location: Point2,
     pub current_rotation: f32,
@@ -88,6 +88,10 @@ impl GridInstance {
             .get_show(show)
             .map_or(0, |show| show.show_order.len());
 
+        println!("\n(===== Creating GridInstance <{}> =====)", id);
+        println!("Attached to Show: {}", show);
+        println!("Initial position: {}", position);
+
         Self {
             id,
             grid,
@@ -109,10 +113,10 @@ impl GridInstance {
 
             active_transition: None,
             transition_config: None,
-            transition_trigger_type: TransitionTrigger::Auto,
+            transition_trigger_type: TransitionTriggerType::Auto,
+            transition_next_animation_type: TransitionAnimationType::default(),
             transition_trigger_received: false,
             transition_use_stroke_order: true,
-            next_glyph_change_is_immediate: false,
             use_power_on_effect: false,
             colorful_flag: false,
 
@@ -180,57 +184,19 @@ impl GridInstance {
         time: f32,
         dt: f32,
     ) {
-        // 0. Update position
-        // Handle time-based position interpolation
-        if self.last_position != self.target_position {
-            let elapsed = time as f64 - self.position_update_time;
-            let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
-
-            if progress < 1.0 {
-                // Calculate the interpolated position
-                let interp_x = self.last_position.x
-                    + (self.target_position.x - self.last_position.x) * progress as f32;
-                let interp_y = self.last_position.y
-                    + (self.target_position.y - self.last_position.y) * progress as f32;
-                let interp_position = pt2(interp_x, interp_y);
-
-                // Calculate the delta from current position
-                let delta = interp_position - self.current_location;
-
-                // Apply the transform
-                if delta.length() > 0.01 {
-                    let transform = Transform2D {
-                        translation: delta,
-                        scale: 1.0,
-                        rotation: 0.0,
-                    };
-                    self.apply_transform(&transform);
-                }
-            } else {
-                // We've reached the end of the interpolation
-                // Set exact position to avoid floating point errors
-                let delta = self.target_position - self.current_location;
-                if delta.length() > 0.01 {
-                    let transform = Transform2D {
-                        translation: delta,
-                        scale: 1.0,
-                        rotation: 0.0,
-                    };
-                    self.apply_transform(&transform);
-                }
-
-                // Mark interpolation as complete
-                self.last_position = self.target_position;
-            }
-        }
-
         // Continue with existing update logic
         // 1. Generate new transitions
         if self.has_target_segments() {
-            self.build_transition(transition_engine);
+            self.build_transition(transition_engine, self.transition_next_animation_type);
         }
 
-        // 2. Update positioning from MovementEngine (for duration > 0)
+        // 2. Update positioning
+        // a. Handle time-based position interpolation (duration = 0.0)
+        if self.has_zero_duration_movement() {
+            self.apply_zero_duration_movement(time);
+        }
+
+        // b. handle duration > 0.0 movements
         if self.has_active_movement() {
             if let Some(update) = self.process_active_movement(dt) {
                 self.apply_movement_update(&update);
@@ -331,24 +297,25 @@ impl GridInstance {
         self.target_style = style;
     }
 
-    /*********************** Segment Transitions ******************************/
+    /*********************** Glyph Transitions ******************************/
 
     // Build the transition
-    pub fn build_transition(&mut self, engine: &TransitionEngine) {
+    pub fn build_transition(&mut self, engine: &TransitionEngine, typ: TransitionAnimationType) {
         // Handle target segments
         let target_segments = self.target_segments.as_ref().unwrap();
 
+        /*
         let changes = if self.transition_use_stroke_order {
             engine.generate_stroke_order_changes(self, target_segments)
         } else {
-            engine.generate_changes(
-                self,
-                target_segments,
-                self.next_glyph_change_is_immediate, // when true, all segments change at once
-            )
+            engine.generate_changes(self, target_segments, typ)
         };
+        */
+
+        let changes = engine.generate_changes(self, target_segments, typ);
 
         self.active_transition = Some(Transition::new(
+            self.transition_next_animation_type,
             changes,
             engine.default_config.frame_duration,
         ));
@@ -363,10 +330,10 @@ impl GridInstance {
         let transition = self.active_transition.as_mut().unwrap();
 
         // Determine if transition should advance based on trigger type
-        let should_advance = self.next_glyph_change_is_immediate
+        let should_advance = transition.is_immediate_type()
             || match self.transition_trigger_type {
-                TransitionTrigger::Auto => transition.should_auto_advance(dt),
-                TransitionTrigger::Manual => self.transition_trigger_received,
+                TransitionTriggerType::Auto => transition.should_auto_advance(dt),
+                TransitionTriggerType::Manual => self.transition_trigger_received,
             };
 
         if !should_advance {
@@ -379,9 +346,10 @@ impl GridInstance {
         // Reset trigger flag
         self.transition_trigger_received = false;
 
-        // Clear transition if complete
+        // Clear transition if complete; reset Power On effect
         if transition.is_complete() {
             self.active_transition = None;
+            self.use_power_on_effect = false;
         }
 
         updates
@@ -453,7 +421,24 @@ impl GridInstance {
         }
     }
 
-    /**************************** Grid movement **********************************/
+    // process OSC /grid/transitiontrigger
+    pub fn receive_transition_trigger(&mut self) {
+        match self.transition_trigger_type {
+            TransitionTriggerType::Auto => {
+                self.transition_trigger_type = TransitionTriggerType::Manual;
+                if self.has_active_transition() {
+                    self.transition_trigger_received = true;
+                }
+            }
+            TransitionTriggerType::Manual => {
+                if self.has_active_transition() {
+                    self.transition_trigger_received = true;
+                }
+            }
+        }
+    }
+
+    /**************************** Grid movement & transform **********************************/
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         // update self.current_location here only.
@@ -551,7 +536,7 @@ impl GridInstance {
         target_y: f32,
         duration: f32,
         engine: &MovementEngine,
-        time: f64,
+        time: f32,
     ) {
         // Create target point from coordinates
         let target_position = pt2(target_x, target_y);
@@ -597,6 +582,48 @@ impl GridInstance {
 
     fn apply_movement_update(&mut self, update: &MovementUpdate) {
         self.apply_transform(&update.transform);
+    }
+
+    fn apply_zero_duration_movement(&mut self, time: f32) {
+        let elapsed = time - self.position_update_time;
+        let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
+
+        if progress < 1.0 {
+            // Calculate the interpolated position
+            let interp_x =
+                self.last_position.x + (self.target_position.x - self.last_position.x) * progress;
+            let interp_y =
+                self.last_position.y + (self.target_position.y - self.last_position.y) * progress;
+            let interp_position = pt2(interp_x, interp_y);
+
+            // Calculate the delta from current position
+            let delta = interp_position - self.current_location;
+
+            // Apply the transform
+            if delta.length() > 0.01 {
+                let transform = Transform2D {
+                    translation: delta,
+                    scale: 1.0,
+                    rotation: 0.0,
+                };
+                self.apply_transform(&transform);
+            }
+        } else {
+            // We've reached the end of the interpolation
+            // Set exact position to avoid floating point errors
+            let delta = self.target_position - self.current_location;
+            if delta.length() > 0.01 {
+                let transform = Transform2D {
+                    translation: delta,
+                    scale: 1.0,
+                    rotation: 0.0,
+                };
+                self.apply_transform(&transform);
+            }
+
+            // Mark interpolation as complete
+            self.last_position = self.target_position;
+        }
     }
 
     /******************** Backbone style and effects **************************** */
@@ -653,14 +680,12 @@ impl GridInstance {
         self.active_movement.is_some()
     }
 
-    pub fn has_backbone_effects(&self) -> bool {
-        !self.backbone_effects.is_empty()
+    pub fn has_zero_duration_movement(&self) -> bool {
+        self.last_position != self.target_position
     }
 
-    pub fn receive_transition_trigger(&mut self) {
-        if self.has_active_transition() {
-            self.transition_trigger_received = true;
-        }
+    pub fn has_backbone_effects(&self) -> bool {
+        !self.backbone_effects.is_empty()
     }
 
     /*********************** Debug Helper ******************************* */

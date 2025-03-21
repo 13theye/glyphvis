@@ -7,7 +7,7 @@ use nannou::prelude::*;
 use std::collections::HashMap;
 
 const CONNECTION_THRESHOLD: f32 = 0.001; // Small threshold for floating point comparison
-const VERBOSE: bool = true;
+const VERBOSE: bool = false;
 
 #[derive(Debug, Clone)]
 pub struct SegmentConnection {

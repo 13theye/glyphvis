@@ -88,6 +88,10 @@ impl GridInstance {
             .get_show(show)
             .map_or(0, |show| show.show_order.len());
 
+        println!("\n(===== Creating GridInstance <{}> =====)", id);
+        println!("Attached to Show: {}", show);
+        println!("Initial position: {}", position);
+
         Self {
             id,
             grid,
@@ -187,12 +191,12 @@ impl GridInstance {
         }
 
         // 2. Update positioning
-        // Handle time-based position interpolation (duration = 0.0)
+        // a. Handle time-based position interpolation (duration = 0.0)
         if self.has_zero_duration_movement() {
             self.apply_zero_duration_movement(time);
         }
 
-        // handle duration > 0.0 movements
+        // b. handle duration > 0.0 movements
         if self.has_active_movement() {
             if let Some(update) = self.process_active_movement(dt) {
                 self.apply_movement_update(&update);

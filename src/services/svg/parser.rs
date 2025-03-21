@@ -35,7 +35,6 @@ fn parse_id(element: &str) -> Option<String> {
 
 // supported SVG elements: path & circle
 fn parse_element(element: &str) -> Option<PathElement> {
-    println!("Parsing SVG element: '{}'", element);
     if element.contains("<circle") {
         return parse_circle(element);
     }

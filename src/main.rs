@@ -683,9 +683,9 @@ fn launch_commands(app: &App, model: &mut Model) {
                 }
             }
             OscCommand::SetPowerEffect { grid_name, setting } => {
-                if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.use_power_on_effect = setting;
-                }
+                println!("/grid/setpowereffect has been deprecated in v0.1.7.");
+                println!("Please use /grid/seteffect.");
+                println!("grid name: {}, setting: {}", grid_name, setting);
             }
             OscCommand::UpdateTransitionConfig {
                 grid_name,

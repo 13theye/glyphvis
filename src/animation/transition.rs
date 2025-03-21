@@ -31,8 +31,9 @@ pub struct Transition {
     frame_duration: f32,
 }
 
-#[derive(Clone)]
+#[derive(Default, Clone, Copy)]
 pub enum TransitionTrigger {
+    #[default]
     Auto,
     Manual,
 }

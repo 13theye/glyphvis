@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use glyphvis::{
-    animation::{EasingType, MovementEngine, TransitionEngine, TransitionTriggerType},
+    animation::{
+        EasingType, MovementEngine, TransitionAnimationType, TransitionEngine,
+        TransitionTriggerType,
+    },
     config::*,
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
@@ -168,7 +171,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::Space => {
             // Send glyph change for each grid
             for name in model.grids.keys() {
-                model.osc_sender.send_next_glyph(name, 0);
+                model.osc_sender.send_next_glyph(name, 2);
             }
         }
         Key::Backslash => {
@@ -621,11 +624,12 @@ fn launch_commands(app: &App, model: &mut Model) {
             OscCommand::GridGlyph {
                 grid_name,
                 glyph_index,
-                immediate,
+                animation_type_msg,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_glyph_by_index(&model.project, glyph_index);
-                    grid.next_glyph_change_is_immediate = immediate;
+                    grid.transition_next_animation_type =
+                        transition_next_animation_type(animation_type_msg);
                 }
             }
             OscCommand::GridInstantGlyphColor {
@@ -641,11 +645,12 @@ fn launch_commands(app: &App, model: &mut Model) {
             }
             OscCommand::GridNextGlyph {
                 grid_name,
-                immediate,
+                animation_type_msg,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.stage_next_glyph(&model.project);
-                    grid.next_glyph_change_is_immediate = immediate;
+                    grid.transition_next_animation_type =
+                        transition_next_animation_type(animation_type_msg);
                 }
             }
             OscCommand::GridNextGlyphColor {
@@ -665,11 +670,12 @@ fn launch_commands(app: &App, model: &mut Model) {
             }
             OscCommand::GridNoGlyph {
                 grid_name,
-                immediate,
+                animation_type_msg,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.no_glyph();
-                    grid.next_glyph_change_is_immediate = immediate;
+                    grid.transition_next_animation_type =
+                        transition_next_animation_type(animation_type_msg);
                 }
             }
             OscCommand::GridToggleVisibility { grid_name } => {
@@ -725,5 +731,15 @@ fn launch_commands(app: &App, model: &mut Model) {
                 }
             }
         }
+    }
+}
+
+fn transition_next_animation_type(msg: i32) -> TransitionAnimationType {
+    match msg {
+        0 => TransitionAnimationType::Random,
+        1 => TransitionAnimationType::Immediate,
+        2 => TransitionAnimationType::Writing,
+        3 => TransitionAnimationType::Overwrite,
+        _ => TransitionAnimationType::Immediate,
     }
 }

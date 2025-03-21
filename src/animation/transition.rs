@@ -29,6 +29,7 @@ pub struct Transition {
     current_step: usize,
     frame_timer: f32,
     frame_duration: f32,
+    animation_type: TransitionAnimationType,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -46,20 +47,26 @@ pub enum TransitionEffect {
 }
 
 #[derive(Default, Clone, Copy)]
-pub enum TransitionType {
+pub enum TransitionAnimationType {
     #[default]
+    Immediate,
     Random,
     Writing,
     Overwrite,
 }
 
 impl Transition {
-    pub fn new(changes: Vec<Vec<SegmentChange>>, frame_duration: f32) -> Self {
+    pub fn new(
+        animation_type: TransitionAnimationType,
+        changes: Vec<Vec<SegmentChange>>,
+        frame_duration: f32,
+    ) -> Self {
         Self {
             changes,
             current_step: 0,
             frame_timer: 0.0,
             frame_duration,
+            animation_type,
         }
     }
 
@@ -102,6 +109,10 @@ impl Transition {
     pub fn is_complete(&self) -> bool {
         self.current_step >= self.changes.len()
     }
+
+    pub fn is_immediate_type(&self) -> bool {
+        matches!(self.animation_type, TransitionAnimationType::Immediate)
+    }
 }
 
 // Generates the frames of the Transition
@@ -125,12 +136,65 @@ impl TransitionEngine {
         &self,
         grid_instance: &GridInstance,
         target_segments: &HashSet<String>,
-        immediate: bool, // when true, all segments change at once
+        animation_type: TransitionAnimationType,
+    ) -> Vec<Vec<SegmentChange>> {
+        match animation_type {
+            TransitionAnimationType::Immediate => {
+                self.generate_immediate_changes(grid_instance, target_segments)
+            }
+            TransitionAnimationType::Random => {
+                self.generate_random_changes(grid_instance, target_segments)
+            }
+            TransitionAnimationType::Writing => {
+                // Writing uses stroke order to generate a new glyph
+                // Starts with no_glyph as first step
+                let start_segments = &HashSet::new();
+                self.generate_stroke_order_changes(grid_instance, start_segments, target_segments)
+            }
+            TransitionAnimationType::Overwrite => {
+                let start_segments = &grid_instance.current_active_segments;
+                self.generate_stroke_order_changes(grid_instance, start_segments, target_segments)
+            }
+        }
+    }
+
+    pub fn generate_immediate_changes(
+        &self,
+        grid_instance: &GridInstance,
+        target_segments: &HashSet<String>,
+    ) -> Vec<Vec<SegmentChange>> {
+        let start_segments = &grid_instance.current_active_segments;
+        let mut single_step = Vec::new();
+
+        // For segments that need to disappear
+        for seg in start_segments.difference(target_segments) {
+            single_step.push(SegmentChange {
+                segment_id: seg.clone(),
+                turn_on: false,
+            });
+        }
+
+        // For segments that need to appear
+        for seg in target_segments.difference(start_segments) {
+            single_step.push(SegmentChange {
+                segment_id: seg.clone(),
+                turn_on: true,
+            });
+        }
+
+        // Return a single step with all changes
+        vec![single_step]
+    }
+
+    pub fn generate_random_changes(
+        &self,
+        grid_instance: &GridInstance,
+        target_segments: &HashSet<String>,
     ) -> Vec<Vec<SegmentChange>> {
         let grid = &grid_instance.grid;
-        let start_segments = &grid_instance.current_active_segments;
         let target_style = &grid_instance.target_style;
         let segment_graph = &grid_instance.graph;
+        let start_segments = &grid_instance.current_active_segments;
 
         let config = if let Some(config) = &grid_instance.transition_config {
             config
@@ -154,16 +218,15 @@ impl TransitionEngine {
 
         let mut filtered_segments = target_segments.clone();
         // Filter out segments that are already in the target state and have the same style
-        if !immediate {
-            filtered_segments.retain(|seg| {
-                let current_style = grid.segments[seg].get_current_style();
-                if current_style == *target_style {
-                    false // Remove if styles match
-                } else {
-                    true // Keep if no previous style
-                }
-            });
-        }
+
+        filtered_segments.retain(|seg| {
+            let current_style = grid.segments[seg].get_current_style();
+            if current_style == *target_style {
+                false // Remove if styles match
+            } else {
+                true // Keep if no previous style
+            }
+        });
 
         // For segments that need to appear
         for seg in filtered_segments {
@@ -173,17 +236,6 @@ impl TransitionEngine {
             } else if start_segments.is_empty() {
                 pending_changes.push((seg.clone(), seg.clone(), true));
             }
-        }
-
-        if immediate {
-            let mut single_step = Vec::new();
-            for (seg, _, is_add) in pending_changes {
-                single_step.push(SegmentChange {
-                    segment_id: seg,
-                    turn_on: is_add,
-                });
-            }
-            return vec![single_step];
         }
 
         // Calculate changes per step based on density
@@ -246,10 +298,12 @@ impl TransitionEngine {
     pub fn generate_stroke_order_changes(
         &self,
         grid_instance: &GridInstance,
+        start_segments: &HashSet<String>,
         target_segments: &HashSet<String>,
     ) -> Vec<Vec<SegmentChange>> {
         // Call into our stroke order module
-        let ordered_segments = stroke_order::generate_stroke_order(grid_instance, target_segments);
+        let ordered_segments =
+            stroke_order::generate_stroke_order(grid_instance, start_segments, target_segments);
 
         // Convert ordered segments to transition changes
         stroke_order::convert_to_transition_changes(ordered_segments, grid_instance)

@@ -49,7 +49,7 @@ pub enum OscCommand {
     GridGlyph {
         grid_name: String,
         glyph_index: usize,
-        immediate: bool,
+        animation_type_msg: i32,
     },
     GridInstantGlyphColor {
         grid_name: String,
@@ -60,7 +60,7 @@ pub enum OscCommand {
     },
     GridNextGlyph {
         grid_name: String,
-        immediate: bool,
+        animation_type_msg: i32,
     },
     GridNextGlyphColor {
         grid_name: String,
@@ -71,7 +71,7 @@ pub enum OscCommand {
     },
     GridNoGlyph {
         grid_name: String,
-        immediate: bool,
+        animation_type_msg: i32,
     },
     GridToggleVisibility {
         grid_name: String,
@@ -208,14 +208,13 @@ impl OscController {
                         }
                     }
                     "/grid/glyph" => {
-                        if let [osc::Type::String(name), osc::Type::Int(index), osc::Type::Int(immediately)] =
+                        if let [osc::Type::String(name), osc::Type::Int(index), osc::Type::Int(animation_type)] =
                             &message.args[..]
                         {
-                            let immediate = *immediately != 0;
                             self.command_queue.push(OscCommand::GridGlyph {
                                 grid_name: name.clone(),
                                 glyph_index: *index as usize,
-                                immediate,
+                                animation_type_msg: *animation_type,
                             });
                         }
                     }
@@ -233,13 +232,12 @@ impl OscController {
                         }
                     }
                     "/grid/nextglyph" => {
-                        if let [osc::Type::String(name), osc::Type::Int(immediately)] =
+                        if let [osc::Type::String(name), osc::Type::Int(animation_type)] =
                             &message.args[..]
                         {
-                            let immediate = *immediately != 0;
                             self.command_queue.push(OscCommand::GridNextGlyph {
                                 grid_name: name.clone(),
-                                immediate,
+                                animation_type_msg: *animation_type,
                             });
                         }
                     }
@@ -257,13 +255,12 @@ impl OscController {
                         }
                     }
                     "/grid/noglyph" => {
-                        if let [osc::Type::String(name), osc::Type::Int(immediately)] =
+                        if let [osc::Type::String(name), osc::Type::Int(animation_type)] =
                             &message.args[..]
                         {
-                            let immediate = *immediately != 0;
                             self.command_queue.push(OscCommand::GridNoGlyph {
                                 grid_name: name.clone(),
-                                immediate,
+                                animation_type_msg: *animation_type,
                             });
                         }
                     }
@@ -451,23 +448,23 @@ impl OscSender {
             .ok();
     }
 
-    pub fn send_glyph(&self, grid_name: &str, index: i32, immediate: i32) {
+    pub fn send_glyph(&self, grid_name: &str, index: i32, animation_type_msg: i32) {
         let addr = "/grid/glyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
             osc::Type::Int(index),
-            osc::Type::Int(immediate),
+            osc::Type::Int(animation_type_msg),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
 
-    pub fn send_next_glyph(&self, grid_name: &str, immediate: i32) {
+    pub fn send_next_glyph(&self, grid_name: &str, animation_type_msg: i32) {
         let addr = "/grid/nextglyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
-            osc::Type::Int(immediate),
+            osc::Type::Int(animation_type_msg),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
@@ -499,11 +496,11 @@ impl OscSender {
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();
     }
-    pub fn send_no_glyph(&self, grid_name: &str, immediate: i32) {
+    pub fn send_no_glyph(&self, grid_name: &str, animation_type_msg: i32) {
         let addr = "/grid/noglyph".to_string();
         let args = vec![
             osc::Type::String(grid_name.to_string()),
-            osc::Type::Int(immediate),
+            osc::Type::Int(animation_type_msg),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

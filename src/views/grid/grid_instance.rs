@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine,
-        TransitionTriggerType, TransitionUpdates,
+        Movement, MovementEngine, MovementUpdate, Transition, TransitionAnimationType,
+        TransitionEngine, TransitionTriggerType, TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
@@ -37,9 +37,9 @@ pub struct GridInstance {
     active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
     pub transition_trigger_type: TransitionTriggerType,
+    pub transition_next_animation_type: TransitionAnimationType,
     pub transition_trigger_received: bool,
     pub transition_use_stroke_order: bool,
-    pub next_glyph_change_is_immediate: bool,
     pub use_power_on_effect: bool,
     pub colorful_flag: bool, // enables random-ish color effect target style
 
@@ -114,9 +114,9 @@ impl GridInstance {
             active_transition: None,
             transition_config: None,
             transition_trigger_type: TransitionTriggerType::Auto,
+            transition_next_animation_type: TransitionAnimationType::default(),
             transition_trigger_received: false,
             transition_use_stroke_order: true,
-            next_glyph_change_is_immediate: false,
             use_power_on_effect: false,
             colorful_flag: false,
 
@@ -187,7 +187,7 @@ impl GridInstance {
         // Continue with existing update logic
         // 1. Generate new transitions
         if self.has_target_segments() {
-            self.build_transition(transition_engine);
+            self.build_transition(transition_engine, self.transition_next_animation_type);
         }
 
         // 2. Update positioning
@@ -297,24 +297,25 @@ impl GridInstance {
         self.target_style = style;
     }
 
-    /*********************** Segment Transitions ******************************/
+    /*********************** Glyph Transitions ******************************/
 
     // Build the transition
-    pub fn build_transition(&mut self, engine: &TransitionEngine) {
+    pub fn build_transition(&mut self, engine: &TransitionEngine, typ: TransitionAnimationType) {
         // Handle target segments
         let target_segments = self.target_segments.as_ref().unwrap();
 
+        /*
         let changes = if self.transition_use_stroke_order {
             engine.generate_stroke_order_changes(self, target_segments)
         } else {
-            engine.generate_changes(
-                self,
-                target_segments,
-                self.next_glyph_change_is_immediate, // when true, all segments change at once
-            )
+            engine.generate_changes(self, target_segments, typ)
         };
+        */
+
+        let changes = engine.generate_changes(self, target_segments, typ);
 
         self.active_transition = Some(Transition::new(
+            self.transition_next_animation_type,
             changes,
             engine.default_config.frame_duration,
         ));
@@ -329,7 +330,7 @@ impl GridInstance {
         let transition = self.active_transition.as_mut().unwrap();
 
         // Determine if transition should advance based on trigger type
-        let should_advance = self.next_glyph_change_is_immediate
+        let should_advance = transition.is_immediate_type()
             || match self.transition_trigger_type {
                 TransitionTriggerType::Auto => transition.should_auto_advance(dt),
                 TransitionTriggerType::Manual => self.transition_trigger_received,
@@ -416,6 +417,23 @@ impl GridInstance {
                 segment_id.clone(),
                 StyleUpdateMsg::new(SegmentAction::InstantStyleChange, new_style.clone()),
             );
+        }
+    }
+
+    // process OSC /grid/transitiontrigger
+    pub fn receive_transition_trigger(&mut self) {
+        match self.transition_trigger_type {
+            TransitionTriggerType::Auto => {
+                self.transition_trigger_type = TransitionTriggerType::Manual;
+                if self.has_active_transition() {
+                    self.transition_trigger_received = true;
+                }
+            }
+            TransitionTriggerType::Manual => {
+                if self.has_active_transition() {
+                    self.transition_trigger_received = true;
+                }
+            }
         }
     }
 
@@ -667,22 +685,6 @@ impl GridInstance {
 
     pub fn has_backbone_effects(&self) -> bool {
         !self.backbone_effects.is_empty()
-    }
-
-    pub fn receive_transition_trigger(&mut self) {
-        match self.transition_trigger_type {
-            TransitionTriggerType::Auto => {
-                self.transition_trigger_type = TransitionTriggerType::Manual;
-                if self.has_active_transition() {
-                    self.transition_trigger_received = true;
-                }
-            }
-            TransitionTriggerType::Manual => {
-                if self.has_active_transition() {
-                    self.transition_trigger_received = true;
-                }
-            }
-        }
     }
 
     /*********************** Debug Helper ******************************* */

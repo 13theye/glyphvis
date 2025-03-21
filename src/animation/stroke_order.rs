@@ -23,11 +23,11 @@ struct Stroke {
 
 pub fn generate_stroke_order(
     grid_instance: &GridInstance,
+    start_segments: &HashSet<String>,
     target_segments: &HashSet<String>,
 ) -> Vec<String> {
     let grid = &grid_instance.grid;
     let graph = &grid_instance.graph;
-    let start_segments = &grid_instance.current_active_segments;
 
     // Find segments to turn on
     let segments_to_turn_on: HashSet<_> = target_segments

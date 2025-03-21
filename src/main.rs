@@ -198,7 +198,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Key1 => {
             for name in model.grids.keys() {
-                model.osc_sender.send_glyph(name, 1, 0);
+                model.osc_sender.send_glyph(name, 1, 3);
             }
         }
         Key::Key2 => {
@@ -709,9 +709,9 @@ fn launch_commands(app: &App, model: &mut Model) {
                 }
             }
             OscCommand::GridSetPowerEffect { grid_name, setting } => {
-                println!("/grid/setpowereffect has been deprecated in v0.1.7.");
-                println!("Please use /grid/seteffect.");
-                println!("grid name: {}, setting: {}", grid_name, setting);
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.use_power_on_effect = setting;
+                }
             }
             OscCommand::TransitionUpdate {
                 grid_name,

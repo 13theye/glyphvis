@@ -147,9 +147,15 @@ impl TransitionEngine {
             }
             TransitionAnimationType::Writing => {
                 // Writing uses stroke order to generate a new glyph
-                // Starts with no_glyph as first step
-                let start_segments = &HashSet::new();
-                self.generate_stroke_order_changes(grid_instance, start_segments, target_segments)
+                // starts with a blank Grid
+                let start_segments = HashSet::new();
+                let mut changes = self.generate_immediate_changes(grid_instance, &start_segments);
+                changes.extend(self.generate_stroke_order_changes(
+                    grid_instance,
+                    &start_segments,
+                    target_segments,
+                ));
+                changes
             }
             TransitionAnimationType::Overwrite => {
                 let start_segments = &grid_instance.current_active_segments;

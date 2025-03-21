@@ -158,8 +158,8 @@ impl TransitionEngine {
                 changes
             }
             TransitionAnimationType::Overwrite => {
-                let start_segments = &grid_instance.current_active_segments;
-                self.generate_stroke_order_changes(grid_instance, start_segments, target_segments)
+                let start_segments = HashSet::new();
+                self.generate_stroke_order_changes(grid_instance, &start_segments, target_segments)
             }
         }
     }

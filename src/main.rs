@@ -69,7 +69,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.1.6")
+        .title("glyphvis 0.1.7")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -222,13 +222,13 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 // Create three test grids via OSC
                 model
                     .osc_sender
-                    .send_create_grid("grid_1", "grid_1", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_1", "wesa", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
-                    .send_create_grid("grid_2", "grid_1", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_2", "wesa", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
-                    .send_create_grid("grid_3", "grid_1", 0.0, 0.0, 0.0);
+                    .send_create_grid("grid_3", "wesa", 0.0, 0.0, 0.0);
                 model.osc_sender.send_toggle_visibility("grid_1");
                 model.osc_sender.send_toggle_visibility("grid_2");
                 model.osc_sender.send_toggle_visibility("grid_3");

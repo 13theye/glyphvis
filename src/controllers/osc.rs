@@ -94,6 +94,9 @@ pub enum OscCommand {
     GridTransitionTrigger {
         grid_name: String,
     },
+    GridTransitionAuto {
+        grid_name: String,
+    },
     TransitionUpdate {
         grid_name: String,
         steps: Option<usize>,
@@ -267,6 +270,13 @@ impl OscController {
                     "/grid/transitiontrigger" => {
                         if let [osc::Type::String(name)] = &message.args[..] {
                             self.command_queue.push(OscCommand::GridTransitionTrigger {
+                                grid_name: name.clone(),
+                            });
+                        }
+                    }
+                    "/grid/transitionauto" => {
+                        if let [osc::Type::String(name)] = &message.args[..] {
+                            self.command_queue.push(OscCommand::GridTransitionAuto {
                                 grid_name: name.clone(),
                             });
                         }
@@ -502,6 +512,14 @@ impl OscSender {
 
     pub fn send_transition_trigger(&self, grid_name: &str) {
         let addr = "/grid/transitiontrigger".to_string();
+        let args = vec![osc::Type::String(grid_name.to_string())];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_transition_auto(&self, grid_name: &str) {
+        let addr = "/grid/transitionauto".to_string();
         let args = vec![osc::Type::String(grid_name.to_string())];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

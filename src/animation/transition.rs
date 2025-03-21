@@ -32,7 +32,7 @@ pub struct Transition {
 }
 
 #[derive(Default, Clone, Copy)]
-pub enum TransitionTrigger {
+pub enum TransitionTriggerType {
     #[default]
     Auto,
     Manual,

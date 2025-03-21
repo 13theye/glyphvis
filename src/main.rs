@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use glyphvis::{
-    animation::{EasingType, MovementEngine, TransitionEngine, TransitionTrigger},
+    animation::{EasingType, MovementEngine, TransitionEngine, TransitionTriggerType},
     config::*,
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
@@ -321,6 +321,13 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             for name in model.grids.keys() {
                 if name == "grid_2" {
                     model.osc_sender.send_transition_trigger(name);
+                }
+            }
+        }
+        Key::LShift => {
+            for name in model.grids.keys() {
+                if name == "grid_2" {
+                    model.osc_sender.send_transition_auto(name);
                 }
             }
         }
@@ -673,6 +680,11 @@ fn launch_commands(app: &App, model: &mut Model) {
             OscCommand::GridTransitionTrigger { grid_name } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
                     grid.receive_transition_trigger();
+                }
+            }
+            OscCommand::GridTransitionAuto { grid_name } => {
+                if let Some(grid) = model.grids.get_mut(&grid_name) {
+                    grid.transition_trigger_type = TransitionTriggerType::Auto;
                 }
             }
             OscCommand::GridSetVisibility { grid_name, setting } => {

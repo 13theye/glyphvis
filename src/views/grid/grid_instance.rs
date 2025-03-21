@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine, TransitionTrigger,
-        TransitionUpdates,
+        Movement, MovementEngine, MovementUpdate, Transition, TransitionEngine,
+        TransitionTriggerType, TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
@@ -36,7 +36,7 @@ pub struct GridInstance {
     // effects state
     active_transition: Option<Transition>,
     pub transition_config: Option<TransitionConfig>,
-    pub transition_trigger_type: TransitionTrigger,
+    pub transition_trigger_type: TransitionTriggerType,
     pub transition_trigger_received: bool,
     pub transition_use_stroke_order: bool,
     pub next_glyph_change_is_immediate: bool,
@@ -113,7 +113,7 @@ impl GridInstance {
 
             active_transition: None,
             transition_config: None,
-            transition_trigger_type: TransitionTrigger::Auto,
+            transition_trigger_type: TransitionTriggerType::Auto,
             transition_trigger_received: false,
             transition_use_stroke_order: true,
             next_glyph_change_is_immediate: false,
@@ -331,8 +331,8 @@ impl GridInstance {
         // Determine if transition should advance based on trigger type
         let should_advance = self.next_glyph_change_is_immediate
             || match self.transition_trigger_type {
-                TransitionTrigger::Auto => transition.should_auto_advance(dt),
-                TransitionTrigger::Manual => self.transition_trigger_received,
+                TransitionTriggerType::Auto => transition.should_auto_advance(dt),
+                TransitionTriggerType::Manual => self.transition_trigger_received,
             };
 
         if !should_advance {
@@ -671,13 +671,13 @@ impl GridInstance {
 
     pub fn receive_transition_trigger(&mut self) {
         match self.transition_trigger_type {
-            TransitionTrigger::Auto => {
-                self.transition_trigger_type = TransitionTrigger::Manual;
+            TransitionTriggerType::Auto => {
+                self.transition_trigger_type = TransitionTriggerType::Manual;
                 if self.has_active_transition() {
                     self.transition_trigger_received = true;
                 }
             }
-            TransitionTrigger::Manual => {
+            TransitionTriggerType::Manual => {
                 if self.has_active_transition() {
                     self.transition_trigger_received = true;
                 }

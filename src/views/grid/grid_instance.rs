@@ -301,18 +301,12 @@ impl GridInstance {
 
     // Build the transition
     pub fn build_transition(&mut self, engine: &TransitionEngine, typ: TransitionAnimationType) {
-        // Handle target segments
-        let target_segments = self.target_segments.as_ref().unwrap();
+        // Only proceed if there are target segments
+        if !self.has_target_segments() {
+            return;
+        }
 
-        /*
-        let changes = if self.transition_use_stroke_order {
-            engine.generate_stroke_order_changes(self, target_segments)
-        } else {
-            engine.generate_changes(self, target_segments, typ)
-        };
-        */
-
-        let changes = engine.generate_changes(self, target_segments, typ);
+        let changes = engine.generate_changes(self, typ);
 
         self.active_transition = Some(Transition::new(
             self.transition_next_animation_type,
@@ -327,6 +321,10 @@ impl GridInstance {
     // Obtain TransitionUpdates by advancing the Transition
     fn process_active_transition(&mut self, dt: f32) -> Option<TransitionUpdates> {
         // Early return if no active transition
+        if !self.has_active_transition() {
+            return None;
+        }
+
         let transition = self.active_transition.as_mut().unwrap();
 
         // Determine if transition should advance based on trigger type

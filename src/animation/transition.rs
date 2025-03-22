@@ -132,33 +132,49 @@ impl TransitionEngine {
         &self.default_config
     }
 
+    // top-level orchestrator to generate transition changes
     pub fn generate_changes(
         &self,
         grid_instance: &GridInstance,
-        target_segments: &HashSet<String>,
         animation_type: TransitionAnimationType,
     ) -> Vec<Vec<SegmentChange>> {
+        // If no target segments, just return an empty Vec
+        if !grid_instance.has_target_segments() {
+            return Vec::new();
+        }
+
         match animation_type {
             TransitionAnimationType::Immediate => {
+                let target_segments = grid_instance.target_segments.as_ref().unwrap();
                 self.generate_immediate_changes(grid_instance, target_segments)
             }
             TransitionAnimationType::Random => {
+                let target_segments = grid_instance.target_segments.as_ref().unwrap();
                 self.generate_random_changes(grid_instance, target_segments)
             }
             TransitionAnimationType::Writing => {
                 // Writing uses stroke order to generate a new glyph
                 // starts with a blank Grid
-                let start_segments = HashSet::new();
-                let mut changes = self.generate_immediate_changes(grid_instance, &start_segments);
+                let first_change_segments = HashSet::new();
+                let target_segments = grid_instance.target_segments.as_ref().unwrap();
+
+                // first, clear the grid
+                let mut changes =
+                    self.generate_immediate_changes(grid_instance, &first_change_segments);
+
+                // then, generate changes to write the glyph
                 changes.extend(self.generate_stroke_order_changes(
                     grid_instance,
-                    &start_segments,
+                    &first_change_segments,
                     target_segments,
                 ));
                 changes
             }
             TransitionAnimationType::Overwrite => {
+                // start at the natural writing starting place
                 let start_segments = HashSet::new();
+                let target_segments = grid_instance.target_segments.as_ref().unwrap();
+
                 self.generate_stroke_order_changes(grid_instance, &start_segments, target_segments)
             }
         }

@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use glyphvis::{
     animation::{
-        EasingType, MovementEngine, Transition, TransitionAnimationType, TransitionEngine,
+        EasingType, MovementEngine, TransitionAnimationType, TransitionEngine,
         TransitionTriggerType,
     },
     config::*,

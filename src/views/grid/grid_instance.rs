@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementEngine, MovementUpdate, Transition, TransitionAnimationType,
+        Movement, MovementChange, MovementEngine, Transition, TransitionAnimationType,
         TransitionEngine, TransitionTriggerType, TransitionUpdates,
     },
     config::TransitionConfig,
@@ -59,6 +59,10 @@ pub struct GridInstance {
 
     // grid transform state
     pub active_movement: Option<Movement>,
+    pub current_location: Point2,
+    pub current_rotation: f32,
+    pub current_scale: f32,
+    pub is_visible: bool,
     spawn_location: Point2,
 
     // state for "instantaneous" movements
@@ -66,11 +70,6 @@ pub struct GridInstance {
     target_position: Point2,
     position_update_time: f32,
     movement_duration: f32,
-
-    pub current_location: Point2,
-    pub current_rotation: f32,
-    pub current_scale: f32,
-    pub is_visible: bool,
 }
 
 impl GridInstance {
@@ -105,12 +104,6 @@ impl GridInstance {
             current_active_segments: HashSet::new(),
             target_style: DrawStyle::default(),
 
-            backbone_effects: HashMap::new(),
-            backbone_style: DrawStyle {
-                color: rgba(0.19, 0.19, 0.19, 1.0),
-                stroke_weight: 5.1,
-            },
-
             active_transition: None,
             transition_config: None,
             transition_trigger_type: TransitionTriggerType::Auto,
@@ -122,17 +115,23 @@ impl GridInstance {
 
             update_batch: HashMap::new(),
 
-            active_movement: None,
-            target_position: position,
-            last_position: position,
-            position_update_time: 0.0,
-            movement_duration: 1.0 / 60.0,
+            backbone_effects: HashMap::new(),
+            backbone_style: DrawStyle {
+                color: rgba(0.19, 0.19, 0.19, 1.0),
+                stroke_weight: 5.1,
+            },
 
-            spawn_location: position,
+            active_movement: None,
             current_location: position,
             current_rotation: rotation,
             current_scale: 1.0,
             is_visible: false,
+            spawn_location: position,
+
+            last_position: position,
+            target_position: position,
+            position_update_time: 0.0,
+            movement_duration: 1.0 / 60.0,
         }
     }
 
@@ -149,24 +148,24 @@ impl GridInstance {
                         self.target_segments = (!glyph.segments.is_empty())
                             .then(|| glyph.segments.iter().cloned().collect());
                     }
-                    None => self.no_glyph(),
+                    None => self.stage_empty_glyph(),
                 },
-                None => self.no_glyph(),
+                None => self.stage_empty_glyph(),
             },
-            None => self.no_glyph(),
+            None => self.stage_empty_glyph(),
         }
     }
 
-    pub fn no_glyph(&mut self) {
+    pub fn stage_empty_glyph(&mut self) {
         self.target_segments = Some(HashSet::new());
     }
 
     pub fn stage_next_glyph(&mut self, project: &Project) {
-        self.advance_index(self.current_glyph_index);
+        self.advance_glyph_index(self.current_glyph_index);
         self.stage_glyph_by_index(project, self.current_glyph_index);
     }
 
-    fn advance_index(&mut self, index: usize) {
+    fn advance_glyph_index(&mut self, index: usize) {
         if index + 1 > self.index_max {
             self.current_glyph_index = 1;
         } else {
@@ -199,7 +198,7 @@ impl GridInstance {
         // b. handle duration > 0.0 movements
         if self.has_active_movement() {
             if let Some(update) = self.process_active_movement(dt) {
-                self.apply_movement_update(&update);
+                self.apply_movement_change(&update);
             }
         }
 
@@ -218,7 +217,7 @@ impl GridInstance {
         }
 
         // 5. Generate update messages for remaining segments (backbone)
-        self.message_backbone_updates();
+        self.stage_backbone_updates();
 
         // 6. Draw
         self.draw_grid_segments(draw);
@@ -232,7 +231,7 @@ impl GridInstance {
 
     /************************** Update messages and state ******************************/
 
-    fn message_segments_on(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
+    fn stage_segments_on(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -244,11 +243,7 @@ impl GridInstance {
         }
     }
 
-    fn message_segments_instant_on(
-        &mut self,
-        segments: &HashSet<String>,
-        target_style: &DrawStyle,
-    ) {
+    fn stage_segments_instant_on(&mut self, segments: &HashSet<String>, target_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -260,7 +255,7 @@ impl GridInstance {
         }
     }
 
-    fn message_segments_off(&mut self, segments: &HashSet<String>, backbone_style: &DrawStyle) {
+    fn stage_segments_off(&mut self, segments: &HashSet<String>, backbone_style: &DrawStyle) {
         for segment_id in segments {
             self.update_batch.insert(
                 segment_id.clone(),
@@ -272,7 +267,7 @@ impl GridInstance {
         }
     }
 
-    fn message_backbone_updates(&mut self) {
+    fn stage_backbone_updates(&mut self) {
         for (segment_id, segment) in self.grid.segments.iter() {
             if !self.update_batch.contains_key(segment_id)
                 && self.grid.segments[segment_id].is_background()
@@ -319,8 +314,9 @@ impl GridInstance {
     }
 
     // Obtain TransitionUpdates by advancing the Transition
+    // Todo: extract functionality requiring mutable self
     fn process_active_transition(&mut self, dt: f32) -> Option<TransitionUpdates> {
-        // Early return if no active transition
+        // Exit if no active transition
         if !self.has_active_transition() {
             return None;
         }
@@ -334,6 +330,7 @@ impl GridInstance {
                 TransitionTriggerType::Manual => self.transition_trigger_received,
             };
 
+        // Exit if it's not yet time to advance the transition
         if !should_advance {
             return None;
         }
@@ -371,14 +368,14 @@ impl GridInstance {
 
         if !updates.segments_on.is_empty() {
             if self.use_power_on_effect {
-                self.message_segments_on(&updates.segments_on, &target_style);
+                self.stage_segments_on(&updates.segments_on, &target_style);
             } else {
-                self.message_segments_instant_on(&updates.segments_on, &target_style);
+                self.stage_segments_instant_on(&updates.segments_on, &target_style);
             }
         }
 
         if !updates.segments_off.is_empty() {
-            self.message_segments_off(&updates.segments_off, &backbone_style);
+            self.stage_segments_off(&updates.segments_off, &backbone_style);
         }
     }
 
@@ -437,22 +434,6 @@ impl GridInstance {
     }
 
     /**************************** Grid movement & transform **********************************/
-
-    pub fn apply_transform(&mut self, transform: &Transform2D) {
-        // update self.current_location here only.
-        // the rotation and and scale states aren't as straightforward.
-        self.current_location += transform.translation;
-        self.grid.apply_transform(transform);
-    }
-
-    pub fn reset_location(&mut self) {
-        let transform = Transform2D {
-            translation: self.spawn_location - self.current_location,
-            scale: 1.0,
-            rotation: 0.0,
-        };
-        self.apply_transform(&transform);
-    }
 
     pub fn rotate_in_place(&mut self, angle: f32) {
         let angle_delta = angle - self.current_rotation;
@@ -528,7 +509,8 @@ impl GridInstance {
         self.current_scale = safe_scale;
     }
 
-    pub fn build_movement(
+    // Sets up a Movement over a specified duration
+    pub fn stage_movement(
         &mut self,
         target_x: f32,
         target_y: f32,
@@ -536,35 +518,23 @@ impl GridInstance {
         engine: &MovementEngine,
         time: f32,
     ) {
-        // Create target point from coordinates
-        let target_position = pt2(target_x, target_y);
-
         // If duration is specified, use the existing MovementEngine
         if duration > 0.0 {
-            let start_transform = Transform2D {
-                translation: self.current_location,
-                scale: self.current_scale,
-                rotation: self.current_rotation,
-            };
-
-            let end_transform = Transform2D {
-                translation: target_position,
-                scale: self.current_scale,
-                rotation: self.current_rotation,
-            };
-
-            let changes = engine.generate_movement(start_transform, end_transform);
-            self.active_movement = Some(Movement::new(changes, 1.0 / 60.0));
+            self.active_movement = Some(engine.build_timed_movement(self, target_x, target_y));
         } else {
             // For immediate movements (duration = 0.0), use time-based interpolation
-            self.last_position = self.current_location;
-            self.target_position = target_position;
-            self.position_update_time = time;
-            self.movement_duration = 1.0 / 60.0;
+            self.stage_zero_duration_movement(target_x, target_y, time);
         }
     }
 
-    fn process_active_movement(&mut self, dt: f32) -> Option<MovementUpdate> {
+    fn stage_zero_duration_movement(&mut self, target_x: f32, target_y: f32, time: f32) {
+        self.last_position = self.current_location;
+        self.target_position = pt2(target_x, target_y);
+        self.position_update_time = time;
+        self.movement_duration = 1.0 / 60.0;
+    }
+
+    fn process_active_movement(&mut self, dt: f32) -> Option<MovementChange> {
         let movement = self.active_movement.as_mut().unwrap();
 
         if movement.update(dt) {
@@ -578,8 +548,8 @@ impl GridInstance {
         }
     }
 
-    fn apply_movement_update(&mut self, update: &MovementUpdate) {
-        self.apply_transform(&update.transform);
+    fn apply_movement_change(&mut self, change: &MovementChange) {
+        self.apply_transform(&change.transform);
     }
 
     fn apply_zero_duration_movement(&mut self, time: f32) {
@@ -624,42 +594,57 @@ impl GridInstance {
         }
     }
 
+    fn apply_transform(&mut self, transform: &Transform2D) {
+        // update self.current_location here only.
+        // the rotation and and scale states aren't as straightforward.
+        self.current_location += transform.translation;
+        self.grid.apply_transform(transform);
+    }
+
+    // go back to where grid spawned
+    pub fn reset_location(&mut self) {
+        let transform = Transform2D {
+            translation: self.spawn_location - self.current_location,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+        self.apply_transform(&transform);
+    }
+
     /******************** Backbone style and effects **************************** */
 
     fn generate_backbone_style(&self, time: f32) -> DrawStyle {
-        let mut current_style = self.backbone_style.clone();
+        let mut style = self.backbone_style.clone();
 
         for effect in self.backbone_effects.values() {
             if effect.is_finished(time) {
                 continue;
             }
-
-            current_style = effect.update(&current_style, time);
+            style = effect.update(&style, time);
         }
-
-        current_style
+        style
     }
 
     fn cleanup_backbone_effects(&mut self, time: f32) {
-        for effect_type in self.get_finished_effects(time) {
+        for effect_type in self.finished_effects(time) {
             println!("Removing effect {}", effect_type);
             self.backbone_effects.remove(&effect_type);
         }
     }
 
-    fn get_finished_effects(&self, time: f32) -> Vec<String> {
-        let mut finished_effects = Vec::new();
+    fn finished_effects(&self, time: f32) -> Vec<String> {
+        let mut finished = Vec::new();
         for effect_type in self.backbone_effects.keys() {
             if let Some(effect) = self.backbone_effects.get(effect_type) {
                 if effect.is_finished(time) {
-                    finished_effects.push(effect_type.clone());
+                    finished.push(effect_type.clone());
                 }
             }
         }
-        finished_effects
+        finished
     }
 
-    pub fn init_backbone_effect(&mut self, effect_type: &str, effect: Box<dyn BackboneEffect>) {
+    pub fn add_backbone_effect(&mut self, effect_type: &str, effect: Box<dyn BackboneEffect>) {
         self.backbone_effects
             .insert(effect_type.to_string(), effect);
     }

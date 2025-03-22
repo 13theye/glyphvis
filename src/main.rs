@@ -592,7 +592,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                         start_time: app.time,
                         is_active: true,
                     };
-                    grid.init_backbone_effect("backbone", Box::new(effect));
+                    grid.add_backbone_effect("backbone", Box::new(effect));
                 }
             }
             OscCommand::GridCreate {
@@ -624,7 +624,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                     };
                     let movement_engine = MovementEngine::new(movement_config);
                     grid.active_movement = None;
-                    grid.build_movement(x, y, duration, &movement_engine, app.time);
+                    grid.stage_movement(x, y, duration, &movement_engine, app.time);
                 }
             }
             OscCommand::GridRotate { name, angle } => {
@@ -689,7 +689,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 animation_type_msg,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.no_glyph();
+                    grid.stage_empty_glyph();
                     grid.transition_next_animation_type =
                         transition_next_animation_type(animation_type_msg);
                 }

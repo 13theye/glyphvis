@@ -132,7 +132,7 @@ fn group_segments_into_strokes(
             let current_segment = grid.segments.get(&current).unwrap();
 
             // Explore connected segments
-            for neighbor in graph.get_neighbors(&current) {
+            for neighbor in graph.neighbors_of(&current) {
                 if !segments.contains(&neighbor) || visited.contains(&neighbor) {
                     continue;
                 }
@@ -821,7 +821,7 @@ fn add_connections_from_segment(
     connections: &mut HashMap<String, Vec<String>>,
 ) {
     // Find all segments connected to this segment
-    let mut connected_segments = graph.get_neighbors(segment_id);
+    let mut connected_segments = graph.neighbors_of(segment_id);
     connected_segments.sort();
 
     // Find which strokes these segments belong to
@@ -891,7 +891,7 @@ fn order_segments_in_stroke(
         let mut best_score = f32::MAX;
 
         // Find unvisited neighbors
-        for neighbor in graph.get_neighbors(&current) {
+        for neighbor in graph.neighbors_of(&current) {
             if stroke.segments.contains(&neighbor) && !visited.contains(&neighbor) {
                 // Score based on position relative to current segment's flow
                 let score = score_next_segment(&current, &neighbor, grid, &stroke.primary_type);

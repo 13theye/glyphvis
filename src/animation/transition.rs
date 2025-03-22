@@ -351,7 +351,7 @@ impl TransitionEngine {
             }
 
             // Add unvisited neighbors to queue
-            for neighbor in graph.get_neighbors(&current) {
+            for neighbor in graph.neighbors_of(&current) {
                 if !visited.contains(&neighbor) {
                     visited.insert(neighbor.clone());
                     queue.push_back(neighbor);

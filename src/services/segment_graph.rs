@@ -24,7 +24,7 @@ pub struct SegmentNode {
 }
 
 impl SegmentNode {
-    fn get_endpoints(&self) -> Vec<Point2> {
+    fn endpoints(&self) -> Vec<Point2> {
         let mut points = Vec::new();
 
         for command in &self.commands {
@@ -46,7 +46,6 @@ impl SegmentNode {
                 }
             }
         }
-
         points
     }
 }
@@ -94,7 +93,7 @@ impl SegmentGraph {
         // For each segment
         for (id1, segment1) in &self.nodes {
             let (x, y) = segment1.tile_pos;
-            let endpoints1 = segment1.get_endpoints();
+            let endpoints1 = segment1.endpoints();
 
             // get segments from current and neighboring tiles
             let neighbor_positions = [
@@ -113,7 +112,7 @@ impl SegmentGraph {
                             continue;
                         }
                         if let Some(segment2) = self.nodes.get(id2) {
-                            let endpoints2 = segment2.get_endpoints();
+                            let endpoints2 = segment2.endpoints();
 
                             // Check all endpoint pairs for connections
                             for p1 in &endpoints1 {
@@ -270,11 +269,11 @@ impl SegmentGraph {
         None // No path found
     }
 
-    pub fn get_node(&self, id: &str) -> Option<&SegmentNode> {
+    pub fn node(&self, id: &str) -> Option<&SegmentNode> {
         self.nodes.get(id)
     }
 
-    pub fn get_neighbors(&self, id: &str) -> Vec<String> {
+    pub fn neighbors_of(&self, id: &str) -> Vec<String> {
         self.nodes
             .get(id)
             .map(|node| {
@@ -452,16 +451,16 @@ mod tests {
         let graph = create_test_graph();
 
         // Check if A connects to B
-        let node_a = graph.get_node("A").unwrap();
+        let node_a = graph.node("A").unwrap();
         assert_eq!(node_a.connections.len(), 1);
         assert_eq!(node_a.connections[0].segment_id, "B");
 
         // Check if B connects to both A and C
-        let node_b = graph.get_node("B").unwrap();
+        let node_b = graph.node("B").unwrap();
         assert_eq!(node_b.connections.len(), 2);
 
         // Check if C connects to B
-        let node_c = graph.get_node("C").unwrap();
+        let node_c = graph.node("C").unwrap();
         assert_eq!(node_c.connections.len(), 1);
         assert_eq!(node_c.connections[0].segment_id, "B");
     }
@@ -484,17 +483,17 @@ mod tests {
         let graph = create_complex_test_graph();
 
         // Test T-junction connections
-        let node_h1 = graph.get_node("H1").unwrap();
+        let node_h1 = graph.node("H1").unwrap();
         assert_eq!(node_h1.connections.len(), 0); // Connects to nothing
 
-        let node_h2 = graph.get_node("H2").unwrap();
+        let node_h2 = graph.node("H2").unwrap();
         assert_eq!(node_h2.connections.len(), 1); // Connects to V
 
-        let node_v = graph.get_node("V").unwrap();
+        let node_v = graph.node("V").unwrap();
         assert_eq!(node_v.connections.len(), 2); // Connects to H2 and A1
 
         // Test arc connections
-        let node_a1 = graph.get_node("A1").unwrap();
+        let node_a1 = graph.node("A1").unwrap();
         assert_eq!(node_a1.connections.len(), 1); // Connects to V
     }
 

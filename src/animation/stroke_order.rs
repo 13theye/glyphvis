@@ -132,7 +132,7 @@ fn group_segments_into_strokes(
             let current_segment = grid.segments.get(&current).unwrap();
 
             // Explore connected segments
-            for neighbor in graph.get_neighbors(&current) {
+            for neighbor in graph.neighbors_of(&current) {
                 if !segments.contains(&neighbor) || visited.contains(&neighbor) {
                     continue;
                 }
@@ -629,8 +629,8 @@ fn order_strokes_by_position(
         let mid_y = 2.4; // Vertical middle of the grid
 
         // Get start segment tile
-        let a_start_tile = grid.get_segment(&a.start_segment).unwrap().tile_coordinate;
-        let b_start_tile = grid.get_segment(&b.start_segment).unwrap().tile_coordinate;
+        let a_start_tile = grid.segment(&a.start_segment).unwrap().tile_coordinate;
+        let b_start_tile = grid.segment(&b.start_segment).unwrap().tile_coordinate;
 
         // Determine which quadrant each stroke starts in
         let a_quadrant = get_quadrant(a_start_tile.0 as f32, a_start_tile.1 as f32, mid_x, mid_y);
@@ -821,7 +821,7 @@ fn add_connections_from_segment(
     connections: &mut HashMap<String, Vec<String>>,
 ) {
     // Find all segments connected to this segment
-    let mut connected_segments = graph.get_neighbors(segment_id);
+    let mut connected_segments = graph.neighbors_of(segment_id);
     connected_segments.sort();
 
     // Find which strokes these segments belong to
@@ -891,7 +891,7 @@ fn order_segments_in_stroke(
         let mut best_score = f32::MAX;
 
         // Find unvisited neighbors
-        for neighbor in graph.get_neighbors(&current) {
+        for neighbor in graph.neighbors_of(&current) {
             if stroke.segments.contains(&neighbor) && !visited.contains(&neighbor) {
                 // Score based on position relative to current segment's flow
                 let score = score_next_segment(&current, &neighbor, grid, &stroke.primary_type);
@@ -935,8 +935,8 @@ fn score_next_segment(
 
     // Special handling for arc segments that form a circle
     if is_arc_type(primary_type) {
-        let current_segment = grid.get_segment(current).unwrap();
-        let next_segment = grid.get_segment(next).unwrap();
+        let current_segment = grid.segment(current).unwrap();
+        let next_segment = grid.segment(next).unwrap();
 
         // Determine if these are adjacent arcs in a circle
         match (&current_segment.segment_type, &next_segment.segment_type) {

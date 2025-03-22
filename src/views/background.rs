@@ -1,6 +1,7 @@
 // src/views/background.rs
 //
 // A simple module to manage background state
+// Needs improvement: pattern after backbone_fx
 
 use crate::effects::*;
 use nannou::prelude::*;

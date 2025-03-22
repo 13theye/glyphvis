@@ -3,7 +3,11 @@
 // The GridInstance movement manager
 // scaling and rotation are not currently supported
 
-use crate::{config::MovementConfig, views::Transform2D};
+use crate::{
+    config::MovementConfig,
+    views::{GridInstance, Transform2D},
+};
+use nannou::prelude::*;
 
 #[derive(Debug, Clone)]
 pub enum EasingType {
@@ -14,20 +18,20 @@ pub enum EasingType {
 }
 
 #[derive(Debug, Clone)]
-pub struct MovementUpdate {
+pub struct MovementChange {
     pub transform: Transform2D,
 }
 
 #[derive(Debug, Clone)]
 pub struct Movement {
-    changes: Vec<MovementUpdate>,
+    changes: Vec<MovementChange>,
     current_step: usize,
     frame_timer: f32,
     frame_duration: f32,
 }
 
 impl Movement {
-    pub fn new(changes: Vec<MovementUpdate>, frame_duration: f32) -> Self {
+    pub fn new(changes: Vec<MovementChange>, frame_duration: f32) -> Self {
         Self {
             changes,
             current_step: 0,
@@ -46,7 +50,7 @@ impl Movement {
         }
     }
 
-    pub fn advance(&mut self) -> Option<MovementUpdate> {
+    pub fn advance(&mut self) -> Option<MovementChange> {
         if self.current_step < self.changes.len() {
             let current_change = self.changes[self.current_step].clone();
             self.current_step += 1;
@@ -64,7 +68,7 @@ impl Movement {
         self.current_step
     }
 
-    pub fn get_changes(&self) -> &Vec<MovementUpdate> {
+    pub fn get_changes(&self) -> &Vec<MovementChange> {
         &self.changes
     }
 
@@ -88,13 +92,40 @@ impl MovementEngine {
         Self { config, steps }
     }
 
-    pub fn generate_movement(&self, start: Transform2D, end: Transform2D) -> Vec<MovementUpdate> {
+    pub fn build_timed_movement(
+        &self,
+        grid: &GridInstance,
+        target_x: f32,
+        target_y: f32,
+    ) -> Movement {
+        let target_position = pt2(target_x, target_y);
+
+        let start_transform = Transform2D {
+            translation: grid.current_location,
+            scale: grid.current_scale,
+            rotation: grid.current_rotation,
+        };
+
+        let end_transform = Transform2D {
+            translation: target_position,
+            scale: grid.current_scale,
+            rotation: grid.current_rotation,
+        };
+
+        let changes = self.generate_movement_changes(start_transform, end_transform);
+
+        Movement::new(changes, 1.0 / 60.0)
+    }
+
+    fn generate_movement_changes(
+        &self,
+        start: Transform2D,
+        end: Transform2D,
+    ) -> Vec<MovementChange> {
         let mut changes = Vec::with_capacity(self.steps);
 
         // Calculate total deltas
         let total_translation = end.translation - start.translation;
-        //let total_rotation = end.rotation - start.rotation;
-        //let total_scale_change = end.scale - start.scale;
 
         for step in 0..self.steps {
             let t = if self.steps > 1 {
@@ -132,7 +163,7 @@ impl MovementEngine {
                 scale: 1.0,
             };
 
-            changes.push(MovementUpdate { transform });
+            changes.push(MovementChange { transform });
         }
         changes
     }

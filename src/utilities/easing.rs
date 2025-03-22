@@ -1,7 +1,7 @@
 //src/utilities/easing.rs
 
 // easing functions for style transitions
-// maybe refactor to be more generic?
+// todo: refactor for generics
 
 use nannou::prelude::*;
 

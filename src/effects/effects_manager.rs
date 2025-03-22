@@ -1,4 +1,6 @@
 // src/effects/effects_manager.rs
+//
+// this pattern IS NO LONGER USED.
 
 use crate::effects::*;
 use crate::views::DrawStyle;

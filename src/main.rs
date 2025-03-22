@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use glyphvis::{
     animation::{
-        EasingType, MovementEngine, Transition, TransitionAnimationType, TransitionEngine,
+        EasingType, MovementEngine, TransitionAnimationType, TransitionEngine,
         TransitionTriggerType,
     },
     config::*,
@@ -164,6 +164,198 @@ fn model(app: &App) -> Model {
         debug_flag: false,
     }
 }
+
+fn update(app: &App, model: &mut Model, _update: Update) {
+    let now = Instant::now();
+    let duration = now - model.last_update;
+    model.last_update = now;
+    // FPS calculation
+    if model.debug_flag {
+        model.fps = 1.0 / duration.as_secs_f32();
+    }
+
+    // Process OSC messages
+    model.osc_controller.process_messages();
+    launch_commands(app, model);
+
+    // Coordinate simulataneous style changes on multiple grids
+    coordinate_colorful_grid_styles(app, model);
+
+    // Handle the background
+    model.background.draw(&model.draw, app.time);
+
+    // Frames processing progress bar:
+    if model.exit_requested {
+        handle_exit_state(app, model);
+        return; // Important: return here to not continue with normal rendering
+    }
+
+    /*********************  Main update method for grids **********************/
+    for (_, grid_instance) in model.grids.iter_mut() {
+        let dt = duration.as_secs_f32();
+        grid_instance.update(&model.draw, &model.transition_engine, app.time, dt);
+    }
+
+    // Handle FPS and origin display
+    if model.debug_flag {
+        // Draw (+,+) axes
+        let draw = &model.draw;
+        draw.line()
+            .points(pt2(0.0, 0.0), pt2(50.0, 0.0))
+            .color(RED)
+            .stroke_weight(1.0);
+        draw.line()
+            .points(pt2(0.0, 0.0), pt2(0.0, 50.0))
+            .color(BLUE)
+            .stroke_weight(1.0);
+
+        // Visualize FPS (Optional)
+        draw.text(&format!("FPS: {:.1}", model.fps))
+            .x_y(1100.0, 290.0)
+            .color(RED);
+    }
+
+    // Render to texture and handle frame recording
+    render_and_capture(app, model);
+
+    //let total_duration = start_time.elapsed();
+    //println!("Total update time: {:?}", total_duration);
+}
+
+// Draw the state of Model into the given Frame
+fn view(_app: &App, model: &Model, frame: Frame) {
+    //resize texture to screen
+    let mut encoder = frame.command_encoder();
+
+    model
+        .texture_reshaper
+        .encode_render_pass(frame.texture_view(), &mut encoder);
+}
+
+// ************************ Multi-grid style coordination  *****************************
+
+fn coordinate_colorful_grid_styles(_app: &App, model: &mut Model) {
+    let color_hsl = hsla(
+        model.random.gen_range(0.0..=1.0),
+        model.random.gen_range(0.2..=1.0),
+        0.4,
+        1.0,
+    );
+
+    let color = Rgba::from(color_hsl);
+
+    for grid_instance in model.grids.values_mut() {
+        if grid_instance.has_target_segments() && grid_instance.colorful_flag {
+            grid_instance.set_effect_target_style(DrawStyle {
+                color,
+                // account for any grid scaling
+                stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
+            });
+        }
+    }
+}
+
+// ******************************* Rendering and Capture *****************************
+
+fn render_and_capture(app: &App, model: &mut Model) {
+    let window = app.main_window();
+    let device = window.device();
+    let ce_desc = wgpu::CommandEncoderDescriptor {
+        label: Some("Texture renderer"),
+    };
+    let mut encoder = device.create_command_encoder(&ce_desc);
+    let texture_view = model.texture.view().build();
+
+    model.draw_renderer.encode_render_pass(
+        device,
+        &mut encoder,
+        &model.draw,
+        2.0,
+        model.texture.size(),
+        &texture_view,
+        None,
+    );
+
+    // Capture the texture for FrameRecorder
+    if model.frame_recorder.is_recording() {
+        model
+            .frame_recorder
+            .capture_frame(device, &mut encoder, &model.texture);
+    }
+
+    window.queue().submit(Some(encoder.finish()));
+    device.poll(wgpu::Maintain::Wait);
+}
+
+// ******************************* Exit State Handling *******************************
+
+fn handle_exit_state(app: &App, model: &mut Model) {
+    if model.frame_recorder.has_pending_frames() {
+        draw_progress_screen(app, model);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    } else {
+        app.quit(); // quit only once all frames are processed
+    }
+}
+
+fn draw_progress_screen(app: &App, model: &mut Model) {
+    // Clear the window and show progress
+    let draw = &model.draw;
+    draw.background().color(BLACK);
+
+    let (processed, total) = model.frame_recorder.get_queue_status();
+
+    // Draw progress text
+    let text = format!("{} / {}\nframes saved", processed, total);
+    draw.text(&text).color(WHITE).font_size(32).x_y(0.0, 50.0);
+
+    // Draw progress bar
+    let progress = processed as f32 / total as f32;
+    draw_progress_bar(draw, progress);
+
+    // Render progress screen
+    render_progress(app, model);
+}
+
+fn draw_progress_bar(draw: &Draw, progress: f32) {
+    let bar_width = 400.0;
+    let bar_height = 30.0;
+
+    // Background bar
+    draw.rect()
+        .color(GRAY)
+        .w_h(bar_width, bar_height)
+        .x_y(0.0, -50.0);
+
+    // Progress bar
+    draw.rect()
+        .color(GREEN)
+        .w_h(bar_width * progress, bar_height)
+        .x_y(-bar_width / 2.0 + (bar_width * progress) / 2.0, -50.0);
+}
+
+fn render_progress(app: &App, model: &mut Model) {
+    let window = app.main_window();
+    let device = window.device();
+    let ce_desc = wgpu::CommandEncoderDescriptor {
+        label: Some("Progress renderer"),
+    };
+    let mut encoder = device.create_command_encoder(&ce_desc);
+    let texture_view = model.texture.view().build();
+
+    model.draw_renderer.encode_render_pass(
+        device,
+        &mut encoder,
+        &model.draw,
+        2.0,
+        model.texture.size(),
+        &texture_view,
+        None,
+    );
+    window.queue().submit(Some(encoder.finish()));
+}
+
+// ******************************* Keyboard Input *******************************
 
 fn key_pressed(_app: &App, model: &mut Model, key: Key) {
     match key {
@@ -335,16 +527,16 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
             }
         }
 
-        /***************** Below functions aren't implemented in OSC ****************** */
-        Key::P => {
-            model.debug_flag = !model.debug_flag;
-        }
         Key::R => {
             if !model.frame_recorder.is_recording() {
                 model.osc_sender.send_recorder_start();
             } else {
                 model.osc_sender.send_recorder_stop();
             }
+        }
+        /***************** Below functions aren't implemented in OSC ****************** */
+        Key::P => {
+            model.debug_flag = !model.debug_flag;
         }
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {
@@ -357,197 +549,6 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         _ => (),
     }
-}
-
-fn update(app: &App, model: &mut Model, _update: Update) {
-    let now = Instant::now();
-    let duration = now - model.last_update;
-    model.last_update = now;
-    // FPS calculation
-    if model.debug_flag {
-        model.fps = 1.0 / duration.as_secs_f32();
-    }
-
-    // Process OSC messages
-    model.osc_controller.process_messages();
-    launch_commands(app, model);
-
-    // Coordinate simulataneous style changes on multiple grids
-    coordinate_colorful_grid_styles(app, model);
-
-    // Handle the background
-    model.background.draw(&model.draw, app.time);
-
-    // Frames processing progress bar:
-    if model.exit_requested {
-        handle_exit_state(app, model);
-        return; // Important: return here to not continue with normal rendering
-    }
-
-    /*********************  Main update method for grids **********************/
-    for (_, grid_instance) in model.grids.iter_mut() {
-        let dt = duration.as_secs_f32();
-        grid_instance.update(&model.draw, &model.transition_engine, app.time, dt);
-    }
-    /*************************************************************************/
-
-    // Handle FPS and origin display
-    if model.debug_flag {
-        // Draw (+,+) axes
-        let draw = &model.draw;
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(50.0, 0.0))
-            .color(RED)
-            .stroke_weight(1.0);
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(0.0, 50.0))
-            .color(BLUE)
-            .stroke_weight(1.0);
-
-        // Visualize FPS (Optional)
-        draw.text(&format!("FPS: {:.1}", model.fps))
-            .x_y(1100.0, 290.0)
-            .color(RED);
-    }
-
-    // Render to texture and handle frame recording
-    render_and_capture(app, model);
-
-    //let total_duration = start_time.elapsed();
-    //println!("Total update time: {:?}", total_duration);
-}
-
-// Draw the state of Model into the given Frame
-fn view(_app: &App, model: &Model, frame: Frame) {
-    //resize texture to screen
-    let mut encoder = frame.command_encoder();
-
-    model
-        .texture_reshaper
-        .encode_render_pass(frame.texture_view(), &mut encoder);
-}
-
-// ************************ Multi-grid style coordination  *****************************
-
-fn coordinate_colorful_grid_styles(_app: &App, model: &mut Model) {
-    let color_hsl = hsla(
-        model.random.gen_range(0.0..=1.0),
-        model.random.gen_range(0.2..=1.0),
-        0.4,
-        1.0,
-    );
-
-    let color = Rgba::from(color_hsl);
-
-    for grid_instance in model.grids.values_mut() {
-        if grid_instance.has_target_segments() && grid_instance.colorful_flag {
-            grid_instance.set_effect_target_style(DrawStyle {
-                color,
-                // account for any grid scaling
-                stroke_weight: model.default_stroke_weight * grid_instance.current_scale,
-            });
-        }
-    }
-}
-
-// ******************************* Rendering and Capture *****************************
-
-fn render_and_capture(app: &App, model: &mut Model) {
-    let window = app.main_window();
-    let device = window.device();
-    let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Texture renderer"),
-    };
-    let mut encoder = device.create_command_encoder(&ce_desc);
-    let texture_view = model.texture.view().build();
-
-    model.draw_renderer.encode_render_pass(
-        device,
-        &mut encoder,
-        &model.draw,
-        2.0,
-        model.texture.size(),
-        &texture_view,
-        None,
-    );
-
-    // Capture the texture for FrameRecorder
-    if model.frame_recorder.is_recording() {
-        model
-            .frame_recorder
-            .capture_frame(device, &mut encoder, &model.texture);
-    }
-
-    window.queue().submit(Some(encoder.finish()));
-    device.poll(wgpu::Maintain::Wait);
-}
-
-// ******************************* Exit State Handling *******************************
-
-fn handle_exit_state(app: &App, model: &mut Model) {
-    if model.frame_recorder.has_pending_frames() {
-        draw_progress_screen(app, model);
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    } else {
-        app.quit(); // quit only once all frames are processed
-    }
-}
-
-fn draw_progress_screen(app: &App, model: &mut Model) {
-    // Clear the window and show progress
-    let draw = &model.draw;
-    draw.background().color(BLACK);
-
-    let (processed, total) = model.frame_recorder.get_queue_status();
-
-    // Draw progress text
-    let text = format!("{} / {}\nframes saved", processed, total);
-    draw.text(&text).color(WHITE).font_size(32).x_y(0.0, 50.0);
-
-    // Draw progress bar
-    let progress = processed as f32 / total as f32;
-    draw_progress_bar(draw, progress);
-
-    // Render progress screen
-    render_progress(app, model);
-}
-
-fn draw_progress_bar(draw: &Draw, progress: f32) {
-    let bar_width = 400.0;
-    let bar_height = 30.0;
-
-    // Background bar
-    draw.rect()
-        .color(GRAY)
-        .w_h(bar_width, bar_height)
-        .x_y(0.0, -50.0);
-
-    // Progress bar
-    draw.rect()
-        .color(GREEN)
-        .w_h(bar_width * progress, bar_height)
-        .x_y(-bar_width / 2.0 + (bar_width * progress) / 2.0, -50.0);
-}
-
-fn render_progress(app: &App, model: &mut Model) {
-    let window = app.main_window();
-    let device = window.device();
-    let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Progress renderer"),
-    };
-    let mut encoder = device.create_command_encoder(&ce_desc);
-    let texture_view = model.texture.view().build();
-
-    model.draw_renderer.encode_render_pass(
-        device,
-        &mut encoder,
-        &model.draw,
-        2.0,
-        model.texture.size(),
-        &texture_view,
-        None,
-    );
-    window.queue().submit(Some(encoder.finish()));
 }
 
 // ******************************* OSC Launcher *******************************
@@ -592,7 +593,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                         start_time: app.time,
                         is_active: true,
                     };
-                    grid.init_backbone_effect("backbone", Box::new(effect));
+                    grid.add_backbone_effect("backbone", Box::new(effect));
                 }
             }
             OscCommand::GridCreate {
@@ -624,7 +625,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                     };
                     let movement_engine = MovementEngine::new(movement_config);
                     grid.active_movement = None;
-                    grid.build_movement(x, y, duration, &movement_engine, app.time);
+                    grid.stage_movement(x, y, duration, &movement_engine, app.time);
                 }
             }
             OscCommand::GridRotate { name, angle } => {
@@ -689,7 +690,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                 animation_type_msg,
             } => {
                 if let Some(grid) = model.grids.get_mut(&grid_name) {
-                    grid.no_glyph();
+                    grid.stage_empty_glyph();
                     grid.transition_next_animation_type =
                         transition_next_animation_type(animation_type_msg);
                 }

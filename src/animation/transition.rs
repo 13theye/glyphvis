@@ -128,10 +128,6 @@ impl TransitionEngine {
         }
     }
 
-    pub fn get_default_config(&self) -> &TransitionConfig {
-        &self.default_config
-    }
-
     // top-level orchestrator to generate transition changes
     pub fn generate_changes(
         &self,
@@ -360,5 +356,9 @@ impl TransitionEngine {
         }
 
         None // No connected segment found in active set
+    }
+
+    pub fn get_default_config(&self) -> &TransitionConfig {
+        &self.default_config
     }
 }

@@ -1,8 +1,8 @@
-// src/views/grid_manager.rs
+// src/views/grid_instance.rs
 //
 // The GridInstance main updating entity in the visualisation.
 //
-// Its holds the state information that makes a a grid instance unique,
+// Its holds the state information that makes a grid instance unique,
 // and provides methods for updating that state.
 // It is also the interface between the Grid "hardware" and the rest of
 // the system.

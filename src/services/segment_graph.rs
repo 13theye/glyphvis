@@ -129,13 +129,6 @@ impl SegmentGraph {
                                                 connection_point,
                                             },
                                         );
-                                        /*
-                                        new_connections.entry(id2.clone()).or_default().push(
-                                            SegmentConnection {
-                                                segment_id: id1.clone(),
-                                                connection_point,
-                                            },
-                                        );*/
                                     }
                                 }
                             }
@@ -155,79 +148,6 @@ impl SegmentGraph {
             self.print_connections();
         }
     }
-    /*
-    fn build_connections_old(&mut self) {
-        // Create a list of all segment IDs
-        let segment_ids: Vec<String> = self.nodes.keys().cloned().collect();
-
-        if VERBOSE {
-            println!("\nBuilding connections:");
-        }
-
-        // For each pair of segments
-        for i in 0..segment_ids.len() {
-            let id1 = &segment_ids[i];
-            let endpoints1 = if let Some(node) = self.nodes.get(id1) {
-                node.get_endpoints()
-            } else {
-                continue;
-            };
-
-            for j in (i + 1)..segment_ids.len() {
-                let id2 = &segment_ids[j];
-                let endpoints2 = if let Some(node) = self.nodes.get(id2) {
-                    node.get_endpoints()
-                } else {
-                    continue;
-                };
-
-                if VERBOSE {
-                    println!("\nComparing {} and {}:", id1, id2);
-                    println!("  Points 1: {:?}", endpoints1);
-                    println!("  Points 2: {:?}", endpoints2);
-                }
-
-                // Check all endpoint pairs for connections
-                for p1 in &endpoints1 {
-                    for p2 in &endpoints2 {
-                        let distance = p1.distance(*p2);
-                        if VERBOSE {
-                            println!("    Distance between {:?} and {:?}: {}", p1, p2, distance);
-                        }
-                        if distance <= CONNECTION_THRESHOLD {
-                            if VERBOSE {
-                                println!("    CONNECTION FOUND!");
-                            }
-                            // Found a connection - add it to both segments
-                            let connection_point = (*p1 + *p2) / 2.0; // Midpoint
-
-                            // Add connection to first segment
-                            if let Some(node) = self.nodes.get_mut(id1) {
-                                node.connections.push(SegmentConnection {
-                                    segment_id: id2.clone(),
-                                    connection_point,
-                                });
-                            }
-
-                            // Add connection to second segment
-                            if let Some(node) = self.nodes.get_mut(id2) {
-                                node.connections.push(SegmentConnection {
-                                    segment_id: id1.clone(),
-                                    connection_point,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Print final connections
-        if VERBOSE {
-            self.print_connections();
-        }
-    }
-    */
 
     pub fn find_path(&self, start: &str, end: &str) -> Option<Vec<String>> {
         use std::collections::{HashSet, VecDeque};

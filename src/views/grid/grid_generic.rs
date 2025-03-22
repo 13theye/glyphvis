@@ -25,8 +25,10 @@ use std::time::Instant;
 
 use crate::{
     models::{EdgeType, PathElement, Project, ViewBox},
-    services::svg::{edge_detection, parser},
-    utilities::{easing, grid_utility, segment_utility},
+    utilities::{
+        easing, grid_utility, segment_utility,
+        svg::{edge_detection, parser},
+    },
     views::Transform2D,
 };
 

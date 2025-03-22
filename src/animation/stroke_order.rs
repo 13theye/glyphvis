@@ -629,8 +629,8 @@ fn order_strokes_by_position(
         let mid_y = 2.4; // Vertical middle of the grid
 
         // Get start segment tile
-        let a_start_tile = grid.get_segment(&a.start_segment).unwrap().tile_coordinate;
-        let b_start_tile = grid.get_segment(&b.start_segment).unwrap().tile_coordinate;
+        let a_start_tile = grid.segment(&a.start_segment).unwrap().tile_coordinate;
+        let b_start_tile = grid.segment(&b.start_segment).unwrap().tile_coordinate;
 
         // Determine which quadrant each stroke starts in
         let a_quadrant = get_quadrant(a_start_tile.0 as f32, a_start_tile.1 as f32, mid_x, mid_y);
@@ -935,8 +935,8 @@ fn score_next_segment(
 
     // Special handling for arc segments that form a circle
     if is_arc_type(primary_type) {
-        let current_segment = grid.get_segment(current).unwrap();
-        let next_segment = grid.get_segment(next).unwrap();
+        let current_segment = grid.segment(current).unwrap();
+        let next_segment = grid.segment(next).unwrap();
 
         // Determine if these are adjacent arcs in a circle
         match (&current_segment.segment_type, &next_segment.segment_type) {

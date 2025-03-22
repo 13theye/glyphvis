@@ -191,7 +191,6 @@ pub struct CachedSegment {
     pub draw_commands: Vec<DrawCommand>,
     pub original_path: PathElement,
     pub edge_type: EdgeType,
-    //pub transform: Transform2D,
 }
 
 impl CachedSegment {
@@ -287,7 +286,7 @@ impl CachedSegment {
         };
     }
 
-    pub fn get_current_style(&self) -> DrawStyle {
+    pub fn current_style(&self) -> DrawStyle {
         match &self.state {
             SegmentState::Idle { style } | SegmentState::Active { style } => style.clone(),
             SegmentState::PoweringOn { .. } => self.calculate_transition_style(),
@@ -361,7 +360,7 @@ impl CachedSegment {
                     SegmentAction::Off => {
                         self.state = SegmentState::PoweringOff {
                             start_time: Instant::now(),
-                            from_style: self.get_current_style(),
+                            from_style: self.current_style(),
                             target_style: target_style.clone(),
                         }
                     }
@@ -473,7 +472,7 @@ impl CachedGrid {
         }
 
         // Remove overlapping segments
-        segments = eliminate_overlaps(segments, project.grid_x, project.grid_y);
+        segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
 
         Self {
             dimensions: (project.grid_x, project.grid_y),
@@ -483,7 +482,7 @@ impl CachedGrid {
     }
 
     /************************ Rendering & transform methods ****************************/
-    pub fn draw_grid_segments(
+    pub fn draw(
         &mut self,
         draw: &Draw,
         update_batch: &HashMap<String, StyleUpdateMsg>,
@@ -504,7 +503,7 @@ impl CachedGrid {
                 match segment.layer {
                     Layer::Background => {
                         for command in &segment.draw_commands {
-                            command.draw(draw, &segment.get_current_style());
+                            command.draw(draw, &segment.current_style());
                         }
                     }
                     Layer::Middle => {
@@ -520,13 +519,13 @@ impl CachedGrid {
         if visible {
             for segment in middle_segments {
                 for command in &segment.draw_commands {
-                    command.draw(draw, &segment.get_current_style());
+                    command.draw(draw, &segment.current_style());
                 }
             }
 
             for segment in foreground_segments {
                 for command in &segment.draw_commands {
-                    command.draw(draw, &segment.get_current_style());
+                    command.draw(draw, &segment.current_style());
                 }
             }
         }
@@ -547,13 +546,13 @@ impl CachedGrid {
 
     /************************ Utility Methods ****************************/
 
-    pub fn get_segments_at(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
+    pub fn get_tile_segments_iter(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
         self.segments
             .values()
             .filter(move |segment| segment.tile_coordinate == (x, y))
     }
 
-    pub fn get_segment(&self, id: &str) -> Option<&CachedSegment> {
+    pub fn segment(&self, id: &str) -> Option<&CachedSegment> {
         self.segments.get(id)
     }
 
@@ -596,7 +595,7 @@ impl CachedGrid {
 
 // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
 // in Glyphvis we decide on whether to draw an element at the beginning.
-fn eliminate_overlaps(
+fn purge_overlapping_segments(
     segments: HashMap<String, CachedSegment>,
     grid_width: u32,
     grid_height: u32,
@@ -833,8 +832,8 @@ mod tests {
             // Test that overlapping edges are properly eliminated
             // For example, if we have a horizontal line at y=0, it should only appear
             // in either the top or bottom tile, not both
-            let top_segments = grid.get_segments_at(1, 1);
-            let bottom_segments = grid.get_segments_at(1, 2);
+            let top_segments = grid.get_tile_segments_iter(1, 1);
+            let bottom_segments = grid.get_tile_segments_iter(1, 2);
 
             // Ensure we don't have the same edge in both tiles
             let top_edges: Vec<EdgeType> = top_segments.map(|s| s.edge_type).collect();

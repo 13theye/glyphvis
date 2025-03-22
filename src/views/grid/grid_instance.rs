@@ -224,8 +224,7 @@ impl GridInstance {
     }
 
     fn draw_grid_segments(&mut self, draw: &Draw) {
-        self.grid
-            .draw_grid_segments(draw, &self.update_batch, self.is_visible);
+        self.grid.draw(draw, &self.update_batch, self.is_visible);
         self.clear_update_batch();
     }
 

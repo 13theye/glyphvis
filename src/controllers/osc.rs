@@ -479,7 +479,7 @@ impl OscSender {
         let addr = "/grid/slide".to_string();
         let args = vec![
             osc::Type::String(name.to_string()),
-            osc::Type::String(name.to_string()),
+            osc::Type::String(axis.to_string()),
             osc::Type::Float(distance),
         ];
         self.sender

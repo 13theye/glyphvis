@@ -97,7 +97,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.2.0")
+        .title("glyphvis 0.2.1 1")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -428,6 +428,11 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model.osc_sender.send_grid_slide(name, "x", 50.0);
             }
         }
+        Key::Key6 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "x", -50.0);
+            }
+        }
         Key::Key9 => {
             for name in model.grids.keys() {
                 model
@@ -445,15 +450,15 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::G => {
             if model.grids.is_empty() {
                 // Create three test grids via OSC
-                model
-                    .osc_sender
-                    .send_create_grid("grid_1", "wesa", 0.0, 0.0, 0.0);
+                /* model
+                .osc_sender
+                .send_create_grid("grid_1", "wesa", 0.0, 0.0, 0.0);*/
                 model
                     .osc_sender
                     .send_create_grid("grid_2", "wesa", 0.0, 0.0, 0.0);
-                model
-                    .osc_sender
-                    .send_create_grid("grid_3", "wesa", 0.0, 0.0, 0.0);
+                /*model
+                .osc_sender
+                .send_create_grid("grid_3", "wesa", 0.0, 0.0, 0.0);*/
                 model.osc_sender.send_toggle_visibility("grid_1");
                 model.osc_sender.send_toggle_visibility("grid_2");
                 model.osc_sender.send_toggle_visibility("grid_3");

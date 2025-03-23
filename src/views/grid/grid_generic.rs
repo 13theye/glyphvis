@@ -474,7 +474,7 @@ impl CachedGrid {
         }
 
         // Remove overlapping segments
-        segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
+        //segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
 
         Self {
             dimensions: (project.grid_x, project.grid_y),
@@ -549,11 +549,15 @@ impl CachedGrid {
     }
 
     pub fn slide(&mut self, axis: &str, distance: f32) {
+        println!("Running slide with params:");
+        println!("axis: {}, distance: {}", axis, distance);
         let n = match axis {
             "x" => self.dimensions.0,
             "y" => self.dimensions.1,
             _ => 0,
         };
+
+        println!("Working with axis: {}", n);
 
         let (odd_lines, even_lines): (Vec<u32>, Vec<u32>) = (1..=n).partition(|&num| num % 2 != 0);
         let translation = vec2(distance, 0.0);
@@ -566,7 +570,7 @@ impl CachedGrid {
 
         for line in odd_lines {
             for segment in self.segments.values_mut() {
-                if segment.tile_coordinate.0 == line {
+                if segment.tile_coordinate.1 == line {
                     segment.apply_transform(&transform);
                 }
             }
@@ -627,7 +631,10 @@ impl CachedGrid {
 
 // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
 // in Glyphvis we decide on whether to draw an element at the beginning.
-fn purge_overlapping_segments(
+//
+// This function doesn't work! Run grid.slide() to see the problem.
+// But we decided not to use it because grid.slide looks better without purging.
+fn _purge_overlapping_segments(
     segments: HashMap<String, CachedSegment>,
     grid_width: u32,
     grid_height: u32,

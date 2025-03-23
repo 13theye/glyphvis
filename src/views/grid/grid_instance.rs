@@ -25,39 +25,60 @@ use crate::{
 pub struct GridInstance {
     // grid data
     pub id: String,
+
+    // The Generic grid defined from SVG data in the Project file and shared methods for
+    // drawing each Grid
     pub grid: CachedGrid,
+
+    // The network of relationships between segments
     pub graph: SegmentGraph,
 
-    // glyph state
+    // glyph state:
+    // The Show attached to this Grid.
+    // The Grid displays Glyphs in this show, in order or by Index in the Show
     show: String,
     pub current_glyph_index: usize,
     index_max: usize,
 
     // effects state
+    // The currently active transition
     active_transition: Option<Transition>,
+    // Parameters that help define the next transition when created
     pub transition_config: Option<TransitionConfig>,
     pub transition_trigger_type: TransitionTriggerType,
     pub transition_next_animation_type: TransitionAnimationType,
     pub transition_trigger_received: bool,
     pub transition_use_stroke_order: bool,
-    pub use_power_on_effect: bool,
-    pub colorful_flag: bool, // enables random-ish color effect target style
 
-    // update messages for a the next frame
+    // Turns on/off the golden flash when a segment is activated. The segment then
+    // fades to the target color.
+    pub use_power_on_effect: bool,
+
+    // enables random-ish color effect target style
+    pub colorful_flag: bool,
+
+    // Segment update messages for the next frame
     // String is the segment_id
     // StyleUpdateMsg is the update message for the segment
     update_batch: HashMap<String, StyleUpdateMsg>,
 
-    // inside-grid state
+    // The Glyph segments that will be displayed after any Transition animation
     pub target_segments: Option<HashSet<String>>,
+
+    // Currently active segments for this frame
     pub current_active_segments: HashSet<String>,
+
+    // The target Active Segment style when an effect is complete
     pub target_style: DrawStyle,
 
-    // backbone state
+    // backbone state (non-active segments)
+    //
     backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
     pub backbone_style: DrawStyle,
 
     // grid transform state
+    //
+    // The currently active time-based movement animation
     pub active_movement: Option<Movement>,
     pub current_location: Point2,
     pub current_rotation: f32,
@@ -65,10 +86,13 @@ pub struct GridInstance {
     pub is_visible: bool,
     spawn_location: Point2,
 
-    // state for "instantaneous" movements
+    // state for "instantaneous" movements -- helps interpolate position
+    // so that OSC position commmands look sync'ed with refresh
     last_position: Point2,
     target_position: Point2,
     position_update_time: f32,
+
+    // usually equal to time between updates
     movement_duration: f32,
 }
 

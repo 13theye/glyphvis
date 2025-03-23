@@ -18,37 +18,62 @@ use glyphvis::{
 };
 
 struct Model {
-    // Core components:
+    // Data from the Project file including all Glyph definitions
     project: Project,
-    grids: HashMap<String, GridInstance>, //(grid_id : CachedGrid)
+
+    // Grids are the primary logical units that get rendered. A grid is a virtual segmented display for Hangeul characters.
+    // By lighting up sets of segments, different characters are displayed.
+    //
+    // The CachedGrid is the generic grid structure.
+    // A GridInstance manages the state of an individual grid and sends commands to its internal segments to turn on or off,
+    // or display different colors.
+    //
+    // When a Grid is created, a Show from the Project file is attached. It is hidden by default until it receives a command
+    // to be shown. A Grid cannot be destroyed once created.
+    grids: HashMap<String, GridInstance>, //(grid_id : GridInstance)
+
+    // BackgroundManager handles Background color state
     background: BackgroundManager,
 
-    // Comms components:
+    // OSC Comms components:
+    // OscController checks incoming OSC commands for validity and maintains a queue holding
+    // all commands received between updates.
     osc_controller: OscController,
+
+    // Keyboard commands (with a few exceptions) use the internal OSC sender to execute commands.
     osc_sender: OscSender,
 
     // Rendering components:
+    //
+    // The full-resolution texture that is drawn every frame
     texture: wgpu::Texture,
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
+
+    // The reshaper is used to resize the texture for the screen monitor display
     texture_reshaper: wgpu::TextureReshaper,
+
+    // A random number generator
     random: rand::rngs::ThreadRng,
 
-    // Transitions & Animation
+    // Builds segment commands defining animation sequences between Glyphs.
     transition_engine: TransitionEngine,
 
-    // Style
+    // Segment default style as stored in config.toml
     default_stroke_weight: f32,
 
-    // Frame recording:
+    // Frame recorder service saves JPGs of full resolution textures at 30fps
     frame_recorder: FrameRecorder,
+
+    // Tracks if a Quit command has been issued, for a graceful exit that waits
+    // for all queued framees to finish saving before halting the program
     exit_requested: bool,
 
     // FPS
     last_update: Instant,
     fps: f32,
 
-    // Message
+    // When on, displays more verbose messages in the terminal
     debug_flag: bool,
 }
 

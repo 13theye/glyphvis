@@ -1,4 +1,4 @@
-// /src/services/svg/edge_detection.rs
+// /src/utilities/svg/edge_detection.rs
 // A collection of functions for finding the edges of a SVG
 
 use crate::models::{EdgeType, PathElement, ViewBox};

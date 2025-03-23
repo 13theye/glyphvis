@@ -483,7 +483,7 @@ impl CachedGrid {
         }
     }
 
-    /************************ Rendering & transform methods ****************************/
+    /************************ Rendering ****************************/
     pub fn draw(
         &mut self,
         draw: &Draw,
@@ -533,6 +533,8 @@ impl CachedGrid {
         }
     }
 
+    /************************ Transform Methods **************************/
+
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         //self.transform = transform.clone();
         for segment in self.segments.values_mut() {
@@ -543,6 +545,31 @@ impl CachedGrid {
     pub fn scale_stroke_weights(&mut self, scale_factor: f32) {
         for segment in self.segments.values_mut() {
             segment.scale_stroke_weight(scale_factor);
+        }
+    }
+
+    pub fn slide(&mut self, axis: &str, distance: f32) {
+        let n = match axis {
+            "x" => self.dimensions.0,
+            "y" => self.dimensions.1,
+            _ => 0,
+        };
+
+        let (odd_lines, even_lines): (Vec<u32>, Vec<u32>) = (1..=n).partition(|&num| num % 2 != 0);
+        let translation = vec2(distance, 0.0);
+
+        let transform = Transform2D {
+            translation,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+
+        for line in odd_lines {
+            for segment in self.segments.values_mut() {
+                if segment.tile_coordinate.0 == line {
+                    segment.apply_transform(&transform);
+                }
+            }
         }
     }
 
@@ -558,19 +585,23 @@ impl CachedGrid {
         self.segments.get(id)
     }
 
-    /*
-    fn validate_segment_points(&self) -> bool {
+    /************************ Validation ****************************/
+
+    pub fn validate_segment_points(&self) -> bool {
         for segment in self.segments.values() {
             for command in &segment.draw_commands {
                 match command {
                     DrawCommand::Line { start, end, .. } => {
-                        if !start.x.is_finite() || !start.y.is_finite() ||
-                           !end.x.is_finite() || !end.y.is_finite() {
+                        if !start.x.is_finite()
+                            || !start.y.is_finite()
+                            || !end.x.is_finite()
+                            || !end.y.is_finite()
+                        {
                             println!("Line error at segment {}", segment.id);
                             println!("Invalid line points: start={:?}, end={:?}", start, end);
                             return false;
                         }
-                    },
+                    }
                     DrawCommand::Arc { points, .. } => {
                         for point in points {
                             if !point.x.is_finite() || !point.y.is_finite() {
@@ -578,7 +609,7 @@ impl CachedGrid {
                                 return false;
                             }
                         }
-                    },
+                    }
                     DrawCommand::Circle { center, radius, .. } => {
                         if !center.x.is_finite() || !center.y.is_finite() || !radius.is_finite() {
                             println!("Invalid circle: center={:?}, radius={}", center, radius);
@@ -590,7 +621,6 @@ impl CachedGrid {
         }
         true
     }
-    */
 }
 
 /************************ CachedGrid Initialization Helper ****************************/

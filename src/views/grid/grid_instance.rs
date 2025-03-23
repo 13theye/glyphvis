@@ -458,6 +458,10 @@ impl GridInstance {
 
     /**************************** Grid movement & transform **********************************/
 
+    pub fn slide(&mut self, axis: &str, distance: f32) {
+        self.grid.slide(axis, distance);
+    }
+
     pub fn rotate_in_place(&mut self, angle: f32) {
         let angle_delta = angle - self.current_rotation;
 

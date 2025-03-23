@@ -475,7 +475,7 @@ impl OscSender {
             .ok();
     }
 
-    pub fn send_slide_grid(&self, name: &str, axis: &str, distance: f32) {
+    pub fn send_grid_slide(&self, name: &str, axis: &str, distance: f32) {
         let addr = "/grid/slide".to_string();
         let args = vec![
             osc::Type::String(name.to_string()),

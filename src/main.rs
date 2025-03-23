@@ -425,9 +425,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         Key::Key5 => {
             for name in model.grids.keys() {
-                model
-                    .osc_sender
-                    .send_grid_slide(name, "x".to_string(), 50.0);
+                model.osc_sender.send_grid_slide(name, "x", 50.0);
             }
         }
         Key::Key9 => {

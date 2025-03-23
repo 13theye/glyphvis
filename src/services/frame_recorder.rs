@@ -18,7 +18,7 @@ use std::{
 };
 
 const BATCH_SIZE: usize = 10; // Process n frames at a time
-const FPS: u64 = 30;
+const FPS: u64 = 60;
 const FRAME_TIME: u64 = 1_000_000_000 / FPS; // Duration in nanoseconds between frames
 const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 

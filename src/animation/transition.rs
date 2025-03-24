@@ -170,6 +170,7 @@ impl TransitionEngine {
                 // start at the natural writing starting place
                 let start_segments = HashSet::new();
                 let target_segments = grid_instance.target_segments.as_ref().unwrap();
+                println!("Building Overwrite with {:?}", target_segments);
 
                 self.generate_stroke_order_changes(grid_instance, &start_segments, target_segments)
             }

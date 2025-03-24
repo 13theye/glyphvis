@@ -548,19 +548,15 @@ impl CachedGrid {
         }
     }
 
-    pub fn slide(&mut self, axis: &str, distance: f32) {
-        println!("Running slide with params:");
-        println!("axis: {}, distance: {}", axis, distance);
-        let n = match axis {
-            "x" => self.dimensions.0,
-            "y" => self.dimensions.1,
-            _ => 0,
+    pub fn slide(&mut self, axis: &str, number: i32, distance: f32) {
+        if axis != "x" && axis != "y" {
+            println!("Slide axis value must be x or y. Current value is {}", axis);
+        }
+        let translation = match axis {
+            "x" => vec2(distance, 0.0),
+            "y" => vec2(0.0, distance),
+            _ => vec2(0.0, 0.0),
         };
-
-        println!("Working with axis: {}", n);
-
-        let (odd_lines, even_lines): (Vec<u32>, Vec<u32>) = (1..=n).partition(|&num| num % 2 != 0);
-        let translation = vec2(distance, 0.0);
 
         let transform = Transform2D {
             translation,
@@ -568,13 +564,41 @@ impl CachedGrid {
             rotation: 0.0,
         };
 
-        for line in odd_lines {
-            for segment in self.segments.values_mut() {
-                if segment.tile_coordinate.1 == line {
-                    segment.apply_transform(&transform);
-                }
-            }
+        let segments = match axis {
+            "x" => self.row_mut(number),
+            "y" => self.col_mut(number),
+            _ => Vec::new(),
+        };
+
+        for segment in segments {
+            segment.apply_transform(&transform);
         }
+    }
+
+    fn row_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
+        // check that number is a valid index
+        if number < 0 {
+            return Vec::new();
+        }
+        let index = number as u32;
+
+        self.segments
+            .values_mut()
+            .filter(|segment| segment.tile_coordinate.1 == index)
+            .collect()
+    }
+
+    fn col_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
+        // check that number is a valid index
+        if number < 0 {
+            return Vec::new();
+        }
+        let index = number as u32;
+
+        self.segments
+            .values_mut()
+            .filter(|segment| segment.tile_coordinate.0 == index)
+            .collect()
     }
 
     /************************ Utility Methods ****************************/

@@ -39,6 +39,7 @@ pub enum OscCommand {
     GridSlide {
         name: String,
         axis: String,
+        number: i32,
         distance: f32,
     },
     BackgroundFlash {
@@ -200,12 +201,13 @@ impl OscController {
                         }
                     }
                     "/grid/slide" => {
-                        if let [osc::Type::String(name), osc::Type::String(axis), osc::Type::Float(distance)] =
+                        if let [osc::Type::String(name), osc::Type::String(axis), osc::Type::Int(number), osc::Type::Float(distance)] =
                             &message.args[..]
                         {
                             self.command_queue.push(OscCommand::GridSlide {
                                 name: name.clone(),
                                 axis: axis.clone(),
+                                number: *number,
                                 distance: *distance,
                             });
                         }
@@ -475,11 +477,12 @@ impl OscSender {
             .ok();
     }
 
-    pub fn send_grid_slide(&self, name: &str, axis: &str, distance: f32) {
+    pub fn send_grid_slide(&self, name: &str, axis: &str, number: i32, distance: f32) {
         let addr = "/grid/slide".to_string();
         let args = vec![
             osc::Type::String(name.to_string()),
             osc::Type::String(axis.to_string()),
+            osc::Type::Int(number),
             osc::Type::Float(distance),
         ];
         self.sender

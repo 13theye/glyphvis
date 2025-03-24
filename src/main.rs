@@ -423,14 +423,24 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model.osc_sender.send_glyph(name, 2, 0);
             }
         }
+        Key::Key3 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "y", 2, 50.0);
+            }
+        }
+        Key::Key4 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "y", 2, -50.0);
+            }
+        }
         Key::Key5 => {
             for name in model.grids.keys() {
-                model.osc_sender.send_grid_slide(name, "x", 50.0);
+                model.osc_sender.send_grid_slide(name, "x", 2, 50.0);
             }
         }
         Key::Key6 => {
             for name in model.grids.keys() {
-                model.osc_sender.send_grid_slide(name, "x", -50.0);
+                model.osc_sender.send_grid_slide(name, "x", 2, -50.0);
             }
         }
         Key::Key9 => {
@@ -676,10 +686,11 @@ fn launch_commands(app: &App, model: &mut Model) {
             OscCommand::GridSlide {
                 name,
                 axis,
+                number,
                 distance,
             } => {
                 if let Some(grid) = model.grids.get_mut(&name) {
-                    grid.slide(&axis, distance);
+                    grid.slide(&axis, number, distance);
                 }
             }
             OscCommand::GridGlyph {

@@ -113,7 +113,7 @@ impl GridInstance {
 
         println!("\n(===== Creating GridInstance <{}> =====)", id);
         println!("Attached to Show: {}", show);
-        println!("Initial position: {}", position);
+        println!("Initial position: {}\n", position);
 
         Self {
             id,
@@ -458,8 +458,9 @@ impl GridInstance {
 
     /**************************** Grid movement & transform **********************************/
 
-    pub fn slide(&mut self, axis: &str, distance: f32) {
-        self.grid.slide(axis, distance);
+    // Slide effect moves tiles of a specific row/column by distance
+    pub fn slide(&mut self, axis: &str, number: i32, distance: f32) {
+        self.grid.slide(axis, number, distance);
     }
 
     pub fn rotate_in_place(&mut self, angle: f32) {

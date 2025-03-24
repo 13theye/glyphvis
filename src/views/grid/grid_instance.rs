@@ -102,7 +102,14 @@ pub struct GridInstance {
 }
 
 impl GridInstance {
-    pub fn new(id: String, project: &Project, show: &str, position: Point2, rotation: f32) -> Self {
+    pub fn new(
+        id: String,
+        project: &Project,
+        show: &str,
+        position: Point2,
+        rotation: f32,
+        stroke_weight: f32,
+    ) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {
@@ -131,7 +138,10 @@ impl GridInstance {
 
             target_segments: None,
             current_active_segments: HashSet::new(),
-            target_style: DrawStyle::default(),
+            target_style: DrawStyle {
+                color: rgba(0.82, 0.0, 0.14, 1.0),
+                stroke_weight,
+            },
 
             active_transition: None,
             transition_config: None,

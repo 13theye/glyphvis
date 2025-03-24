@@ -653,6 +653,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                     &show,
                     pt2(position.0, position.1),
                     rotation,
+                    model.default_stroke_weight,
                 );
                 model.grids.insert(name, grid);
             }

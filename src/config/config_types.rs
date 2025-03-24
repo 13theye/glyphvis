@@ -23,6 +23,7 @@ pub struct WindowConfig {
 pub struct FrameRecorderConfig {
     pub frame_limit: u32,
     pub jpeg_quality: u8,
+    pub fps: u64,
 }
 
 #[derive(Debug, Deserialize)]

@@ -18,8 +18,6 @@ use std::{
 };
 
 const BATCH_SIZE: usize = 10; // Process n frames at a time
-const FPS: u64 = 60;
-const FRAME_TIME: u64 = 1_000_000_000 / FPS; // Duration in nanoseconds between frames
 const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 const VERBOSE: bool = false; // true to show debug msgs
@@ -42,6 +40,7 @@ pub struct FrameRecorder {
     frames_in_queue: Arc<AtomicUsize>,
     frames_processed: Arc<AtomicUsize>,
     capture_in_progress: Arc<AtomicBool>,
+    frame_time: u64,
 
     // capture pipeline
     texture_reshaper: wgpu::TextureReshaper,
@@ -57,6 +56,7 @@ impl FrameRecorder {
         output_dir: &str,
         frame_limit: u32,
         format: OutputFormat,
+        fps: u64,
     ) -> Self {
         create_dir_all(output_dir).expect("Failed to create output directory");
 
@@ -165,6 +165,7 @@ impl FrameRecorder {
             frames_in_queue,
             frames_processed,
             capture_in_progress: Arc::new(AtomicBool::new(false)),
+            frame_time: 1000000000 / fps,
 
             texture_reshaper,
             resolved_texture,
@@ -218,12 +219,12 @@ impl FrameRecorder {
         // Check for timing gaps
         let mut last_capture = self.last_capture.lock().unwrap();
         let time_since_last = now - *last_capture;
-        if time_since_last > FRAME_TIME * 2 {
+        if time_since_last > self.frame_time * 2 {
             // If we've missed more than one frame interval
             println!(
                 "WARNING: Frame timing gap detected - {}ms since last capture (expected {}ms)",
                 time_since_last / 1_000_000,
-                FRAME_TIME / 1_000_000
+                self.frame_time / 1_000_000
             );
 
             // Check if previous capture is still in progress
@@ -237,7 +238,7 @@ impl FrameRecorder {
         }
 
         // Skip this capture if not enough time has passed
-        if now - *last_capture < FRAME_TIME {
+        if now - *last_capture < self.frame_time {
             return;
         }
 
@@ -594,8 +595,14 @@ mod tests {
         let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         assert!(
             !recorder.is_recording(),
@@ -619,8 +626,14 @@ mod tests {
         let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         assert!(
             !recorder.is_recording(),
@@ -645,8 +658,14 @@ mod tests {
         let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         recorder.toggle_recording();
 
@@ -675,8 +694,14 @@ mod tests {
         let texture = create_test_texture(&device, 100, 100);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         let frame_data = create_test_frame(100, 100);
         for i in 0..BATCH_SIZE + 1 {
@@ -715,6 +740,7 @@ mod tests {
             &test_dir,
             frame_limit,
             OutputFormat::JPEG(85),
+            30,
         );
 
         recorder.toggle_recording();
@@ -751,8 +777,14 @@ mod tests {
         let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         recorder.toggle_recording();
 
@@ -772,8 +804,9 @@ mod tests {
                 device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         }
 
+        let fps = 30;
         let elapsed = start.elapsed();
-        let theoretical_frames = (elapsed.as_secs_f64() * FPS as f64).floor() as u32;
+        let theoretical_frames = (elapsed.as_secs_f64() * fps as f64).floor() as u32;
 
         let (_processed, total) = recorder.get_queue_status();
         assert!(
@@ -790,8 +823,14 @@ mod tests {
         let texture = create_test_texture(&device, 320, 240);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         recorder.toggle_recording();
 
@@ -826,8 +865,14 @@ mod tests {
         let texture = create_test_texture(&device, 640, 480);
         let test_dir = create_test_dir();
 
-        let recorder =
-            FrameRecorder::new(&device, &texture, &test_dir, 100, OutputFormat::JPEG(85));
+        let recorder = FrameRecorder::new(
+            &device,
+            &texture,
+            &test_dir,
+            100,
+            OutputFormat::JPEG(85),
+            30,
+        );
 
         recorder.toggle_recording();
 

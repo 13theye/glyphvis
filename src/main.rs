@@ -60,6 +60,7 @@ struct Model {
     transition_engine: TransitionEngine,
 
     // Segment default style as stored in config.toml
+    // Need it here to pass into GridInstance when a Grid is created.
     default_stroke_weight: f32,
     default_backbone_stroke_weight: f32,
 
@@ -153,6 +154,7 @@ fn model(app: &App) -> Model {
     };
 
     let output_format = OutputFormat::JPEG(config.frame_recorder.jpeg_quality);
+    let recorder_fps = config.frame_recorder.fps;
 
     // Create the frame recorder
     let frame_recorder = FrameRecorder::new(
@@ -161,6 +163,7 @@ fn model(app: &App) -> Model {
         &config.resolve_output_dir_as_str(),
         config.frame_recorder.frame_limit,
         output_format,
+        recorder_fps,
     );
 
     Model {

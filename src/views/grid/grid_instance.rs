@@ -109,6 +109,7 @@ impl GridInstance {
         position: Point2,
         rotation: f32,
         stroke_weight: f32,
+        backbone_stroke_weight: f32,
     ) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
@@ -157,7 +158,7 @@ impl GridInstance {
             backbone_effects: HashMap::new(),
             backbone_style: DrawStyle {
                 color: rgba(0.19, 0.19, 0.19, 1.0),
-                stroke_weight: 5.1,
+                stroke_weight: backbone_stroke_weight,
             },
 
             active_movement: None,

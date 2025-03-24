@@ -28,6 +28,7 @@ pub struct FrameRecorderConfig {
 #[derive(Debug, Deserialize)]
 pub struct StyleConfig {
     pub default_stroke_weight: f32,
+    pub default_backbone_stroke_weight: f32,
 }
 
 #[derive(Debug, Deserialize)]

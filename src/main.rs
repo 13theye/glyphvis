@@ -61,6 +61,7 @@ struct Model {
 
     // Segment default style as stored in config.toml
     default_stroke_weight: f32,
+    default_backbone_stroke_weight: f32,
 
     // Frame recorder service saves JPGs of full resolution textures at 30fps
     frame_recorder: FrameRecorder,
@@ -176,6 +177,7 @@ fn model(app: &App) -> Model {
         random: rand::thread_rng(),
 
         default_stroke_weight: config.style.default_stroke_weight,
+        default_backbone_stroke_weight: config.style.default_backbone_stroke_weight,
 
         transition_engine: TransitionEngine::new(default_transition_config),
 
@@ -654,6 +656,7 @@ fn launch_commands(app: &App, model: &mut Model) {
                     pt2(position.0, position.1),
                     rotation,
                     model.default_stroke_weight,
+                    model.default_backbone_stroke_weight,
                 );
                 model.grids.insert(name, grid);
             }

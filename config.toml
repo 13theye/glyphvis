@@ -38,6 +38,7 @@ jpeg_quality = 85
 [style]
 # To me this is the best looking line thickness
 default_stroke_weight = 5.1
+default_backbone_stroke_weight = 5.1
 
 [speed]
 # This is not used. BPM will be controlled from Ableton.

@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementChange, MovementEngine, Transition, TransitionAnimationType,
-        TransitionEngine, TransitionTriggerType, TransitionUpdates,
+        Movement, MovementChange, MovementEngine, SlideAnimation, Transition,
+        TransitionAnimationType, TransitionEngine, TransitionTriggerType, TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
@@ -92,12 +92,25 @@ pub struct GridInstance {
     target_position: Point2,
     position_update_time: f32,
 
-    // usually equal to time between updates
+    // usually equal to time between updates (1.0/60.0)
     movement_duration: f32,
+
+    // Slide animation states
+    row_positions: HashMap<i32, f32>, // <index, position offset>
+    col_positions: HashMap<i32, f32>, // <index, position offset>
+    slide_animations: Vec<SlideAnimation>,
 }
 
 impl GridInstance {
-    pub fn new(id: String, project: &Project, show: &str, position: Point2, rotation: f32) -> Self {
+    pub fn new(
+        id: String,
+        project: &Project,
+        show: &str,
+        position: Point2,
+        rotation: f32,
+        stroke_weight: f32,
+        backbone_stroke_weight: f32,
+    ) -> Self {
         let mut grid = CachedGrid::new(project);
         let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {
@@ -113,7 +126,7 @@ impl GridInstance {
 
         println!("\n(===== Creating GridInstance <{}> =====)", id);
         println!("Attached to Show: {}", show);
-        println!("Initial position: {}", position);
+        println!("Initial position: {}\n", position);
 
         Self {
             id,
@@ -126,7 +139,10 @@ impl GridInstance {
 
             target_segments: None,
             current_active_segments: HashSet::new(),
-            target_style: DrawStyle::default(),
+            target_style: DrawStyle {
+                color: rgba(0.82, 0.0, 0.14, 1.0),
+                stroke_weight,
+            },
 
             active_transition: None,
             transition_config: None,
@@ -142,7 +158,7 @@ impl GridInstance {
             backbone_effects: HashMap::new(),
             backbone_style: DrawStyle {
                 color: rgba(0.19, 0.19, 0.19, 1.0),
-                stroke_weight: 5.1,
+                stroke_weight: backbone_stroke_weight,
             },
 
             active_movement: None,
@@ -156,6 +172,10 @@ impl GridInstance {
             target_position: position,
             position_update_time: 0.0,
             movement_duration: 1.0 / 60.0,
+
+            row_positions: HashMap::new(),
+            col_positions: HashMap::new(),
+            slide_animations: Vec::new(),
         }
     }
 
@@ -207,7 +227,6 @@ impl GridInstance {
         time: f32,
         dt: f32,
     ) {
-        // Continue with existing update logic
         // 1. Generate new transitions
         if self.has_target_segments() {
             self.build_transition(transition_engine, self.transition_next_animation_type);
@@ -224,6 +243,11 @@ impl GridInstance {
             if let Some(update) = self.process_active_movement(dt) {
                 self.apply_movement_change(&update);
             }
+        }
+
+        // c. handle slide animations
+        if self.has_slide_animations() {
+            self.update_slide_animations(time);
         }
 
         // 3. Stage any backbone style change
@@ -634,6 +658,149 @@ impl GridInstance {
         self.apply_transform(&transform);
     }
 
+    /**************************** Row/column Slide Effect *****************************/
+    pub fn slide(&mut self, axis: &str, index: i32, position: f32, time: f32) {
+        // Validate axis
+        if axis != "x" && axis != "y" {
+            println!("Slide axis value must be x or y. Current value is {}", axis);
+        }
+
+        // Transform axis to char
+        let axis_char = match axis {
+            "x" => 'x',
+            "y" => 'y',
+            _ => '0', // this case shouldn't happen
+        };
+
+        // Get current row/col positions
+        let positions = match axis_char {
+            'x' => &mut self.row_positions,
+            'y' => &mut self.col_positions,
+            _ => return,
+        };
+
+        // Get current position (default to 0.0 if not set)
+        let current_position = *positions.get(&index).unwrap_or(&0.0);
+
+        // Update stored position
+        positions.insert(index, position);
+
+        // Find existing animation or create new
+        let existing_index = self
+            .slide_animations
+            .iter()
+            .position(|anim| anim.axis == axis_char && anim.index == index);
+
+        if let Some(idx) = existing_index {
+            // Update existing animation
+            let anim = &mut self.slide_animations[idx];
+            anim.start_position = anim.current_position;
+            anim.target_position = position;
+            anim.start_time = time;
+        } else {
+            // Create new animation
+            let animation = SlideAnimation {
+                axis: axis_char,
+                index,
+                start_position: current_position,
+                current_position,
+                target_position: position,
+                start_time: time,
+                duration: 1.0 / 60.0,
+            };
+
+            self.slide_animations.push(animation);
+        }
+    }
+
+    fn update_slide_animations(&mut self, time: f32) {
+        let mut transforms_to_apply: Vec<(i32, char, Transform2D)> = Vec::new();
+        let mut completed = Vec::new();
+
+        // Calculate all transforms without applying them yet
+        for (i, animation) in self.slide_animations.iter_mut().enumerate() {
+            let elapsed = time - animation.start_time;
+            let progress = (elapsed / animation.duration).clamp(0.0, 1.0);
+
+            if progress < 1.0 {
+                // Calculate interpolated position
+                let new_position = animation.start_position
+                    + (animation.target_position - animation.start_position) * progress;
+
+                // Calculate movement delta from last frame
+                let delta = new_position - animation.current_position;
+
+                // Create transform if there's significant movement
+                if delta.abs() > 0.001 {
+                    let translation = match animation.axis {
+                        'x' => vec2(delta, 0.0),
+                        'y' => vec2(0.0, delta),
+                        _ => vec2(0.0, 0.0),
+                    };
+
+                    let transform = Transform2D {
+                        translation,
+                        scale: 1.0,
+                        rotation: 0.0,
+                    };
+
+                    transforms_to_apply.push((animation.index, animation.axis, transform));
+                }
+
+                // Update current position
+                animation.current_position = new_position;
+            } else {
+                // Ensure we reach exactly the target position
+                let delta = animation.target_position - animation.current_position;
+
+                if delta.abs() > 0.001 {
+                    let translation = match animation.axis {
+                        'x' => vec2(delta, 0.0),
+                        'y' => vec2(0.0, delta),
+                        _ => vec2(0.0, 0.0),
+                    };
+
+                    let transform = Transform2D {
+                        translation,
+                        scale: 1.0,
+                        rotation: 0.0,
+                    };
+
+                    transforms_to_apply.push((animation.index, animation.axis, transform));
+                }
+
+                animation.current_position = animation.target_position;
+                completed.push(i);
+            }
+        }
+
+        // Apply all calculated transforms
+        for (index, axis, transform) in transforms_to_apply {
+            match axis {
+                'x' => {
+                    // Get row segments from CachedGrid and apply transform
+                    let segments = self.grid.row_mut(index);
+                    for segment in segments {
+                        segment.apply_transform(&transform);
+                    }
+                }
+                'y' => {
+                    // Get column segments from CachedGrid and apply transform
+                    let segments = self.grid.col_mut(index);
+                    for segment in segments {
+                        segment.apply_transform(&transform);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Remove completed animations
+        for i in completed.iter().rev() {
+            self.slide_animations.remove(*i);
+        }
+    }
+
     /******************** Backbone style and effects **************************** */
 
     fn generate_backbone_style(&self, time: f32) -> DrawStyle {
@@ -692,6 +859,10 @@ impl GridInstance {
 
     pub fn has_backbone_effects(&self) -> bool {
         !self.backbone_effects.is_empty()
+    }
+
+    pub fn has_slide_animations(&self) -> bool {
+        !self.slide_animations.is_empty()
     }
 
     /*********************** Debug Helper ******************************* */

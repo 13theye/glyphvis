@@ -61,6 +61,7 @@ struct Model {
 
     // Segment default style as stored in config.toml
     default_stroke_weight: f32,
+    default_backbone_stroke_weight: f32,
 
     // Frame recorder service saves JPGs of full resolution textures at 30fps
     frame_recorder: FrameRecorder,
@@ -97,7 +98,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.2.0")
+        .title("glyphvis 0.2.3")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -176,6 +177,7 @@ fn model(app: &App) -> Model {
         random: rand::thread_rng(),
 
         default_stroke_weight: config.style.default_stroke_weight,
+        default_backbone_stroke_weight: config.style.default_backbone_stroke_weight,
 
         transition_engine: TransitionEngine::new(default_transition_config),
 
@@ -423,6 +425,26 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
                 model.osc_sender.send_glyph(name, 2, 0);
             }
         }
+        Key::Key3 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "y", 2, 50.0);
+            }
+        }
+        Key::Key4 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "y", 2, -50.0);
+            }
+        }
+        Key::Key5 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "x", 2, 50.0);
+            }
+        }
+        Key::Key6 => {
+            for name in model.grids.keys() {
+                model.osc_sender.send_grid_slide(name, "x", 2, -50.0);
+            }
+        }
         Key::Key9 => {
             for name in model.grids.keys() {
                 model
@@ -633,6 +655,8 @@ fn launch_commands(app: &App, model: &mut Model) {
                     &show,
                     pt2(position.0, position.1),
                     rotation,
+                    model.default_stroke_weight,
+                    model.default_backbone_stroke_weight,
                 );
                 model.grids.insert(name, grid);
             }
@@ -661,6 +685,16 @@ fn launch_commands(app: &App, model: &mut Model) {
             OscCommand::GridScale { name, scale } => {
                 if let Some(grid) = model.grids.get_mut(&name) {
                     grid.scale_in_place(scale);
+                }
+            }
+            OscCommand::GridSlide {
+                name,
+                axis,
+                number,
+                position,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&name) {
+                    grid.slide(&axis, number, position, app.time);
                 }
             }
             OscCommand::GridGlyph {

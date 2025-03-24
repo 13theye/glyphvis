@@ -36,6 +36,12 @@ pub enum OscCommand {
         name: String,
         scale: f32,
     },
+    GridSlide {
+        name: String,
+        axis: String,
+        number: i32,
+        position: f32,
+    },
     BackgroundFlash {
         r: f32,
         g: f32,
@@ -191,6 +197,18 @@ impl OscController {
                             self.command_queue.push(OscCommand::GridScale {
                                 name: name.clone(),
                                 scale: *scale,
+                            });
+                        }
+                    }
+                    "/grid/slide" => {
+                        if let [osc::Type::String(name), osc::Type::String(axis), osc::Type::Int(number), osc::Type::Float(position)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::GridSlide {
+                                name: name.clone(),
+                                axis: axis.clone(),
+                                number: *number,
+                                position: *position,
                             });
                         }
                     }
@@ -454,6 +472,19 @@ impl OscSender {
     pub fn send_scale_grid(&self, name: &str, scale: f32) {
         let addr = "/grid/scale".to_string();
         let args = vec![osc::Type::String(name.to_string()), osc::Type::Float(scale)];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_grid_slide(&self, name: &str, axis: &str, number: i32, position: f32) {
+        let addr = "/grid/slide".to_string();
+        let args = vec![
+            osc::Type::String(name.to_string()),
+            osc::Type::String(axis.to_string()),
+            osc::Type::Int(number),
+            osc::Type::Float(position),
+        ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))
             .ok();

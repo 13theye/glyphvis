@@ -474,7 +474,7 @@ impl CachedGrid {
         }
 
         // Remove overlapping segments
-        segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
+        //segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
 
         Self {
             dimensions: (project.grid_x, project.grid_y),
@@ -483,7 +483,7 @@ impl CachedGrid {
         }
     }
 
-    /************************ Rendering & transform methods ****************************/
+    /************************ Rendering ****************************/
     pub fn draw(
         &mut self,
         draw: &Draw,
@@ -533,6 +533,8 @@ impl CachedGrid {
         }
     }
 
+    /************************ Transform Methods **************************/
+
     pub fn apply_transform(&mut self, transform: &Transform2D) {
         //self.transform = transform.clone();
         for segment in self.segments.values_mut() {
@@ -558,19 +560,49 @@ impl CachedGrid {
         self.segments.get(id)
     }
 
-    /*
-    fn validate_segment_points(&self) -> bool {
+    pub fn row_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
+        // check that number is a valid index
+        if number < 0 {
+            return Vec::new();
+        }
+        let index = number as u32;
+
+        self.segments
+            .values_mut()
+            .filter(|segment| segment.tile_coordinate.1 == index)
+            .collect()
+    }
+
+    pub fn col_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
+        // check that number is a valid index
+        if number < 0 {
+            return Vec::new();
+        }
+        let index = number as u32;
+
+        self.segments
+            .values_mut()
+            .filter(|segment| segment.tile_coordinate.0 == index)
+            .collect()
+    }
+
+    /************************ Validation ****************************/
+
+    pub fn validate_segment_points(&self) -> bool {
         for segment in self.segments.values() {
             for command in &segment.draw_commands {
                 match command {
                     DrawCommand::Line { start, end, .. } => {
-                        if !start.x.is_finite() || !start.y.is_finite() ||
-                           !end.x.is_finite() || !end.y.is_finite() {
+                        if !start.x.is_finite()
+                            || !start.y.is_finite()
+                            || !end.x.is_finite()
+                            || !end.y.is_finite()
+                        {
                             println!("Line error at segment {}", segment.id);
                             println!("Invalid line points: start={:?}, end={:?}", start, end);
                             return false;
                         }
-                    },
+                    }
                     DrawCommand::Arc { points, .. } => {
                         for point in points {
                             if !point.x.is_finite() || !point.y.is_finite() {
@@ -578,7 +610,7 @@ impl CachedGrid {
                                 return false;
                             }
                         }
-                    },
+                    }
                     DrawCommand::Circle { center, radius, .. } => {
                         if !center.x.is_finite() || !center.y.is_finite() || !radius.is_finite() {
                             println!("Invalid circle: center={:?}, radius={}", center, radius);
@@ -590,14 +622,16 @@ impl CachedGrid {
         }
         true
     }
-    */
 }
 
 /************************ CachedGrid Initialization Helper ****************************/
 
 // Unlike Glyphmaker, where we draw all elements and then handle selection logic,
 // in Glyphvis we decide on whether to draw an element at the beginning.
-fn purge_overlapping_segments(
+//
+// This function doesn't work! Run grid.slide() to see the problem.
+// But we decided not to use it because grid.slide looks better without purging.
+fn _purge_overlapping_segments(
     segments: HashMap<String, CachedSegment>,
     grid_width: u32,
     grid_height: u32,

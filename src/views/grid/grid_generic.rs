@@ -548,34 +548,19 @@ impl CachedGrid {
         }
     }
 
-    pub fn slide(&mut self, axis: &str, number: i32, distance: f32) {
-        if axis != "x" && axis != "y" {
-            println!("Slide axis value must be x or y. Current value is {}", axis);
-        }
-        let translation = match axis {
-            "x" => vec2(distance, 0.0),
-            "y" => vec2(0.0, distance),
-            _ => vec2(0.0, 0.0),
-        };
+    /************************ Utility Methods ****************************/
 
-        let transform = Transform2D {
-            translation,
-            scale: 1.0,
-            rotation: 0.0,
-        };
-
-        let segments = match axis {
-            "x" => self.row_mut(number),
-            "y" => self.col_mut(number),
-            _ => Vec::new(),
-        };
-
-        for segment in segments {
-            segment.apply_transform(&transform);
-        }
+    pub fn get_tile_segments_iter(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
+        self.segments
+            .values()
+            .filter(move |segment| segment.tile_coordinate == (x, y))
     }
 
-    fn row_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
+    pub fn segment(&self, id: &str) -> Option<&CachedSegment> {
+        self.segments.get(id)
+    }
+
+    pub fn row_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
         // check that number is a valid index
         if number < 0 {
             return Vec::new();
@@ -588,7 +573,7 @@ impl CachedGrid {
             .collect()
     }
 
-    fn col_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
+    pub fn col_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
         // check that number is a valid index
         if number < 0 {
             return Vec::new();
@@ -599,18 +584,6 @@ impl CachedGrid {
             .values_mut()
             .filter(|segment| segment.tile_coordinate.0 == index)
             .collect()
-    }
-
-    /************************ Utility Methods ****************************/
-
-    pub fn get_tile_segments_iter(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
-        self.segments
-            .values()
-            .filter(move |segment| segment.tile_coordinate == (x, y))
-    }
-
-    pub fn segment(&self, id: &str) -> Option<&CachedSegment> {
-        self.segments.get(id)
     }
 
     /************************ Validation ****************************/

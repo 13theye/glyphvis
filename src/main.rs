@@ -460,15 +460,15 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         Key::G => {
             if model.grids.is_empty() {
                 // Create three test grids via OSC
-                /* model
-                .osc_sender
-                .send_create_grid("grid_1", "wesa", 0.0, 0.0, 0.0);*/
+                model
+                    .osc_sender
+                    .send_create_grid("grid_1", "wesa", 0.0, 0.0, 0.0);
                 model
                     .osc_sender
                     .send_create_grid("grid_2", "wesa", 0.0, 0.0, 0.0);
-                /*model
-                .osc_sender
-                .send_create_grid("grid_3", "wesa", 0.0, 0.0, 0.0);*/
+                model
+                    .osc_sender
+                    .send_create_grid("grid_3", "wesa", 0.0, 0.0, 0.0);
                 model.osc_sender.send_toggle_visibility("grid_1");
                 model.osc_sender.send_toggle_visibility("grid_2");
                 model.osc_sender.send_toggle_visibility("grid_3");
@@ -687,10 +687,10 @@ fn launch_commands(app: &App, model: &mut Model) {
                 name,
                 axis,
                 number,
-                distance,
+                position,
             } => {
                 if let Some(grid) = model.grids.get_mut(&name) {
-                    grid.slide(&axis, number, distance);
+                    grid.slide(&axis, number, position, app.time);
                 }
             }
             OscCommand::GridGlyph {

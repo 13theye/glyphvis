@@ -322,6 +322,7 @@ fn handle_exit_state(app: &App, model: &mut Model) {
         draw_progress_screen(app, model);
         std::thread::sleep(std::time::Duration::from_millis(200));
     } else {
+        println!("Video processing complete.");
         app.quit(); // quit only once all frames are processed
     }
 }
@@ -333,9 +334,13 @@ fn draw_progress_screen(app: &App, model: &mut Model) {
 
     let (processed, total) = model.frame_recorder.get_queue_status();
 
-    // Draw progress text
-    let text = format!("{} / {}\nframes processed", processed, total);
-    draw.text(&text).color(WHITE).font_size(32).x_y(0.0, 50.0);
+    // Draw progress text with updated wording
+    let text = if processed >= total {
+        "Video processing complete."
+    } else {
+        "Processing video..."
+    };
+    draw.text(text).color(WHITE).font_size(32).x_y(0.0, 50.0);
 
     // Draw progress bar
     let progress = processed as f32 / total as f32;
@@ -588,12 +593,9 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {
-            let (processed, total) = model.frame_recorder.get_queue_status();
-            println!("Processed {} frames out of {}", processed, total);
-            if model.frame_recorder.is_recording() {
-                model.frame_recorder.toggle_recording();
-            }
+            model.frame_recorder.request_shutdown();
             model.exit_requested = true;
+            println!("Shutdown requested");
         }
         _ => (),
     }

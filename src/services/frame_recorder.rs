@@ -41,6 +41,9 @@ pub struct FrameRecorder {
     // FFmpeg process info
     ffmpeg_process: Arc<Mutex<Option<Child>>>,
     ffmpeg_stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
+
+    // Synchronization
+    next_scheduled_capture: Arc<Mutex<u64>>,
 }
 
 impl FrameRecorder {
@@ -175,6 +178,8 @@ impl FrameRecorder {
 
             ffmpeg_process,
             ffmpeg_stdin,
+
+            next_scheduled_capture: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -235,6 +240,47 @@ impl FrameRecorder {
             .unwrap()
             .as_nanos() as u64;
 
+        // Get our next scheduled capture time
+        let mut next_scheduled = self.next_scheduled_capture.lock().unwrap();
+        // If this is the first frame after starting recording, initialize the schedule
+        if *next_scheduled == 0 {
+            *next_scheduled = now;
+        }
+        // Check if it's time for the next frame yet
+        if now < *next_scheduled {
+            // Too early, wait until exactly the scheduled time
+            return;
+        }
+
+        // If we're more than a frame behind, skip to the next appropriate frame time
+        // This prevents frame accumulation if we fall behind
+        if now > *next_scheduled + self.frame_time {
+            // Calculate how many frames we're behind
+            let frames_behind = (now - *next_scheduled) / self.frame_time;
+
+            // Skip to the next valid frame time, dropping any missed frames
+            *next_scheduled += (frames_behind + 1) * self.frame_time;
+
+            println!(
+                "WARNING: Skipped {} frames, now capturing at scheduled time {}",
+                frames_behind, *next_scheduled
+            );
+
+            return; // Skip this frame and catch up on the next one
+        }
+
+        // Schedule the next frame at exactly frame_time nanoseconds from the current scheduled time
+        *next_scheduled += self.frame_time;
+
+        // Check if we're still processing the previous frame
+        if self.capture_in_progress.load(Ordering::SeqCst) {
+            println!(
+                "WARNING: Previous capture still in progress, skipping frame at scheduled time {}",
+                *next_scheduled - self.frame_time
+            );
+            return;
+        }
+        /*
         // Check for timing gaps
         let mut last_capture = self.last_capture.lock().unwrap();
         let time_since_last = now - *last_capture;
@@ -260,9 +306,11 @@ impl FrameRecorder {
             return;
         }
 
+         */
+
         // Begin capture process - note the time, set capture in progress flag
         self.capture_in_progress.store(true, Ordering::SeqCst);
-        *last_capture = now;
+        //*last_capture = now;
         let frame_start = std::time::Instant::now();
 
         // Check if we've reached the frame limit

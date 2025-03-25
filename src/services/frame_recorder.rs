@@ -15,6 +15,7 @@ use std::{
     },
 };
 
+const BATCH_SIZE: usize = 10;
 const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const VERBOSE: bool = false; // true to show debug msgs
 
@@ -74,15 +75,21 @@ impl FrameRecorder {
 
         // Spawn worker thread
         std::thread::spawn(move || {
+            // Add batch handling
+            let mut frame_batch = Vec::new();
+            let mut batch_count = 0;
+
             while let Ok((frame_data, width, height)) = receiver.recv() {
                 // Check if this is the first frame - if so, start FFmpeg
-                let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
-                if stdin_guard.is_none() {
-                    // Initialize FFmpeg on first frame
-                    let (process, stdin) =
-                        start_ffmpeg_process(&thread_output_dir, width, height, thread_fps);
-                    *ffmpeg_process_clone.lock().unwrap() = Some(process);
-                    *stdin_guard = Some(stdin);
+                if batch_count == 0 {
+                    let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                    if stdin_guard.is_none() {
+                        // Initialize FFmpeg on first frame
+                        let (process, stdin) =
+                            start_ffmpeg_process(&thread_output_dir, width, height, thread_fps);
+                        *ffmpeg_process_clone.lock().unwrap() = Some(process);
+                        *stdin_guard = Some(stdin);
+                    }
                 }
 
                 // Convert RGBA to RGB for FFmpeg
@@ -90,14 +97,37 @@ impl FrameRecorder {
                     let rgb_buffer =
                         nannou::image::DynamicImage::ImageRgba8(image_buffer).to_rgb8();
 
-                    // Write the frame to FFmpeg's stdin
-                    if let Some(stdin) = stdin_guard.as_mut() {
-                        if let Err(e) = stdin.write_all(rgb_buffer.as_raw()) {
-                            eprintln!("Failed to write frame to FFmpeg: {}", e);
-                        } else {
-                            frames_processed_clone.fetch_add(1, Ordering::SeqCst);
-                            frames_in_queue_clone.fetch_sub(1, Ordering::SeqCst);
+                    // Add this frame's data to the batch
+                    frame_batch.extend_from_slice(rgb_buffer.as_raw());
+                    batch_count += 1;
+
+                    // If we've reached the batch size, write all frames at once
+                    if batch_count >= BATCH_SIZE {
+                        let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                        if let Some(stdin) = stdin_guard.as_mut() {
+                            if let Err(e) = stdin.write_all(&frame_batch) {
+                                eprintln!("Failed to write frames to FFmpeg: {}", e);
+                            } else {
+                                // Update processed count for all frames in batch
+                                frames_processed_clone.fetch_add(batch_count, Ordering::SeqCst);
+                                frames_in_queue_clone.fetch_sub(batch_count, Ordering::SeqCst);
+                            }
                         }
+                        frame_batch.clear();
+                        batch_count = 0;
+                    }
+                }
+            }
+
+            // Write any remaining frames in the batch
+            if batch_count > 0 {
+                let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                if let Some(stdin) = stdin_guard.as_mut() {
+                    if let Err(e) = stdin.write_all(&frame_batch) {
+                        eprintln!("Failed to write remaining frames to FFmpeg: {}", e);
+                    } else {
+                        frames_processed_clone.fetch_add(batch_count, Ordering::SeqCst);
+                        frames_in_queue_clone.fetch_sub(batch_count, Ordering::SeqCst);
                     }
                 }
             }

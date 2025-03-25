@@ -13,7 +13,7 @@ use glyphvis::{
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
     models::Project,
-    services::{FrameRecorder, OutputFormat},
+    services::FrameRecorder,
     views::{BackgroundManager, DrawStyle, GridInstance},
 };
 
@@ -99,7 +99,7 @@ fn model(app: &App) -> Model {
     // Create window
     let window_id = app
         .new_window()
-        .title("glyphvis 0.2.3")
+        .title("glyphvis 0.3.0")
         .size(config.window.width, config.window.height)
         .msaa_samples(1)
         .view(view)
@@ -153,7 +153,6 @@ fn model(app: &App) -> Model {
         density: config.animation.transition.density,
     };
 
-    let output_format = OutputFormat::JPEG(config.frame_recorder.jpeg_quality);
     let recorder_fps = config.frame_recorder.fps;
 
     // Create the frame recorder
@@ -162,7 +161,6 @@ fn model(app: &App) -> Model {
         &texture,
         &config.resolve_output_dir_as_str(),
         config.frame_recorder.frame_limit,
-        output_format,
         recorder_fps,
     );
 
@@ -336,7 +334,7 @@ fn draw_progress_screen(app: &App, model: &mut Model) {
     let (processed, total) = model.frame_recorder.get_queue_status();
 
     // Draw progress text
-    let text = format!("{} / {}\nframes saved", processed, total);
+    let text = format!("{} / {}\nframes processed", processed, total);
     draw.text(&text).color(WHITE).font_size(32).x_y(0.0, 50.0);
 
     // Draw progress bar

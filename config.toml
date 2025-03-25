@@ -33,7 +33,6 @@ rx_port = 8000
 # Frame limit of 30000 frames is about 16m40s at 30fps
 # Frame limit of 50000 frames is about 13m53s at 60fps
 frame_limit = 50000
-jpeg_quality = 85
 fps = 30
 
 [style]

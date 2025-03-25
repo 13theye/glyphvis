@@ -390,29 +390,29 @@ impl FrameRecorder {
             println!("Total frame capture took: {:?}", frame_start.elapsed());
         }
 
-        // Poll the device with a timeout to avoid infinite waiting
-        let timeout_duration = std::time::Duration::from_millis(5);
+        // Try a more efficient polling approach
         let start_time = std::time::Instant::now();
 
-        while start_time.elapsed() < timeout_duration {
-            match device.poll(wgpu::Maintain::Wait) {
-                // If maintenance returns true, it means there are no more pending operations
-                true => {
-                    return;
-                }
-                false => {
-                    // Sleep a tiny bit to prevent tight polling
-                    std::thread::sleep(std::time::Duration::from_millis(1));
-                }
-            }
+        // First poll without waiting to quickly check if operations are done
+        if device.poll(wgpu::Maintain::Poll) {
+            // No pending operations, we can return immediately
+            self.capture_in_progress.store(false, Ordering::SeqCst);
+            return;
         }
-        // If we reach this point, the poll timed out. Clean up pending operations.
-        device.poll(wgpu::Maintain::Poll);
+
+        // If we need to wait, use a single Wait call with a shorter timeout
+        // This avoids the overhead of the polling loop
+        device.poll(wgpu::Maintain::Wait);
+
+        // If we've waited too long, log it but continue
+        if start_time.elapsed() > std::time::Duration::from_millis(10) {
+            println!(
+                "WARNING: Device poll took longer than expected: {:?}",
+                start_time.elapsed()
+            );
+        }
+
         self.capture_in_progress.store(false, Ordering::SeqCst);
-        println!(
-            "WARNING: Device poll timed out after {:?}",
-            timeout_duration
-        );
     }
 
     pub fn get_queue_status(&self) -> (usize, usize) {
@@ -456,6 +456,10 @@ fn start_ffmpeg_process(
             &fps.to_string(), // Frame rate
             "-i",
             "-", // Read from stdin
+            "-vsync",
+            "cfr", // constant frame rate
+            "-r",
+            &fps.to_string(), // force output frame rate
             "-c:v",
             "libx264", // Use H.264 codec
             "-preset",

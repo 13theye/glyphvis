@@ -1,8 +1,14 @@
-// src/services/frame_recorder.rs
+// src/services/frame_recorder_jpg.rs
+
 // FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk.
 // Its gets its own thread to avoid blocking the main thread.
 // Saving is done in batches and in parallel for maximum speed.
-// I'm very happy with its performance.
+//
+// We have discovered that this is suffering from inconsistent frame timing,
+// so it is not currently being used.
+//
+// The timing issue is not due to disk IO as previously suspected.
+// Suspect issue is in device polling and buffer management.
 
 use nannou::{image::RgbaImage, wgpu};
 use rayon::prelude::*;

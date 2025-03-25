@@ -24,7 +24,6 @@ type FrameData = (Vec<u8>, u32, u32);
 pub struct FrameRecorder {
     frame_sender: Sender<FrameData>,
     is_recording: Arc<Mutex<bool>>,
-    last_capture: Arc<Mutex<u64>>,
     frame_limit: u32,
     frame_number: Arc<Mutex<u32>>,
     frames_in_queue: Arc<AtomicUsize>,
@@ -163,7 +162,6 @@ impl FrameRecorder {
         Self {
             frame_sender: sender,
             is_recording: Arc::new(Mutex::new(false)),
-            last_capture: Arc::new(Mutex::new(0)),
             frame_limit,
             frame_number: Arc::new(Mutex::new(0)),
             frames_in_queue,

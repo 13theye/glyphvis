@@ -1761,6 +1761,42 @@
     }
   },
   "shows": {
+    "Hul": {
+      "name": "Hul",
+      "metadata": {},
+      "showOrder": {
+        "1": {
+          "name": "Hul1",
+          "type": "glyph",
+          "position": 1,
+          "metadata": {
+            "color": "#ff0008",
+            "dwell": 3,
+            "effect": "Solid"
+          }
+        },
+        "2": {
+          "name": "Hul2",
+          "type": "glyph",
+          "position": 2,
+          "metadata": {
+            "color": "#ff0008",
+            "dwell": 3,
+            "effect": "Solid"
+          }
+        },
+        "3": {
+          "name": "Hul3",
+          "type": "glyph",
+          "position": 3,
+          "metadata": {
+            "color": "#ff0008",
+            "dwell": 3,
+            "effect": "Solid"
+          }
+        }
+      }
+    },
     "wesa": {
       "name": "wesa",
       "metadata": {},

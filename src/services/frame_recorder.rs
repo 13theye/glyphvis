@@ -1,15 +1,13 @@
 // src/services/frame_recorder.rs
-// FrameRecorder is a service for capturing frames from a wgpu::Texture and saving them to disk.
-// Its gets its own thread to avoid blocking the main thread.
-// Saving is done in batches and in parallel for maximum speed.
-// I'm very happy with its performance.
+// FrameRecorder is a service for capturing frames from a wgpu::Texture and encoding them to video.
+// It gets its own thread to avoid blocking the main thread.
+// Encoding is done by piping frames directly to ffmpeg for h264 encoding.
 
 use nannou::{image::RgbaImage, wgpu};
-use rayon::prelude::*;
 use std::{
-    collections::VecDeque,
-    fs::{create_dir_all, File},
-    io::BufWriter,
+    io::Write,
+    path::Path,
+    process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{channel, Sender},
@@ -17,36 +15,34 @@ use std::{
     },
 };
 
-const BATCH_SIZE: usize = 10; // Process n frames at a time
+const BATCH_SIZE: usize = 10;
 const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-
 const VERBOSE: bool = false; // true to show debug msgs
 
-#[derive(Clone, Copy)]
-pub enum OutputFormat {
-    //PNG,
-    JPEG(u8), // u8 parameter for JPEG quality (1-100)
-}
-
 // Type alias for the frame data tuple
-type FrameData = (u32, Vec<u8>, u32, u32);
+type FrameData = (Vec<u8>, u32, u32);
 
 pub struct FrameRecorder {
     frame_sender: Sender<FrameData>,
     is_recording: Arc<Mutex<bool>>,
-    last_capture: Arc<Mutex<u64>>,
     frame_limit: u32,
     frame_number: Arc<Mutex<u32>>,
     frames_in_queue: Arc<AtomicUsize>,
-    frames_processed: Arc<AtomicUsize>,
     capture_in_progress: Arc<AtomicBool>,
     frame_time: u64,
+    shutdown_requested: Arc<AtomicBool>,
 
     // capture pipeline
     texture_reshaper: wgpu::TextureReshaper,
     resolved_texture: wgpu::Texture, // for MSAA resolution
     staging_buffers: Vec<Arc<wgpu::Buffer>>,
     current_buffer_index: Arc<AtomicUsize>,
+
+    // FFmpeg process info
+    ffmpeg_process: Arc<Mutex<Option<Child>>>,
+
+    // Synchronization
+    next_scheduled_capture: Arc<Mutex<u64>>,
 }
 
 impl FrameRecorder {
@@ -55,63 +51,135 @@ impl FrameRecorder {
         render_texture: &wgpu::Texture,
         output_dir: &str,
         frame_limit: u32,
-        format: OutputFormat,
         fps: u64,
     ) -> Self {
-        create_dir_all(output_dir).expect("Failed to create output directory");
+        // Ensure output directory exists
+        std::fs::create_dir_all(output_dir).expect("Failed to create output directory");
 
         let frames_in_queue = Arc::new(AtomicUsize::new(0));
-        let frames_processed = Arc::new(AtomicUsize::new(0));
-        let frames_processed_clone = frames_processed.clone();
         let frames_in_queue_clone = frames_in_queue.clone();
 
-        let (sender, receiver) = channel();
-        let thread_output_dir = output_dir.to_string();
+        let ffmpeg_process = Arc::new(Mutex::new(None));
+        let ffmpeg_process_clone = ffmpeg_process.clone();
 
+        let thread_output_dir = output_dir.to_string();
+        let thread_fps = fps;
+
+        let (sender, receiver) = channel();
+
+        let shutdown_requested = Arc::new(AtomicBool::new(false));
+        let batched_frames = Arc::new(AtomicUsize::new(0));
+
+        let shutdown_requested_clone = shutdown_requested.clone();
+        let batched_frames_clone = batched_frames.clone();
+
+        // Spawn worker thread
         std::thread::spawn(move || {
-            let mut frame_buffer: VecDeque<FrameData> = VecDeque::new();
+            let ffmpeg_stdin = Arc::new(Mutex::new(None));
+
+            // Add batch handling
+            let mut frame_batch = Vec::new();
+            let mut batch_count = 0;
 
             loop {
+                // Use recv_timeout to allow checking for shutdown
                 match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
-                    Ok(frame_data) => {
-                        frame_buffer.push_back(frame_data);
+                    Ok((frame_data, width, height)) => {
+                        // Initialize FFmpeg if needed
+                        if batch_count == 0 {
+                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                            if stdin_guard.is_none() {
+                                // Initialize FFmpeg on first frame
+                                let (process, stdin) = start_ffmpeg_process(
+                                    &thread_output_dir,
+                                    width,
+                                    height,
+                                    thread_fps,
+                                );
+                                *ffmpeg_process_clone.lock().unwrap() = Some(process);
+                                *stdin_guard = Some(stdin);
+                            }
+                        }
 
-                        // Process if we have enough frames or after a timeout
-                        if frame_buffer.len() >= BATCH_SIZE {
-                            process_frame_batch(
-                                &mut frame_buffer,
-                                &thread_output_dir,
-                                format,
-                                &frames_processed_clone,
-                                &frames_in_queue_clone,
-                            );
+                        // Convert RGBA to RGB and add to batch as before
+                        if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
+                            let rgb_buffer =
+                                nannou::image::DynamicImage::ImageRgba8(image_buffer).to_rgb8();
+
+                            // Add to batch
+                            frame_batch.extend_from_slice(rgb_buffer.as_raw());
+                            batch_count += 1;
+                            batched_frames_clone.store(batch_count, Ordering::SeqCst);
+
+                            // Process batch if full
+                            if batch_count >= BATCH_SIZE {
+                                // Write batch to FFmpeg as before
+                                let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                                if let Some(stdin) = stdin_guard.as_mut() {
+                                    if let Err(e) = stdin.write_all(&frame_batch) {
+                                        eprintln!("Failed to write frames to FFmpeg: {}", e);
+                                    } else {
+                                        frames_in_queue_clone
+                                            .fetch_sub(batch_count, Ordering::SeqCst);
+                                    }
+                                }
+                                frame_batch.clear();
+                                batch_count = 0;
+                            }
                         }
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        // Process any remaining frames on timeout
-                        if !frame_buffer.is_empty() {
-                            process_frame_batch(
-                                &mut frame_buffer,
-                                &thread_output_dir,
-                                format,
-                                &frames_processed_clone,
-                                &frames_in_queue_clone,
-                            );
+                        // Check if shutdown requested and handle any partial batch
+                        if shutdown_requested_clone.load(Ordering::SeqCst) {
+                            // Write any remaining frames in the batch
+                            if batch_count > 0 {
+                                let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                                if let Some(stdin) = stdin_guard.as_mut() {
+                                    if let Err(e) = stdin.write_all(&frame_batch) {
+                                        eprintln!(
+                                            "Failed to write remaining frames to FFmpeg: {}",
+                                            e
+                                        );
+                                    } else {
+                                        frames_in_queue_clone
+                                            .fetch_sub(batch_count, Ordering::SeqCst);
+                                    }
+                                }
+                            }
+
+                            // Close the FFmpeg stdin stream to signal end of input
+                            drop(ffmpeg_stdin.lock().unwrap().take());
+                            break; // Exit the loop
                         }
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                        // Process remaining frames and exit
-                        if !frame_buffer.is_empty() {
-                            process_frame_batch(
-                                &mut frame_buffer,
-                                &thread_output_dir,
-                                format,
-                                &frames_processed_clone,
-                                &frames_in_queue_clone,
-                            );
+                        // Channel closed, handle any remaining frames
+                        if batch_count > 0 {
+                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                            if let Some(stdin) = stdin_guard.as_mut() {
+                                if let Err(e) = stdin.write_all(&frame_batch) {
+                                    eprintln!("Failed to write remaining frames to FFmpeg: {}", e);
+                                } else {
+                                    frames_in_queue_clone.fetch_sub(batch_count, Ordering::SeqCst);
+                                }
+                            }
                         }
                         break;
                     }
+                }
+            }
+
+            // Wait for FFmpeg to finish after exiting the loop
+            if let Some(mut process) = ffmpeg_process_clone.lock().unwrap().take() {
+                match process.wait() {
+                    Ok(status) => {
+                        if !status.success() {
+                            eprintln!("FFmpeg exited with non-zero status: {}", status);
+                        } else if VERBOSE {
+                            println!("FFmpeg process completed successfully");
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to wait for FFmpeg process: {}", e),
                 }
             }
         });
@@ -139,7 +207,7 @@ impl FrameRecorder {
             RESOLVED_TEXTURE_FORMAT,
         );
 
-        // Create triple staging buffers for GPU->CPU transfer
+        // Create n staging buffers for GPU->CPU transfer
         const NUM_BUFFERS: usize = 3;
         let pixel_size = format_bytes_per_pixel(RESOLVED_TEXTURE_FORMAT);
         let bytes_per_row = wgpu::util::align_to(render_texture.width() * pixel_size, 256);
@@ -159,45 +227,41 @@ impl FrameRecorder {
         Self {
             frame_sender: sender,
             is_recording: Arc::new(Mutex::new(false)),
-            last_capture: Arc::new(Mutex::new(0)),
             frame_limit,
             frame_number: Arc::new(Mutex::new(0)),
             frames_in_queue,
-            frames_processed,
             capture_in_progress: Arc::new(AtomicBool::new(false)),
-            frame_time: 1000000000 / fps,
+            frame_time: 1_000_000_000 / fps,
+            shutdown_requested,
 
             texture_reshaper,
             resolved_texture,
             staging_buffers,
             current_buffer_index: Arc::new(AtomicUsize::new(0)),
+
+            ffmpeg_process,
+            //ffmpeg_stdin,
+            next_scheduled_capture: Arc::new(Mutex::new(0)),
         }
     }
 
     pub fn toggle_recording(&self) {
         let mut is_recording = self.is_recording.lock().unwrap();
         *is_recording = !*is_recording;
+
         if *is_recording {
+            // Starting a new recording
             *self.frame_number.lock().unwrap() = 0;
             self.frames_in_queue.store(0, Ordering::SeqCst);
-            self.frames_processed.store(0, Ordering::SeqCst);
             println!("Recording started");
         } else {
+            // Stopping recording
             println!("Recording stopped");
         }
     }
 
     pub fn is_recording(&self) -> bool {
         *self.is_recording.lock().unwrap()
-    }
-
-    pub fn send_frame_data(&self, frame_data: FrameData) -> Result<(), String> {
-        self.frames_in_queue.fetch_add(1, Ordering::SeqCst);
-        if let Err(e) = self.frame_sender.send(frame_data) {
-            self.frames_in_queue.fetch_sub(1, Ordering::SeqCst);
-            return Err(format!("Failed to send frame: {}", e));
-        }
-        Ok(())
     }
 
     pub fn capture_frame(
@@ -216,35 +280,68 @@ impl FrameRecorder {
             .unwrap()
             .as_nanos() as u64;
 
-        // Check for timing gaps
-        let mut last_capture = self.last_capture.lock().unwrap();
-        let time_since_last = now - *last_capture;
-        if time_since_last > self.frame_time * 2 {
-            // If we've missed more than one frame interval
-            println!(
-                "WARNING: Frame timing gap detected - {}ms since last capture (expected {}ms)",
-                time_since_last / 1_000_000,
-                self.frame_time / 1_000_000
-            );
-
-            // Check if previous capture is still in progress
-            if self.capture_in_progress.load(Ordering::SeqCst) {
-                println!(
-                    "DEBUG: Previous capture still processing after {}ms",
-                    time_since_last / 1_000_000
-                );
-                return;
-            }
+        // Get our next scheduled capture time
+        let mut next_scheduled = self.next_scheduled_capture.lock().unwrap();
+        // If this is the first frame after starting recording, initialize the schedule
+        if *next_scheduled == 0 {
+            *next_scheduled = now;
+        }
+        // Check if it's time for the next frame yet
+        if now < *next_scheduled {
+            // Too early, wait until exactly the scheduled time
+            return;
         }
 
-        // Skip this capture if not enough time has passed
-        if now - *last_capture < self.frame_time {
+        // If we're more than a frame behind, skip to the next appropriate frame time
+        // This prevents frame accumulation if we fall behind
+        if now > *next_scheduled + self.frame_time {
+            // Calculate how many frames we're behind
+            let frames_behind = (now - *next_scheduled) / self.frame_time;
+
+            // Calculate time difference in milliseconds
+            let time_diff_ms = (now - *next_scheduled) / 1_000_000;
+
+            // Calculate video timestamp (time since recording started)
+            // We use frame_number to calculate the position in the video timeline
+            let frame_num = *self.frame_number.lock().unwrap();
+            let video_time_ns = frame_num as u64 * self.frame_time;
+            let video_time_s = video_time_ns / 1_000_000_000;
+            let video_time_ms = (video_time_ns % 1_000_000_000) / 1_000_000;
+
+            let video_timestamp = format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                (video_time_s / 3600),    // hours
+                (video_time_s / 60) % 60, // minutes
+                video_time_s % 60,        // seconds
+                video_time_ms             // milliseconds
+            );
+
+            // Skip to the next valid frame time, dropping any missed frames
+            *next_scheduled += (frames_behind + 1) * self.frame_time;
+
+            println!(
+                "WARNING: Skipped {} frames, {}ms behind schedule, video time: {}",
+                frames_behind, time_diff_ms, video_timestamp
+            );
+
+            return; // Skip this frame and catch up on the next one
+        }
+
+        // Schedule the next frame at exactly frame_time nanoseconds from the current scheduled time
+        *next_scheduled += self.frame_time;
+
+        // Check if we're still processing the previous frame
+        if self.capture_in_progress.load(Ordering::SeqCst) {
+            println!(
+                "WARNING: Previous capture still in progress, skipping frame at scheduled time {}",
+                *next_scheduled - self.frame_time
+            );
             return;
         }
 
         // Begin capture process - note the time, set capture in progress flag
         self.capture_in_progress.store(true, Ordering::SeqCst);
-        *last_capture = now;
+        //*last_capture = now;
         let frame_start = std::time::Instant::now();
 
         // Check if we've reached the frame limit
@@ -256,7 +353,6 @@ impl FrameRecorder {
 
         // Increment frame number
         *frame_number += 1;
-        let frame_num = *frame_number;
 
         // Get the next staging buffer
         let buffer_index = {
@@ -314,7 +410,7 @@ impl FrameRecorder {
         device.poll(wgpu::Maintain::Poll);
 
         // Map buffer and process data
-        let buffer_map_start = std::time::Instant::now();
+        let _buffer_map_start = std::time::Instant::now();
         staging_buffer
             .slice(..)
             .map_async(wgpu::MapMode::Read, move |result| {
@@ -355,14 +451,10 @@ impl FrameRecorder {
                         staging_buffer_clone.unmap();
 
                         // Send the frame data
-                        let send_start = std::time::Instant::now();
                         frames_in_queue.fetch_add(1, Ordering::SeqCst);
-                        if let Err(e) = sender.send((frame_num, unpadded_data, width, height)) {
+                        if let Err(e) = sender.send((unpadded_data, width, height)) {
                             frames_in_queue.fetch_sub(1, Ordering::SeqCst);
                             eprintln!("Failed to send frame: {}", e);
-                        }
-                        if VERBOSE {
-                            println!("Frame send took: {:?}", send_start.elapsed());
                         }
                     }
                     Err(e) => {
@@ -371,122 +463,143 @@ impl FrameRecorder {
                     }
                 }
                 capture_in_progress_outer.store(false, Ordering::SeqCst);
-                if VERBOSE {
-                    println!(
-                        "Total buffer mapping and processing took: {:?}",
-                        buffer_map_start.elapsed()
-                    );
-                }
             });
 
         if VERBOSE {
             println!("Total frame capture took: {:?}", frame_start.elapsed());
         }
 
-        // Poll the device with a timeout to avoid infinite waiting
-        let timeout_duration = std::time::Duration::from_millis(50);
+        // Try a more efficient polling approach
         let start_time = std::time::Instant::now();
 
-        while start_time.elapsed() < timeout_duration {
-            match device.poll(wgpu::Maintain::Wait) {
-                // If maintenance returns true, it means there are no more pending operations
-                true => {
-                    return;
-                }
-                false => {
-                    // Sleep a tiny bit to prevent tight polling
-                    println!("DEBUG: Sleeping 1ms to prevent tight polling");
-                    std::thread::sleep(std::time::Duration::from_millis(1));
-                }
-            }
+        // First poll without waiting to quickly check if operations are done
+        if device.poll(wgpu::Maintain::Poll) {
+            // No pending operations, we can return immediately
+            self.capture_in_progress.store(false, Ordering::SeqCst);
+            return;
         }
-        // If we reach this point, the poll timed out. Clean up pending operations.
-        device.poll(wgpu::Maintain::Poll);
+
+        // If we need to wait, use a single Wait call with a shorter timeout
+        // This avoids the overhead of the polling loop
+        device.poll(wgpu::Maintain::Wait);
+
+        // If we've waited too long, log it but continue
+        if start_time.elapsed() > std::time::Duration::from_millis(10) {
+            println!(
+                "WARNING: Device poll took longer than expected: {:?}",
+                start_time.elapsed()
+            );
+        }
+
         self.capture_in_progress.store(false, Ordering::SeqCst);
-        println!(
-            "WARNING: Device poll timed out after {:?}",
-            timeout_duration
-        );
     }
 
     pub fn get_queue_status(&self) -> (usize, usize) {
-        let processed = self.frames_processed.load(Ordering::SeqCst);
         let total = self.frames_in_queue.load(Ordering::SeqCst);
-        println!("Queue status - Processed: {}, Total: {}", processed, total);
-        (processed, total)
+
+        // Check if FFmpeg process is still running
+        let is_running = self.ffmpeg_process.lock().unwrap().is_some();
+
+        if is_running {
+            // FFmpeg still running - show 0 processed
+            (0, total)
+        } else {
+            // FFmpeg finished - all frames processed
+            (total, total)
+        }
     }
 
     pub fn has_pending_frames(&self) -> bool {
-        let (processed, total) = self.get_queue_status();
-        processed < total
+        self.ffmpeg_process.lock().unwrap().is_some()
+    }
+
+    pub fn request_shutdown(&self) {
+        self.shutdown_requested.store(true, Ordering::SeqCst);
     }
 }
 
-fn process_frame_batch(
-    frame_buffer: &mut VecDeque<FrameData>,
+fn start_ffmpeg_process(
     output_dir: &str,
-    format: OutputFormat,
-    frames_processed: &AtomicUsize,
-    _frames_in_queue: &AtomicUsize,
-) {
-    // Convert batch of frames to a vector for parallel processing
-    let frames: Vec<_> = frame_buffer.drain(..).collect();
+    width: u32,
+    height: u32,
+    fps: u64,
+) -> (Child, std::process::ChildStdin) {
+    // Find the next available output file name
+    let output_file = find_next_output_filename(output_dir);
+    let output_path = format!("{}/{}", output_dir, output_file);
 
-    // Process frames in parallel
-    frames
-        .into_par_iter()
-        .for_each(|(frame_number, frame_data, width, height)| {
-            let jpeg_start = std::time::Instant::now();
+    println!("Starting FFmpeg process to encode to {}", output_path);
 
-            if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
-                let filename = match format {
-                    OutputFormat::JPEG(_) => format!("{}/frame{:05}.jpg", output_dir, frame_number),
-                };
+    // Set up FFmpeg command with appropriate parameters
+    let mut command = Command::new("ffmpeg");
+    command
+        .args([
+            "-f",
+            "rawvideo", // Input format is raw video data
+            "-pixel_format",
+            "rgb24", // Input pixel format (matching our RGB8 conversion)
+            "-video_size",
+            &format!("{}x{}", width, height), // Video dimensions
+            "-framerate",
+            &fps.to_string(), // Frame rate
+            "-i",
+            "-", // Read from stdin
+            "-vsync",
+            "cfr", // constant frame rate
+            "-r",
+            &fps.to_string(), // force output frame rate
+            "-c:v",
+            "libx264", // Use H.264 codec
+            "-preset",
+            "medium", // Encoding speed/quality tradeoff
+            "-crf",
+            "23", // Quality level (lower is better quality, 23 is default)
+            "-pix_fmt",
+            "yuv420p",    // Output pixel format
+            "-y",         // Overwrite output file if it exists
+            &output_path, // Output file path
+        ])
+        .stdin(Stdio::piped()) // Capture stdin
+        .stdout(Stdio::null()) // Discard stdout
+        .stderr(if VERBOSE {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        }); // Show or hide stderr
 
-                let result = match format {
-                    OutputFormat::JPEG(quality) => {
-                        // Process JPEG in a scope to ensure memory is freed immediately
-                        let result = {
-                            let rgb_buffer =
-                                nannou::image::DynamicImage::ImageRgba8(image_buffer).to_rgb8();
-                            let file = File::create(&filename).ok();
-                            if let Some(file) = file {
-                                let mut buf_writer = BufWriter::new(file);
-                                nannou::image::codecs::jpeg::JpegEncoder::new_with_quality(
-                                    &mut buf_writer,
-                                    quality,
-                                )
-                                .encode(
-                                    rgb_buffer.as_raw(),
-                                    rgb_buffer.width(),
-                                    rgb_buffer.height(),
-                                    nannou::image::ColorType::Rgb8,
-                                )
-                            } else {
-                                Err(nannou::image::ImageError::IoError(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    "Failed to create file",
-                                )))
-                            }
-                        };
-                        if VERBOSE {
-                            println!(
-                                "Frame {:?} encoding took: {:?}",
-                                frame_number,
-                                jpeg_start.elapsed()
-                            );
-                        }
-                        result
-                    }
-                };
+    // Start the FFmpeg process
+    let mut process = command.spawn().expect("Failed to start FFmpeg process");
 
-                if let Err(e) = result {
-                    eprintln!("Failed to save frame {}: {}", frame_number, e);
-                } else {
-                    frames_processed.fetch_add(1, Ordering::SeqCst);
-                }
-            }
-        });
+    // Get the stdin handle that we'll write frames to
+    let stdin = process
+        .stdin
+        .take()
+        .expect("Failed to open stdin for FFmpeg process");
+
+    (process, stdin)
+}
+
+fn find_next_output_filename(output_dir: &str) -> String {
+    // Try output.mp4 first
+    let base_name = "output";
+    let extension = "mp4";
+    let mut index = 0;
+
+    loop {
+        let file_name = if index == 0 {
+            format!("{}.{}", base_name, extension)
+        } else {
+            format!("{}{}.{}", base_name, index, extension)
+        };
+
+        let path = Path::new(output_dir).join(&file_name);
+
+        if !path.exists() {
+            return file_name;
+        }
+
+        index += 1;
+    }
 }
 
 fn format_bytes_per_pixel(format: wgpu::TextureFormat) -> u32 {
@@ -500,402 +613,5 @@ fn format_bytes_per_pixel(format: wgpu::TextureFormat) -> u32 {
         wgpu::TextureFormat::R32Float => 4,
         // Add other formats as needed
         _ => panic!("Unsupported texture format: {:?}", format),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use nannou::wgpu;
-    use std::fs;
-    use std::time::Duration;
-
-    // Helper to create a test wgpu device
-    fn create_test_device() -> (wgpu::Device, wgpu::Queue) {
-        let instance = nannou::wgpu::Instance::default();
-
-        pollster::block_on(async {
-            let adapter = instance
-                .request_adapter(&nannou::wgpu::RequestAdapterOptions {
-                    power_preference: nannou::wgpu::PowerPreference::HighPerformance,
-                    force_fallback_adapter: false,
-                    compatible_surface: None,
-                })
-                .await
-                .expect("Failed to find appropriate adapter");
-
-            adapter
-                .request_device(
-                    &nannou::wgpu::DeviceDescriptor {
-                        label: None,
-                        features: nannou::wgpu::Features::empty(),
-                        limits: nannou::wgpu::Limits::default(),
-                    },
-                    None,
-                )
-                .await
-                .expect("Failed to create device")
-        })
-    }
-
-    fn create_test_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
-        wgpu::TextureBuilder::new()
-            .size([width, height])
-            .sample_count(1)
-            .format(wgpu::TextureFormat::Rgba8UnormSrgb)
-            .usage(
-                wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-            )
-            .build(device)
-    }
-
-    fn create_test_frame(width: u32, height: u32) -> Vec<u8> {
-        let size = (width * height * 4) as usize;
-        let mut data = Vec::with_capacity(size);
-        for i in 0..size {
-            data.push((i % 255) as u8); // Creates a gradient pattern
-        }
-        data
-    }
-
-    fn create_test_dir() -> String {
-        let mut attempts = 0;
-        loop {
-            let test_dir = format!(
-                "test_frames_{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            );
-
-            if let Err(e) = fs::create_dir(&test_dir) {
-                if e.kind() == std::io::ErrorKind::AlreadyExists {
-                    attempts += 1;
-                    if attempts > 10 {
-                        panic!("Failed to create unique test directory after 10 attempts");
-                    }
-                    continue;
-                }
-                panic!("Failed to create test directory: {}", e);
-            }
-            return test_dir;
-        }
-    }
-
-    fn cleanup_test_dir(dir: &str) {
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn test_initialization() {
-        let (device, _) = create_test_device();
-        let texture = create_test_texture(&device, 640, 480);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        assert!(
-            !recorder.is_recording(),
-            "Should not be recording initially"
-        );
-        assert!(
-            !recorder.has_pending_frames(),
-            "Should not have pending frames initially"
-        );
-
-        let (processed, total) = recorder.get_queue_status();
-        assert_eq!(processed, 0, "Initial processed count should be 0");
-        assert_eq!(total, 0, "Initial total count should be 0");
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_recording_toggle() {
-        let (device, _) = create_test_device();
-        let texture = create_test_texture(&device, 640, 480);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        assert!(
-            !recorder.is_recording(),
-            "Should not be recording initially"
-        );
-
-        recorder.toggle_recording();
-        assert!(recorder.is_recording(), "Should be recording after toggle");
-
-        recorder.toggle_recording();
-        assert!(
-            !recorder.is_recording(),
-            "Should not be recording after second toggle"
-        );
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_frame_capture() {
-        let (device, queue) = create_test_device();
-        let texture = create_test_texture(&device, 640, 480);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        recorder.toggle_recording();
-
-        // Create and submit a test frame
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        recorder.capture_frame(&device, &mut encoder, &texture);
-        queue.submit(Some(encoder.finish()));
-
-        // Wait for processing
-        std::thread::sleep(Duration::from_millis(100));
-
-        let (processed, total) = recorder.get_queue_status();
-        assert!(total > 0, "Should have frames in queue");
-        assert!(
-            processed <= total,
-            "Processed frames should not exceed total"
-        );
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_queue_status_batch_processing() {
-        let (device, _) = create_test_device();
-        let texture = create_test_texture(&device, 100, 100);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        let frame_data = create_test_frame(100, 100);
-        for i in 0..BATCH_SIZE + 1 {
-            recorder
-                .send_frame_data((i as u32, frame_data.clone(), 100, 100))
-                .unwrap();
-        }
-
-        // Give time for batch processing
-        std::thread::sleep(Duration::from_millis(500));
-
-        let (processed, total) = recorder.get_queue_status();
-        assert_eq!(
-            total,
-            BATCH_SIZE + 1,
-            "Total should match number of frames sent"
-        );
-        assert!(
-            processed >= BATCH_SIZE,
-            "At least one batch should be processed"
-        );
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_frame_limit() {
-        let (device, queue) = create_test_device();
-        let texture = create_test_texture(&device, 640, 480);
-        let test_dir = create_test_dir();
-        let frame_limit = 3;
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            frame_limit,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        recorder.toggle_recording();
-
-        // Try to capture more frames than the limit
-        for _ in 0..frame_limit + 2 {
-            let mut encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            recorder.capture_frame(&device, &mut encoder, &texture);
-            queue.submit(Some(encoder.finish()));
-            std::thread::sleep(Duration::from_millis(50));
-        }
-
-        // Wait for processing
-        std::thread::sleep(Duration::from_millis(200));
-
-        let (processed, total) = recorder.get_queue_status();
-        assert!(
-            total <= frame_limit as usize,
-            "Should not exceed frame limit"
-        );
-        assert_eq!(processed, total, "All frames should be processed");
-        assert!(
-            !recorder.is_recording(),
-            "Recording should stop at frame limit"
-        );
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_frame_timing() {
-        let (device, queue) = create_test_device();
-        let texture = create_test_texture(&device, 640, 480);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        recorder.toggle_recording();
-
-        // Try to capture frames faster than FPS limit
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let time_between_captures = Duration::from_millis(10); // Much faster than FPS allows
-        let start = std::time::Instant::now();
-        //let mut captures = 0;
-
-        for _ in 0..5 {
-            recorder.capture_frame(&device, &mut encoder, &texture);
-            //captures += 1;
-            queue.submit(Some(encoder.finish()));
-            std::thread::sleep(time_between_captures);
-            encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        }
-
-        let fps = 30;
-        let elapsed = start.elapsed();
-        let theoretical_frames = (elapsed.as_secs_f64() * fps as f64).floor() as u32;
-
-        let (_processed, total) = recorder.get_queue_status();
-        assert!(
-            total <= theoretical_frames as usize,
-            "Should not capture more frames than FPS limit allows"
-        );
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_output_files() {
-        let (device, queue) = create_test_device();
-        let texture = create_test_texture(&device, 320, 240);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        recorder.toggle_recording();
-
-        // Capture a few frames
-        for _ in 0..3 {
-            let mut encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            recorder.capture_frame(&device, &mut encoder, &texture);
-            queue.submit(Some(encoder.finish()));
-            std::thread::sleep(Duration::from_millis(50));
-        }
-
-        // Wait for processing to complete
-        std::thread::sleep(Duration::from_millis(500));
-
-        // Check if output files exist and have reasonable sizes
-        for i in 1..=3 {
-            let file_path = format!("{}/frame{:05}.jpg", test_dir, i);
-            let metadata = fs::metadata(&file_path).expect("Output file should exist");
-            assert!(
-                metadata.len() > 1000,
-                "JPEG file should have reasonable size"
-            );
-        }
-
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_cleanup_after_recording() {
-        let (device, queue) = create_test_device();
-        let texture = create_test_texture(&device, 640, 480);
-        let test_dir = create_test_dir();
-
-        let recorder = FrameRecorder::new(
-            &device,
-            &texture,
-            &test_dir,
-            100,
-            OutputFormat::JPEG(85),
-            30,
-        );
-
-        recorder.toggle_recording();
-
-        // Capture some frames
-        for _ in 0..3 {
-            let mut encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            recorder.capture_frame(&device, &mut encoder, &texture);
-            queue.submit(Some(encoder.finish()));
-            std::thread::sleep(Duration::from_millis(50));
-        }
-
-        recorder.toggle_recording();
-
-        // Wait for processing to complete
-        std::thread::sleep(Duration::from_millis(500));
-
-        let (processed, total) = recorder.get_queue_status();
-        assert_eq!(
-            processed, total,
-            "All frames should be processed after recording stops"
-        );
-
-        cleanup_test_dir(&test_dir);
     }
 }

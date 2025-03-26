@@ -300,12 +300,30 @@ impl FrameRecorder {
             // Calculate how many frames we're behind
             let frames_behind = (now - *next_scheduled) / self.frame_time;
 
+            // Calculate time difference in milliseconds
+            let time_diff_ms = (now - *next_scheduled) / 1_000_000;
+
+            // Calculate video timestamp (time since recording started)
+            // We use frame_number to calculate the position in the video timeline
+            let frame_num = *self.frame_number.lock().unwrap();
+            let video_time_ns = frame_num as u64 * self.frame_time;
+            let video_time_s = video_time_ns / 1_000_000_000;
+            let video_time_ms = (video_time_ns % 1_000_000_000) / 1_000_000;
+
+            let video_timestamp = format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                (video_time_s / 3600),    // hours
+                (video_time_s / 60) % 60, // minutes
+                video_time_s % 60,        // seconds
+                video_time_ms             // milliseconds
+            );
+
             // Skip to the next valid frame time, dropping any missed frames
             *next_scheduled += (frames_behind + 1) * self.frame_time;
 
             println!(
-                "WARNING: Skipped {} frames, now capturing at scheduled time {}",
-                frames_behind, *next_scheduled
+                "WARNING: Skipped {} frames, {}ms behind schedule, video time: {}",
+                frames_behind, time_diff_ms, video_timestamp
             );
 
             return; // Skip this frame and catch up on the next one

@@ -40,7 +40,7 @@ pub struct FrameRecorder {
 
     // FFmpeg process info
     ffmpeg_process: Arc<Mutex<Option<Child>>>,
-    ffmpeg_stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
+    //ffmpeg_stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
 
     // Synchronization
     next_scheduled_capture: Arc<Mutex<u64>>,
@@ -242,7 +242,7 @@ impl FrameRecorder {
             current_buffer_index: Arc::new(AtomicUsize::new(0)),
 
             ffmpeg_process,
-            ffmpeg_stdin,
+            //ffmpeg_stdin,
             next_scheduled_capture: Arc::new(Mutex::new(0)),
         }
     }

@@ -6,6 +6,7 @@
 use crate::{
     animation::transition::SegmentChange,
     services::SegmentGraph,
+    utilities::segment_analysis,
     views::{CachedGrid, CachedSegment, DrawCommand, GridInstance, SegmentType},
 };
 
@@ -141,7 +142,7 @@ fn group_segments_into_strokes(
                 let neighbor_segment = grid.segments.get(&neighbor).unwrap();
 
                 // add to stroke if types are compatible
-                if are_compatible_segments(current_segment, neighbor_segment) {
+                if segment_analysis::are_compatible_segments(current_segment, neighbor_segment) {
                     queue.push_back(neighbor);
                 }
             }
@@ -149,9 +150,10 @@ fn group_segments_into_strokes(
 
         if !stroke_segments.is_empty() {
             // Determine primary type and start position
-            let primary_type = get_primary_segment_type(&stroke_segments, grid);
-            let start_segment = determine_stroke_start(&stroke_segments, grid, &primary_type);
-            let start_position = get_segment_position(&start_segment, grid);
+            let primary_type = segment_analysis::get_primary_segment_type(&stroke_segments, grid);
+            let start_segment =
+                segment_analysis::determine_stroke_start(&stroke_segments, grid, &primary_type);
+            let start_position = segment_analysis::get_segment_position(&start_segment, grid);
 
             strokes.push(Stroke {
                 segments: stroke_segments,
@@ -163,329 +165,6 @@ fn group_segments_into_strokes(
         }
     }
     strokes
-}
-
-// Check if two segments should be part of the same stroke
-fn are_compatible_segments(seg1: &CachedSegment, seg2: &CachedSegment) -> bool {
-    if seg1.segment_type == seg2.segment_type {
-        return true;
-    }
-
-    // Special handling for arcs that form a circle
-    if is_arc_type(&seg1.segment_type) && is_arc_type(&seg2.segment_type) {
-        // Check if these arcs are adjacent in a circular pattern
-        // For example: ArcTopLeft followed by ArcTopRight forms the top half of a circle
-        match (&seg1.segment_type, &seg2.segment_type) {
-            (SegmentType::ArcTopLeft, SegmentType::ArcTopRight) => return true,
-            (SegmentType::ArcTopRight, SegmentType::ArcBottomRight) => return true,
-            (SegmentType::ArcBottomRight, SegmentType::ArcBottomLeft) => return true,
-            (SegmentType::ArcBottomLeft, SegmentType::ArcTopLeft) => return true,
-            // Also allow the reverse connections
-            (SegmentType::ArcTopRight, SegmentType::ArcTopLeft) => return true,
-            (SegmentType::ArcBottomRight, SegmentType::ArcTopRight) => return true,
-            (SegmentType::ArcBottomLeft, SegmentType::ArcBottomRight) => return true,
-            (SegmentType::ArcTopLeft, SegmentType::ArcBottomLeft) => return true,
-            _ => {}
-        }
-    }
-    // Default
-    false
-}
-
-// Get the most common segment type in a stroke
-fn get_primary_segment_type(segments: &[String], grid: &CachedGrid) -> SegmentType {
-    let mut type_counts: HashMap<SegmentType, usize> = HashMap::new();
-
-    for id in segments {
-        if let Some(segment) = grid.segments.get(id) {
-            *type_counts.entry(segment.segment_type).or_insert(0) += 1;
-        }
-    }
-
-    type_counts
-        .into_iter()
-        .max_by_key(|&(_, count)| count)
-        .map(|(typ, _)| typ)
-        .unwrap_or(SegmentType::Unknown)
-}
-
-// Determine the starting segment for a stroke
-fn determine_stroke_start(
-    segments: &[String],
-    grid: &CachedGrid,
-    primary_type: &SegmentType,
-) -> String {
-    match primary_type {
-        SegmentType::Horizontal => {
-            // For horizontal strokes, start at leftmost
-            segments
-                .iter()
-                .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid).x;
-                    let pos_b = get_segment_position(b, grid).x;
-                    pos_a
-                        .partial_cmp(&pos_b)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap()
-                .clone()
-        }
-        SegmentType::Vertical => {
-            // For vertical strokes, start at topmost
-            segments
-                .iter()
-                .max_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid).y;
-                    let pos_b = get_segment_position(b, grid).y;
-                    pos_a
-                        .partial_cmp(&pos_b)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap()
-                .clone()
-        }
-        SegmentType::ArcTopLeft
-        | SegmentType::ArcTopRight
-        | SegmentType::ArcBottomLeft
-        | SegmentType::ArcBottomRight => {
-            // For arcs, find an appropriate starting point based on type
-            determine_arc_start(segments, grid, primary_type)
-        }
-        SegmentType::Unknown => {
-            // Default to topmost, leftmost
-            segments
-                .iter()
-                .max_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
-                    pos_a
-                        .y
-                        .partial_cmp(&pos_b.y)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then(
-                            pos_a
-                                .x
-                                .partial_cmp(&pos_b.x)
-                                .unwrap_or(std::cmp::Ordering::Equal),
-                        )
-                })
-                .unwrap()
-                .clone()
-        }
-    }
-}
-
-// Get position for a segment (using the starting point)
-fn get_segment_position(segment_id: &str, grid: &CachedGrid) -> Point2 {
-    if let Some(segment) = grid.segments.get(segment_id) {
-        // Use the appropriate point based on segment type
-        match segment.segment_type {
-            SegmentType::Horizontal => find_leftmost_point(&segment.draw_commands),
-            SegmentType::Vertical => find_topmost_point(&segment.draw_commands),
-            SegmentType::ArcTopLeft => find_topmost_point(&segment.draw_commands),
-            SegmentType::ArcTopRight => find_topmost_point(&segment.draw_commands),
-            SegmentType::ArcBottomLeft => find_leftmost_point(&segment.draw_commands),
-            SegmentType::ArcBottomRight => find_rightmost_point(&segment.draw_commands),
-            SegmentType::Unknown => find_average_point(&segment.draw_commands),
-        }
-    } else {
-        Point2::new(0.0, 0.0)
-    }
-}
-
-// Helper functions to find specific points in draw commands
-fn find_leftmost_point(commands: &[DrawCommand]) -> Point2 {
-    let mut leftmost = Point2::new(f32::MAX, 0.0);
-
-    for cmd in commands {
-        match cmd {
-            DrawCommand::Line { start, end } => {
-                if start.x < leftmost.x {
-                    leftmost = *start;
-                }
-                if end.x < leftmost.x {
-                    leftmost = *end;
-                }
-            }
-            DrawCommand::Arc { points } => {
-                for point in points {
-                    if point.x < leftmost.x {
-                        leftmost = *point;
-                    }
-                }
-            }
-            DrawCommand::Circle { center, .. } => {
-                if center.x < leftmost.x {
-                    leftmost = *center;
-                }
-            }
-        }
-    }
-
-    leftmost
-}
-
-// Similarly implement other point-finding functions
-fn find_topmost_point(commands: &[DrawCommand]) -> Point2 {
-    let mut topmost = Point2::new(0.0, f32::MAX);
-
-    for cmd in commands {
-        match cmd {
-            DrawCommand::Line { start, end } => {
-                // Note: Lower y value is higher in screen coordinates
-                if start.y < topmost.y {
-                    topmost = *start;
-                }
-                if end.y < topmost.y {
-                    topmost = *end;
-                }
-            }
-            DrawCommand::Arc { points } => {
-                for point in points {
-                    if point.y < topmost.y {
-                        topmost = *point;
-                    }
-                }
-            }
-            DrawCommand::Circle { center, .. } => {
-                if center.y < topmost.y {
-                    topmost = *center;
-                }
-            }
-        }
-    }
-
-    topmost
-}
-
-fn find_rightmost_point(commands: &[DrawCommand]) -> Point2 {
-    let mut rightmost = Point2::new(f32::MIN, 0.0);
-
-    for cmd in commands {
-        match cmd {
-            DrawCommand::Line { start, end } => {
-                if start.x > rightmost.x {
-                    rightmost = *start;
-                }
-                if end.x > rightmost.x {
-                    rightmost = *end;
-                }
-            }
-            DrawCommand::Arc { points } => {
-                for point in points {
-                    if point.x > rightmost.x {
-                        rightmost = *point;
-                    }
-                }
-            }
-            DrawCommand::Circle { center, .. } => {
-                if center.x > rightmost.x {
-                    rightmost = *center;
-                }
-            }
-        }
-    }
-
-    rightmost
-}
-
-fn find_average_point(commands: &[DrawCommand]) -> Point2 {
-    let mut sum = Point2::new(0.0, 0.0);
-    let mut count = 0;
-
-    for cmd in commands {
-        match cmd {
-            DrawCommand::Line { start, end } => {
-                sum += *start;
-                sum += *end;
-                count += 2;
-            }
-            DrawCommand::Arc { points } => {
-                for point in points {
-                    sum += *point;
-                    count += 1;
-                }
-            }
-            DrawCommand::Circle { center, .. } => {
-                sum += *center;
-                count += 1;
-            }
-        }
-    }
-
-    if count > 0 {
-        sum / count as f32
-    } else {
-        Point2::new(0.0, 0.0)
-    }
-}
-
-// Determine start point for arc segments
-fn determine_arc_start(segments: &[String], grid: &CachedGrid, arc_type: &SegmentType) -> String {
-    // For different arc types, starting points differ
-    match arc_type {
-        SegmentType::ArcTopLeft => {
-            // Start at top for top-left arc
-            segments
-                .iter()
-                .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
-                    pos_a
-                        .y
-                        .partial_cmp(&pos_b.y)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap()
-                .clone()
-        }
-        SegmentType::ArcTopRight => {
-            // Start at top for top-right arc
-            segments
-                .iter()
-                .max_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
-                    pos_a
-                        .y
-                        .partial_cmp(&pos_b.y)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap()
-                .clone()
-        }
-        SegmentType::ArcBottomLeft => {
-            // Start at left for bottom-left arc
-            segments
-                .iter()
-                .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
-                    pos_a
-                        .x
-                        .partial_cmp(&pos_b.x)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap()
-                .clone()
-        }
-        SegmentType::ArcBottomRight => {
-            // Start at right for bottom-right arc
-            segments
-                .iter()
-                .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
-                    pos_a
-                        .x
-                        .partial_cmp(&pos_b.x)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap()
-                .clone()
-        }
-        _ => segments[0].clone(),
-    }
 }
 
 fn order_strokes_with_connections(
@@ -571,8 +250,8 @@ fn sort_connected_strokes(strokes: Vec<&Stroke>) -> Vec<&Stroke> {
     let mut sorted = strokes.clone();
     sorted.sort_by(|a, b| {
         // First prioritize by segment type according to specified order
-        let type_a_priority = get_type_priority(&a.primary_type);
-        let type_b_priority = get_type_priority(&b.primary_type);
+        let type_a_priority = segment_analysis::get_segment_type_priority(&a.primary_type);
+        let type_b_priority = segment_analysis::get_segment_type_priority(&b.primary_type);
 
         if type_a_priority != type_b_priority {
             return type_a_priority.cmp(&type_b_priority);
@@ -601,19 +280,6 @@ fn sort_connected_strokes(strokes: Vec<&Stroke>) -> Vec<&Stroke> {
     sorted
 }
 
-// Helper function to assign priority to segment types
-fn get_type_priority(segment_type: &SegmentType) -> u8 {
-    match segment_type {
-        SegmentType::ArcTopLeft => 1, // Highest priority
-        SegmentType::ArcTopRight => 2,
-        SegmentType::ArcBottomLeft => 3,
-        SegmentType::ArcBottomRight => 4,
-        SegmentType::Horizontal => 5,
-        SegmentType::Vertical => 6,
-        SegmentType::Unknown => 7, // Lowest priority
-    }
-}
-
 fn order_strokes_by_position(
     mut strokes: Vec<Stroke>,
     connections: &HashMap<String, Vec<String>>,
@@ -633,8 +299,18 @@ fn order_strokes_by_position(
         let b_start_tile = grid.segment(&b.start_segment).unwrap().tile_coordinate;
 
         // Determine which quadrant each stroke starts in
-        let a_quadrant = get_quadrant(a_start_tile.0 as f32, a_start_tile.1 as f32, mid_x, mid_y);
-        let b_quadrant = get_quadrant(b_start_tile.0 as f32, b_start_tile.1 as f32, mid_x, mid_y);
+        let a_quadrant = segment_analysis::get_quadrant(
+            a_start_tile.0 as f32,
+            a_start_tile.1 as f32,
+            mid_x,
+            mid_y,
+        );
+        let b_quadrant = segment_analysis::get_quadrant(
+            b_start_tile.0 as f32,
+            b_start_tile.1 as f32,
+            mid_x,
+            mid_y,
+        );
 
         // Rule 1: Quadrant 1 (top-left) before all others
         if a_quadrant == 1 && b_quadrant != 1 {
@@ -693,17 +369,19 @@ fn order_strokes_by_position(
             }
 
             // !Horizontal before any arc
-            (SegmentType::Horizontal, _) if is_arc_type(&b.primary_type) => {
+            (SegmentType::Horizontal, _) if segment_analysis::is_arc_type(&b.primary_type) => {
                 std::cmp::Ordering::Greater
             }
-            (_, SegmentType::Horizontal) if is_arc_type(&a.primary_type) => {
+            (_, SegmentType::Horizontal) if segment_analysis::is_arc_type(&a.primary_type) => {
                 std::cmp::Ordering::Less
             }
             // !Vertical before any arc
-            (SegmentType::Vertical, _) if is_arc_type(&b.primary_type) => {
+            (SegmentType::Vertical, _) if segment_analysis::is_arc_type(&b.primary_type) => {
                 std::cmp::Ordering::Greater
             }
-            (_, SegmentType::Vertical) if is_arc_type(&a.primary_type) => std::cmp::Ordering::Less,
+            (_, SegmentType::Vertical) if segment_analysis::is_arc_type(&a.primary_type) => {
+                std::cmp::Ordering::Less
+            }
 
             // Default equal if no other rule applies
             _ => std::cmp::Ordering::Equal,
@@ -785,7 +463,7 @@ fn identify_connections(strokes: &[Stroke], graph: &SegmentGraph) -> HashMap<Str
         }
 
         // For arcs, also check connections at ALL segments in the stroke
-        if is_arc_type(&stroke.primary_type) {
+        if segment_analysis::is_arc_type(&stroke.primary_type) {
             for segment_id in &stroke.segments {
                 // Skip the end segment which we already processed
                 if segment_id == &stroke.end_segment {
@@ -843,32 +521,6 @@ fn add_connections_from_segment(
             .or_default()
             .extend(connected_stroke_ids);
     }
-}
-
-// Helper function to determine quadrant
-fn get_quadrant(x: f32, y: f32, mid_x: f32, mid_y: f32) -> u8 {
-    if y <= mid_y {
-        if x < mid_x {
-            1 // Top-left
-        } else {
-            2 // Top-right
-        }
-    } else if x < mid_x {
-        3 // Bottom-left
-    } else {
-        4 // Bottom-right
-    }
-}
-
-// Helper function to check if a segment type is an arc
-fn is_arc_type(segment_type: &SegmentType) -> bool {
-    matches!(
-        segment_type,
-        SegmentType::ArcTopLeft
-            | SegmentType::ArcTopRight
-            | SegmentType::ArcBottomLeft
-            | SegmentType::ArcBottomRight
-    )
 }
 
 // Order segments within a stroke in natural writing order
@@ -930,11 +582,11 @@ fn score_next_segment(
     grid: &CachedGrid,
     primary_type: &SegmentType,
 ) -> f32 {
-    let current_pos = get_segment_position(current, grid);
-    let next_pos = get_segment_position(next, grid);
+    let current_pos = segment_analysis::get_segment_position(current, grid);
+    let next_pos = segment_analysis::get_segment_position(next, grid);
 
     // Special handling for arc segments that form a circle
-    if is_arc_type(primary_type) {
+    if segment_analysis::is_arc_type(primary_type) {
         let current_segment = grid.segment(current).unwrap();
         let next_segment = grid.segment(next).unwrap();
 

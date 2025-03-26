@@ -4,7 +4,7 @@
 
 use crate::{
     models::{PathElement, ViewBox},
-    utilities::grid_utility,
+    utilities::grid_init,
     views::grid::grid_generic::ARC_RESOLUTION,
     views::{DrawCommand, Transform2D},
 };
@@ -37,7 +37,7 @@ pub fn generate_draw_commands(
             let end = initial_transform(*end_x, *end_y, viewbox, transform);
 
             // no need to translate b/c rx, ry are relative measures
-            let (center, start_angle, sweep_angle) = grid_utility::calculate_arc_center(
+            let (center, start_angle, sweep_angle) = grid_init::calculate_arc_center(
                 start,
                 end,
                 *rx,
@@ -48,7 +48,7 @@ pub fn generate_draw_commands(
             );
 
             // Calculate all points, scale radii
-            let points = grid_utility::generate_arc_points(
+            let points = grid_init::generate_arc_points(
                 center,
                 *rx * transform.scale,
                 *ry * transform.scale,

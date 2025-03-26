@@ -4,6 +4,12 @@
 // EdgeType: An enum representing the viewbox edges a segment can be
 // PathElement: An enum representing the different types of SVG path element instructions
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Axis {
+    X,
+    Y,
+}
+
 #[derive(Debug, Clone)]
 pub struct ViewBox {
     pub min_x: f32,

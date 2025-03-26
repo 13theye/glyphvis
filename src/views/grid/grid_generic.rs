@@ -26,7 +26,7 @@ use std::time::Instant;
 use crate::{
     models::{EdgeType, PathElement, Project, ViewBox},
     utilities::{
-        easing, grid_utility, segment_utility,
+        easing, grid_init, segment_init,
         svg::{edge_detection, parser},
     },
     views::Transform2D,
@@ -206,10 +206,10 @@ impl CachedSegment {
     ) -> Self {
         // create the transformation to this tile's position
         let tile_transform =
-            segment_utility::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
+            segment_init::calculate_tile_transform(viewbox, tile_coordinate, grid_dims);
 
         // Generate commands with tile transform
-        let draw_commands = segment_utility::generate_draw_commands(path, viewbox, &tile_transform);
+        let draw_commands = segment_init::generate_draw_commands(path, viewbox, &tile_transform);
 
         // Determine SegmentType from PathElement
         let segment_type = match &path {
@@ -228,7 +228,7 @@ impl CachedSegment {
                 end_x,
                 end_y,
                 ..
-            } => grid_utility::classify_arc(start_x, start_y, end_x, end_y),
+            } => grid_init::classify_arc(start_x, start_y, end_x, end_y),
             PathElement::Circle { .. } => SegmentType::Unknown,
         };
 
@@ -439,7 +439,7 @@ pub struct CachedGrid {
 impl CachedGrid {
     pub fn new(project: &Project) -> Self {
         // Parse viewbox from SVG
-        let viewbox = grid_utility::parse_viewbox(&project.svg_base_tile)
+        let viewbox = grid_init::parse_viewbox(&project.svg_base_tile)
             .expect("Failed to parse viewbox from SVG");
 
         // Parse the SVG & create basic grid elements
@@ -659,7 +659,7 @@ fn _purge_overlapping_segments(
         }
 
         // Get potential neighbors based on edge type
-        if let Some((neighbor_x, neighbor_y)) = grid_utility::get_neighbor_coords(
+        if let Some((neighbor_x, neighbor_y)) = grid_init::get_neighbor_coords(
             segment.tile_coordinate.0,
             segment.tile_coordinate.1,
             segment.edge_type,
@@ -677,14 +677,14 @@ fn _purge_overlapping_segments(
                     let mut should_keep = true;
 
                     for neighbor in neighbor_segments {
-                        let direction = grid_utility::get_neighbor_direction(
+                        let direction = grid_init::get_neighbor_direction(
                             segment.tile_coordinate.0,
                             segment.tile_coordinate.1,
                             neighbor_x,
                             neighbor_y,
                         );
 
-                        if grid_utility::check_segment_alignment(segment, neighbor, direction) {
+                        if grid_init::check_segment_alignment(segment, neighbor, direction) {
                             should_keep = false;
                             break;
                         }

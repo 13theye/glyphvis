@@ -40,7 +40,6 @@ pub struct FrameRecorder {
 
     // FFmpeg process info
     ffmpeg_process: Arc<Mutex<Option<Child>>>,
-    //ffmpeg_stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
 
     // Synchronization
     next_scheduled_capture: Arc<Mutex<u64>>,
@@ -61,10 +60,7 @@ impl FrameRecorder {
         let frames_in_queue_clone = frames_in_queue.clone();
 
         let ffmpeg_process = Arc::new(Mutex::new(None));
-        let ffmpeg_stdin = Arc::new(Mutex::new(None));
-
         let ffmpeg_process_clone = ffmpeg_process.clone();
-        let ffmpeg_stdin_clone = ffmpeg_stdin.clone();
 
         let thread_output_dir = output_dir.to_string();
         let thread_fps = fps;
@@ -79,6 +75,8 @@ impl FrameRecorder {
 
         // Spawn worker thread
         std::thread::spawn(move || {
+            let ffmpeg_stdin = Arc::new(Mutex::new(None));
+
             // Add batch handling
             let mut frame_batch = Vec::new();
             let mut batch_count = 0;
@@ -89,7 +87,7 @@ impl FrameRecorder {
                     Ok((frame_data, width, height)) => {
                         // Initialize FFmpeg if needed
                         if batch_count == 0 {
-                            let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
                             if stdin_guard.is_none() {
                                 // Initialize FFmpeg on first frame
                                 let (process, stdin) = start_ffmpeg_process(
@@ -116,7 +114,7 @@ impl FrameRecorder {
                             // Process batch if full
                             if batch_count >= BATCH_SIZE {
                                 // Write batch to FFmpeg as before
-                                let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                                let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
                                 if let Some(stdin) = stdin_guard.as_mut() {
                                     if let Err(e) = stdin.write_all(&frame_batch) {
                                         eprintln!("Failed to write frames to FFmpeg: {}", e);
@@ -135,7 +133,7 @@ impl FrameRecorder {
                         if shutdown_requested_clone.load(Ordering::SeqCst) {
                             // Write any remaining frames in the batch
                             if batch_count > 0 {
-                                let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                                let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
                                 if let Some(stdin) = stdin_guard.as_mut() {
                                     if let Err(e) = stdin.write_all(&frame_batch) {
                                         eprintln!(
@@ -150,14 +148,14 @@ impl FrameRecorder {
                             }
 
                             // Close the FFmpeg stdin stream to signal end of input
-                            drop(ffmpeg_stdin_clone.lock().unwrap().take());
+                            drop(ffmpeg_stdin.lock().unwrap().take());
                             break; // Exit the loop
                         }
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                         // Channel closed, handle any remaining frames
                         if batch_count > 0 {
-                            let mut stdin_guard = ffmpeg_stdin_clone.lock().unwrap();
+                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
                             if let Some(stdin) = stdin_guard.as_mut() {
                                 if let Err(e) = stdin.write_all(&frame_batch) {
                                     eprintln!("Failed to write remaining frames to FFmpeg: {}", e);

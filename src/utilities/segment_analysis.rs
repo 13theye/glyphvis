@@ -311,7 +311,7 @@ pub fn get_primary_segment_type(segments: &[String], grid: &CachedGrid) -> Segme
 }
 
 /// Get segment position based on segment type
-pub fn get_segment_position(segment_id: &str, grid: &CachedGrid) -> Point2 {
+pub fn get_segment_start_point(segment_id: &str, grid: &CachedGrid) -> Point2 {
     if let Some(segment) = grid.segments.get(segment_id) {
         // Use the appropriate point based on segment type
         match segment.segment_type {
@@ -516,8 +516,8 @@ pub fn determine_stroke_start(
             segments
                 .iter()
                 .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid).x;
-                    let pos_b = get_segment_position(b, grid).x;
+                    let pos_a = get_segment_start_point(a, grid).x;
+                    let pos_b = get_segment_start_point(b, grid).x;
                     pos_a
                         .partial_cmp(&pos_b)
                         .unwrap_or(std::cmp::Ordering::Equal)
@@ -530,8 +530,8 @@ pub fn determine_stroke_start(
             segments
                 .iter()
                 .max_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid).y;
-                    let pos_b = get_segment_position(b, grid).y;
+                    let pos_a = get_segment_start_point(a, grid).y;
+                    let pos_b = get_segment_start_point(b, grid).y;
                     pos_a
                         .partial_cmp(&pos_b)
                         .unwrap_or(std::cmp::Ordering::Equal)
@@ -551,8 +551,8 @@ pub fn determine_stroke_start(
             segments
                 .iter()
                 .max_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
+                    let pos_a = get_segment_start_point(a, grid);
+                    let pos_b = get_segment_start_point(b, grid);
                     pos_a
                         .y
                         .partial_cmp(&pos_b.y)
@@ -583,8 +583,8 @@ pub fn determine_arc_start(
             segments
                 .iter()
                 .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
+                    let pos_a = get_segment_start_point(a, grid);
+                    let pos_b = get_segment_start_point(b, grid);
                     pos_a
                         .y
                         .partial_cmp(&pos_b.y)
@@ -598,8 +598,8 @@ pub fn determine_arc_start(
             segments
                 .iter()
                 .max_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
+                    let pos_a = get_segment_start_point(a, grid);
+                    let pos_b = get_segment_start_point(b, grid);
                     pos_a
                         .y
                         .partial_cmp(&pos_b.y)
@@ -613,8 +613,8 @@ pub fn determine_arc_start(
             segments
                 .iter()
                 .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
+                    let pos_a = get_segment_start_point(a, grid);
+                    let pos_b = get_segment_start_point(b, grid);
                     pos_a
                         .x
                         .partial_cmp(&pos_b.x)
@@ -628,8 +628,8 @@ pub fn determine_arc_start(
             segments
                 .iter()
                 .min_by(|a, b| {
-                    let pos_a = get_segment_position(a, grid);
-                    let pos_b = get_segment_position(b, grid);
+                    let pos_a = get_segment_start_point(a, grid);
+                    let pos_b = get_segment_start_point(b, grid);
                     pos_a
                         .x
                         .partial_cmp(&pos_b.x)
@@ -702,8 +702,8 @@ pub fn score_segment_flow(
     grid: &CachedGrid,
     primary_type: &SegmentType,
 ) -> f32 {
-    let current_pos = get_segment_position(current_id, grid);
-    let next_pos = get_segment_position(next_id, grid);
+    let current_pos = get_segment_start_point(current_id, grid);
+    let next_pos = get_segment_start_point(next_id, grid);
 
     // Special handling for arc segments that form a circle
     if is_arc_type(primary_type) {

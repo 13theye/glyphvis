@@ -5,6 +5,7 @@
 use crate::{
     models::{Axis, EdgeType, PathElement},
     services::SegmentGraph,
+    utilities::segment_analysis,
     views::{
         CachedGrid, CachedSegment, DrawCommand, DrawStyle, GridInstance, SegmentAction,
         SegmentType, StyleUpdateMsg, Transform2D,
@@ -22,6 +23,7 @@ pub struct StretchEffect {
     pub stretch_segments: HashMap<String, CachedSegment>,
     pub last_applied_amount: f32,
     pub interpolation_speed: f32,
+    pub boundary_intersections: Vec<Vec<(Point2, Vec<String>)>>, // Cache boundary intersections
 }
 
 impl StretchEffect {
@@ -34,6 +36,7 @@ impl StretchEffect {
             stretch_segments: HashMap::new(),
             last_applied_amount: 0.0,
             interpolation_speed: 1.0 / 60.0,
+            boundary_intersections: Vec::new(),
         }
     }
 
@@ -77,26 +80,23 @@ impl StretchEffect {
             return style_updates;
         }
 
-        // Save current amount as laste applied
+        // Save current amount as last applied
         self.last_applied_amount = self.current_amount;
 
-        let grid = &mut grid_instance.grid;
-        let graph = &grid_instance.graph;
-
         // 1. Calculate displacements for each column/row
-        let displacements = self.calculate_displacements(grid.dimensions);
+        let displacements = self.calculate_displacements(grid_instance.grid.dimensions);
 
-        // 2. Apply displacements to reposition existing segments;
-        self.reposition_grid(grid, &displacements);
+        // 2. Update or find boundary intersections if needed
+        if self.boundary_intersections.is_empty() {
+            // Only find intersections once - they stay the same throughout animation
+            self.find_boundary_intersections(&grid_instance.grid, &grid_instance.graph);
+        }
 
-        // 3. Find boundary intersections using the graph
-        let boundary_intersections = self.find_boundary_intersections(grid, graph);
-
-        // 4. Create/update stretch segments
+        // 3. Create/update stretch segments
         self.stretch_segments.clear();
 
-        for (boundary_idx, intersections) in boundary_intersections.iter().enumerate() {
-            for point in intersections {
+        for (boundary_idx, intersections) in self.boundary_intersections.iter().enumerate() {
+            for (point, connected_segments) in intersections {
                 let segment_id = match self.axis {
                     Axis::X => format!(
                         "stretch-x-{}-{}",
@@ -112,13 +112,17 @@ impl StretchEffect {
 
                 if self.current_amount > 0.0 {
                     // Create stretch segment
-                    let segment = self.create_stretch_segment(grid, boundary_idx + 1, *point);
+                    let segment =
+                        self.create_stretch_segment(&grid_instance.grid, boundary_idx + 1, *point);
                     self.stretch_segments
                         .insert(segment_id.clone(), segment.clone());
-                    grid.segments.insert(segment_id.clone(), segment);
+                    grid_instance
+                        .grid
+                        .segments
+                        .insert(segment_id.clone(), segment);
 
                     // Determine style (active or backbone)
-                    let is_active = self.is_intersection_active(grid_instance, *point);
+                    let is_active = self.is_intersection_active(grid_instance, connected_segments);
 
                     if is_active {
                         style_updates.insert(
@@ -141,22 +145,27 @@ impl StretchEffect {
             }
         }
 
+        // 4. Apply transform at the GridInstance level
+        // Generate a transform for each column/row based on displacements
+        let transforms = self.generate_transforms(displacements);
+        self.apply_transforms_to_grid_instance(grid_instance, &transforms);
+
         // 5. Remove old stretch segments not in the current set
         let mut to_remove = Vec::new();
-        for (id, _) in &grid.segments {
+        for (id, _) in &grid_instance.grid.segments {
             if id.starts_with("stretch-") && !self.stretch_segments.contains_key(id) {
                 to_remove.push(id.clone());
             }
         }
 
         for id in to_remove {
-            grid.segments.remove(&id);
+            grid_instance.grid.segments.remove(&id);
         }
 
         style_updates
     }
 
-    // reset the grid by removing stretch segments and positioning original segments
+    // Reset the grid by removing stretch segments and repositioning original segments
     pub fn reset(&mut self, grid_instance: &mut GridInstance) {
         self.current_amount = 0.0;
         self.target_amount = 0.0;
@@ -178,28 +187,108 @@ impl StretchEffect {
         displacements
     }
 
-    fn reposition_grid(&self, grid: &mut CachedGrid, displacements: &[f32]) {
-        todo!();
+    // Generate Transform2D objects for each column/row
+    fn generate_transforms(&self, displacements: Vec<f32>) -> HashMap<u32, Transform2D> {
+        let mut transforms = HashMap::new();
+
+        for (idx, displacement) in displacements.iter().enumerate() {
+            let position = idx as u32;
+
+            // Create transform with appropriate translation
+            let transform = match self.axis {
+                Axis::X => Transform2D {
+                    translation: Vec2::new(*displacement, 0.0),
+                    scale: 1.0,
+                    rotation: 0.0,
+                },
+                Axis::Y => Transform2D {
+                    translation: Vec2::new(0.0, *displacement),
+                    scale: 1.0,
+                    rotation: 0.0,
+                },
+            };
+
+            transforms.insert(position, transform);
+        }
+
+        transforms
     }
 
-    fn find_boundary_intersections(
+    // Apply transforms to segments based on their position
+    fn apply_transforms_to_grid_instance(
         &self,
-        grid: &CachedGrid,
-        graph: &SegmentGraph,
-    ) -> Vec<Vec<Point2>> {
-        todo!();
+        grid_instance: &mut GridInstance,
+        transforms: &HashMap<u32, Transform2D>,
+    ) {
+        // Reset all segments to base positions first
+        grid_instance.reset_segment_positions();
+
+        // Apply transforms to segments based on their position
+        for segment in grid_instance.grid.segments.values_mut() {
+            // Skip stretch segments (they'll be positioned correctly when created)
+            if segment.id.starts_with("stretch-") {
+                continue;
+            }
+
+            let (col, row) = segment.tile_coordinate;
+
+            let transform_idx = match self.axis {
+                Axis::X => col,
+                Axis::Y => row,
+            };
+
+            if let Some(transform) = transforms.get(&transform_idx) {
+                segment.apply_transform(transform);
+            }
+        }
     }
 
-    fn find_command_x_intersection(
+    fn find_boundary_intersections(&mut self, grid: &CachedGrid, graph: &SegmentGraph) {
+        let mut all_intersections = Vec::new();
+
+        match self.axis {
+            Axis::X => {
+                // For each vertical boundary
+                for boundary_x in 1..grid.dimensions.0 {
+                    // Use the segment_analysis utility function
+                    let boundary_intersections =
+                        segment_analysis::find_x_boundary_intersections(grid, graph, boundary_x);
+                    all_intersections.push(boundary_intersections);
+                }
+            }
+            Axis::Y => {
+                // For each horizontal boundary
+                for boundary_y in 1..grid.dimensions.1 {
+                    // Use the segment_analysis utility function
+                    let boundary_intersections =
+                        segment_analysis::find_y_boundary_intersections(grid, graph, boundary_y);
+                    all_intersections.push(boundary_intersections);
+                }
+            }
+        }
+
+        self.boundary_intersections = all_intersections;
+    }
+
+    // Check if any of the connected segments are active or targeted
+    fn is_intersection_active(
         &self,
-        command: &DrawCommand,
-        boundary_x: f32,
-    ) -> Option<Point2> {
-        todo!();
-    }
+        grid_instance: &GridInstance,
+        connected_segments: &[String],
+    ) -> bool {
+        for segment_id in connected_segments {
+            if grid_instance.current_active_segments.contains(segment_id) {
+                return true;
+            }
 
-    fn is_intersection_active(&self, grid_instance: &GridInstance, point: Point2) -> bool {
-        todo!();
+            if let Some(target_segments) = &grid_instance.target_segments {
+                if target_segments.contains(segment_id) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     fn create_stretch_segment(
@@ -208,6 +297,51 @@ impl StretchEffect {
         boundary_idx: u32,
         point: Point2,
     ) -> CachedSegment {
-        todo!();
+        match self.axis {
+            Axis::X => {
+                // Calculate position based on boundary
+                let tile_x = boundary_idx;
+                let tile_y =
+                    ((point.y / grid.viewbox.height) * grid.dimensions.1 as f32).ceil() as u32;
+
+                let path = PathElement::Line {
+                    x1: point.x,
+                    y1: point.y,
+                    x2: point.x + self.current_amount,
+                    y2: point.y,
+                };
+
+                CachedSegment::new(
+                    format!("stretch-x-{}-{}", boundary_idx, (point.y * 100.0) as u32),
+                    (tile_x, tile_y),
+                    &path,
+                    EdgeType::None,
+                    &grid.viewbox,
+                    grid.dimensions,
+                )
+            }
+            Axis::Y => {
+                // Calculate position based on boundary
+                let tile_x =
+                    ((point.x / grid.viewbox.width) * grid.dimensions.0 as f32).ceil() as u32;
+                let tile_y = boundary_idx;
+
+                let path = PathElement::Line {
+                    x1: point.x,
+                    y1: point.y,
+                    x2: point.x,
+                    y2: point.y + self.current_amount,
+                };
+
+                CachedSegment::new(
+                    format!("stretch-y-{}-{}", (point.x * 100.0) as u32, boundary_idx),
+                    (tile_x, tile_y),
+                    &path,
+                    EdgeType::None,
+                    &grid.viewbox,
+                    grid.dimensions,
+                )
+            }
+        }
     }
 }

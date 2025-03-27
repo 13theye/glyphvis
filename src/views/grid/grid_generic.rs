@@ -111,7 +111,7 @@ impl Default for DrawStyle {
     fn default() -> Self {
         Self {
             color: rgba(0.82, 0.0, 0.14, 1.0),
-            stroke_weight: 5.1,
+            stroke_weight: 10.0,
         }
     }
 }

@@ -22,6 +22,7 @@ struct Stroke {
     start_position: Point2,
 }
 
+// this function works but the internal logic needs cleaning up.
 pub fn generate_stroke_order(
     grid_instance: &GridInstance,
     start_segments: &HashSet<String>,
@@ -153,7 +154,7 @@ fn group_segments_into_strokes(
             let primary_type = segment_analysis::get_primary_segment_type(&stroke_segments, grid);
             let start_segment =
                 segment_analysis::determine_stroke_start(&stroke_segments, grid, &primary_type);
-            let start_position = segment_analysis::get_segment_position(&start_segment, grid);
+            let start_position = segment_analysis::get_segment_start_point(&start_segment, grid);
 
             strokes.push(Stroke {
                 segments: stroke_segments,
@@ -582,8 +583,8 @@ fn score_next_segment(
     grid: &CachedGrid,
     primary_type: &SegmentType,
 ) -> f32 {
-    let current_pos = segment_analysis::get_segment_position(current, grid);
-    let next_pos = segment_analysis::get_segment_position(next, grid);
+    let current_pos = segment_analysis::get_segment_start_point(current, grid);
+    let next_pos = segment_analysis::get_segment_start_point(next, grid);
 
     // Special handling for arc segments that form a circle
     if segment_analysis::is_arc_type(primary_type) {

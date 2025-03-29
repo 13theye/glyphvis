@@ -175,7 +175,7 @@ impl FrameRecorder {
 
         loop {
             // Use recv_timeout to allow checking for shutdown
-            match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+            match receiver.recv_timeout(std::time::Duration::from_millis(50)) {
                 Ok((frame_data, width, height)) => {
                     // Initialize FFmpeg if needed
                     if batch_count == 0 {
@@ -189,7 +189,7 @@ impl FrameRecorder {
                         }
                     }
 
-                    // Convert RGBA to RGB and add to batch as before
+                    // Convert RGBA to RGB and add to batch
                     if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
                         let rgb_buffer =
                             nannou::image::DynamicImage::ImageRgba8(image_buffer).to_rgb8();
@@ -200,7 +200,7 @@ impl FrameRecorder {
 
                         // Process batch if full
                         if batch_count >= BATCH_SIZE {
-                            // Write batch to FFmpeg as before
+                            // Write batch to FFmpeg
                             let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
                             if let Some(stdin) = stdin_guard.as_mut() {
                                 if let Err(e) = stdin.write_all(&frame_batch) {
@@ -257,7 +257,7 @@ impl FrameRecorder {
                 Ok(status) => {
                     if !status.success() {
                         eprintln!("FFmpeg exited with non-zero status: {}", status);
-                    } else if VERBOSE {
+                    } else {
                         println!("FFmpeg process completed successfully");
                     }
                 }
@@ -301,7 +301,6 @@ impl FrameRecorder {
     fn terminate_worker_thread(worker: WorkerThread) {
         // Request thread to shut down
         worker.shutdown_requested.store(true, Ordering::SeqCst);
-
         if let Err(e) = worker.thread_handle.join() {
             eprintln!("Error joining worker thread: {:?}", e);
         }

@@ -27,6 +27,7 @@ struct WorkerThread {
     thread_handle: JoinHandle<()>,
     frame_sender: Sender<FrameData>,
     shutdown_requested: Arc<AtomicBool>,
+    thread_completed: Arc<AtomicBool>,
     frames_in_queue: Arc<AtomicUsize>,
 
     // FFmpeg process info
@@ -128,6 +129,7 @@ impl FrameRecorder {
         let frames_in_queue = Arc::new(AtomicUsize::new(0));
         let ffmpeg_process = Arc::new(Mutex::new(None));
         let shutdown_requested = Arc::new(AtomicBool::new(false));
+        let thread_completed = Arc::new(AtomicBool::new(false));
 
         let (sender, receiver) = channel();
 
@@ -137,6 +139,7 @@ impl FrameRecorder {
         let frames_in_queue_clone = frames_in_queue.clone();
         let ffmpeg_process_clone = ffmpeg_process.clone();
         let shutdown_requested_clone = shutdown_requested.clone();
+        let thread_completed_clone = thread_completed.clone();
 
         // Spawn worker thread
         let thread_handle = thread::spawn(move || {
@@ -147,6 +150,7 @@ impl FrameRecorder {
                 frames_in_queue_clone,
                 ffmpeg_process_clone,
                 shutdown_requested_clone,
+                thread_completed_clone,
             );
         });
 
@@ -155,6 +159,7 @@ impl FrameRecorder {
             frame_sender: sender,
             shutdown_requested,
             frames_in_queue,
+            thread_completed,
             ffmpeg_process,
         }
     }
@@ -166,6 +171,7 @@ impl FrameRecorder {
         frames_in_queue: Arc<AtomicUsize>,
         ffmpeg_process: Arc<Mutex<Option<Child>>>,
         shutdown_requested: Arc<AtomicBool>,
+        thread_completed: Arc<AtomicBool>,
     ) {
         let ffmpeg_stdin = Arc::new(Mutex::new(None));
 
@@ -264,6 +270,8 @@ impl FrameRecorder {
                 Err(e) => eprintln!("Failed to wait for FFmpeg process: {}", e),
             }
         }
+        thread_completed.store(true, Ordering::SeqCst);
+        println!("FFmpeg worker thread finished");
     }
 
     pub fn toggle_recording(&self) {
@@ -271,12 +279,15 @@ impl FrameRecorder {
         *is_recording = !*is_recording;
 
         if *is_recording {
-            // Starting a new recording
+            // Starting a new recording - clean up any completed worker first
+            self.cleanup_completed_worker();
+
             let mut worker_thread_guard = self.worker_thread.lock().unwrap();
 
-            // if already worker thread, terminate it
-            if let Some(worker) = worker_thread_guard.take() {
-                Self::terminate_worker_thread(worker);
+            // If there's an existing worker thread, just signal it to shut down
+            // We'll clean it up later when it's done
+            if let Some(worker) = worker_thread_guard.as_ref() {
+                Self::request_worker_shutdown(worker);
             }
 
             // Create new worker thread
@@ -287,22 +298,58 @@ impl FrameRecorder {
             *self.next_scheduled_capture.lock().unwrap() = 0;
             println!("Recording started");
         } else {
-            // Stopping recording
+            // Stopping recording - just signal the worker to shut down
             println!("Recording stopped");
-
-            // Shut down worker thread
-            let mut worker_thread_guard = self.worker_thread.lock().unwrap();
-            if let Some(worker) = worker_thread_guard.take() {
-                Self::terminate_worker_thread(worker);
-            }
+            self.signal_shutdown();
         }
     }
 
-    fn terminate_worker_thread(worker: WorkerThread) {
-        // Request thread to shut down
+    fn request_worker_shutdown(worker: &WorkerThread) {
         worker.shutdown_requested.store(true, Ordering::SeqCst);
-        if let Err(e) = worker.thread_handle.join() {
-            eprintln!("Error joining worker thread: {:?}", e);
+    }
+
+    pub fn request_shutdown(&self) {
+        self.signal_shutdown();
+    }
+
+    pub fn signal_shutdown(&self) -> bool {
+        let worker_thread_guard = self.worker_thread.lock().unwrap();
+
+        // If there's a worker thread, signal it to shut down
+        if let Some(worker) = worker_thread_guard.as_ref() {
+            worker.shutdown_requested.store(true, Ordering::SeqCst);
+            return true; // Worker exists and was signaled
+        }
+
+        false // No worker thread to signal
+    }
+
+    pub fn is_worker_completed(&self) -> bool {
+        let worker_thread_guard = self.worker_thread.lock().unwrap();
+
+        match worker_thread_guard.as_ref() {
+            Some(worker) => {
+                // Check if thread has marked itself as completed
+                worker.thread_completed.load(Ordering::SeqCst)
+            }
+            None => true, // No worker means "completed"
+        }
+    }
+
+    pub fn cleanup_completed_worker(&self) {
+        let mut worker_thread_guard = self.worker_thread.lock().unwrap();
+
+        if let Some(worker) = worker_thread_guard.as_ref() {
+            if worker.thread_completed.load(Ordering::SeqCst) {
+                // Thread is done, we can safely take and drop it
+                let completed_worker = worker_thread_guard.take();
+
+                // Drop the worker thread - this will join the thread but it's already
+                // completed so it won't block
+                drop(completed_worker);
+
+                println!("Worker thread cleanup complete");
+            }
         }
     }
 
@@ -574,17 +621,12 @@ impl FrameRecorder {
         let worker_thread_guard = self.worker_thread.lock().unwrap();
 
         match worker_thread_guard.as_ref() {
-            Some(worker) => worker.ffmpeg_process.lock().unwrap().is_some(),
+            Some(worker) => {
+                // Thread exists - check if still processing
+                worker.ffmpeg_process.lock().unwrap().is_some()
+                    || !worker.thread_completed.load(Ordering::SeqCst)
+            }
             None => false, // No worker thread, no pending frames
-        }
-    }
-
-    pub fn request_shutdown(&self) {
-        let mut worker_thread_guard = self.worker_thread.lock().unwrap();
-
-        // If there's an existing worker thread, ensure it's terminated properly
-        if let Some(worker) = worker_thread_guard.take() {
-            Self::terminate_worker_thread(worker);
         }
     }
 }

@@ -16,6 +16,7 @@ use glyphvis::{
     services::FrameRecorder,
     views::{BackgroundManager, DrawStyle, GridInstance},
 };
+use std::io::{self, Write};
 
 struct Model {
     // Data from the Project file including all Glyph definitions
@@ -212,6 +213,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Handle the background
     model.background.draw(&model.draw, app.time);
 
+    model.frame_recorder.cleanup_completed_worker();
+
     // Frames processing progress bar:
     if model.exit_requested {
         handle_exit_state(app, model);
@@ -325,11 +328,17 @@ fn render_and_capture(app: &App, model: &mut Model) {
 
 fn handle_exit_state(app: &App, model: &mut Model) {
     if model.frame_recorder.has_pending_frames() {
-        println!("Finishing video processing...");
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        // Show progress information to the user
+        print!(".");
+        io::stdout().flush().unwrap();
+        let (_, total) = model.frame_recorder.get_queue_status();
+        if total > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     } else {
+        // Worker thread has completed - safe to quit
         println!("Video processing complete.");
-        app.quit(); // quit only once all frames are processed
+        app.quit();
     }
 }
 
@@ -538,9 +547,10 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         }
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {
-            model.frame_recorder.request_shutdown();
+            model.frame_recorder.signal_shutdown();
             model.exit_requested = true;
-            println!("Shutdown requested");
+            println!("\nShutdown requested.");
+            println!("Waiting for any recording threads to finish...")
         }
         _ => (),
     }

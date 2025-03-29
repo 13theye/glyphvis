@@ -16,7 +16,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-const BATCH_SIZE: usize = 600;
+const BATCH_SIZE: usize = 10;
 const RESOLVED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const VERBOSE: bool = false; // true to show debug msgs
 
@@ -302,12 +302,9 @@ impl FrameRecorder {
         // Request thread to shut down
         worker.shutdown_requested.store(true, Ordering::SeqCst);
 
-        // Let the thread to finish without blocking main
-        thread::spawn(move || {
-            if let Err(e) = worker.thread_handle.join() {
-                eprintln!("Error joining worker thread: {:?}", e);
-            }
-        });
+        if let Err(e) = worker.thread_handle.join() {
+            eprintln!("Error joining worker thread: {:?}", e);
+        }
     }
 
     pub fn is_recording(&self) -> bool {

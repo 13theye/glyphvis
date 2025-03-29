@@ -226,21 +226,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     // Handle FPS and origin display
     if model.debug_flag {
-        // Draw (+,+) axes
-        let draw = &model.draw;
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(50.0, 0.0))
-            .color(RED)
-            .stroke_weight(1.0);
-        draw.line()
-            .points(pt2(0.0, 0.0), pt2(0.0, 50.0))
-            .color(BLUE)
-            .stroke_weight(1.0);
-
-        // Visualize FPS (Optional)
-        draw.text(&format!("FPS: {:.1}", model.fps))
-            .x_y(1100.0, 290.0)
-            .color(RED);
+        draw_fps(model);
     }
 
     // Render to texture and handle frame recording
@@ -258,6 +244,26 @@ fn view(_app: &App, model: &Model, frame: Frame) {
     model
         .texture_reshaper
         .encode_render_pass(frame.texture_view(), &mut encoder);
+}
+
+// ************************ FPS and debug display  *************************************
+
+fn draw_fps(model: &Model) {
+    let draw = &model.draw;
+    // Draw (+,+) axes
+    draw.line()
+        .points(pt2(0.0, 0.0), pt2(50.0, 0.0))
+        .color(RED)
+        .stroke_weight(1.0);
+    draw.line()
+        .points(pt2(0.0, 0.0), pt2(0.0, 50.0))
+        .color(BLUE)
+        .stroke_weight(1.0);
+
+    // Visualize FPS (Optional)
+    draw.text(&format!("FPS: {:.1}", model.fps))
+        .x_y(1100.0, 290.0)
+        .color(RED);
 }
 
 // ************************ Multi-grid style coordination  *****************************
@@ -319,73 +325,12 @@ fn render_and_capture(app: &App, model: &mut Model) {
 
 fn handle_exit_state(app: &App, model: &mut Model) {
     if model.frame_recorder.has_pending_frames() {
-        draw_progress_screen(app, model);
+        println!("Finishing video processing...");
         std::thread::sleep(std::time::Duration::from_millis(200));
     } else {
         println!("Video processing complete.");
         app.quit(); // quit only once all frames are processed
     }
-}
-
-fn draw_progress_screen(app: &App, model: &mut Model) {
-    // Clear the window and show progress
-    let draw = &model.draw;
-    draw.background().color(BLACK);
-
-    let (processed, total) = model.frame_recorder.get_queue_status();
-
-    // Draw progress text with updated wording
-    let text = if processed >= total {
-        "Video processing complete."
-    } else {
-        "Processing video..."
-    };
-    draw.text(text).color(WHITE).font_size(32).x_y(0.0, 50.0);
-
-    // Draw progress bar
-    let progress = processed as f32 / total as f32;
-    draw_progress_bar(draw, progress);
-
-    // Render progress screen
-    render_progress(app, model);
-}
-
-fn draw_progress_bar(draw: &Draw, progress: f32) {
-    let bar_width = 400.0;
-    let bar_height = 30.0;
-
-    // Background bar
-    draw.rect()
-        .color(GRAY)
-        .w_h(bar_width, bar_height)
-        .x_y(0.0, -50.0);
-
-    // Progress bar
-    draw.rect()
-        .color(GREEN)
-        .w_h(bar_width * progress, bar_height)
-        .x_y(-bar_width / 2.0 + (bar_width * progress) / 2.0, -50.0);
-}
-
-fn render_progress(app: &App, model: &mut Model) {
-    let window = app.main_window();
-    let device = window.device();
-    let ce_desc = wgpu::CommandEncoderDescriptor {
-        label: Some("Progress renderer"),
-    };
-    let mut encoder = device.create_command_encoder(&ce_desc);
-    let texture_view = model.texture.view().build();
-
-    model.draw_renderer.encode_render_pass(
-        device,
-        &mut encoder,
-        &model.draw,
-        2.0,
-        model.texture.size(),
-        &texture_view,
-        None,
-    );
-    window.queue().submit(Some(encoder.finish()));
 }
 
 // ******************************* Keyboard Input *******************************

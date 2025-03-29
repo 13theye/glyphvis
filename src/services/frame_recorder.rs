@@ -10,9 +10,10 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        mpsc::{channel, Sender},
+        mpsc::{channel, Receiver, Sender},
         Arc, Mutex,
     },
+    thread::{self, JoinHandle},
 };
 
 const BATCH_SIZE: usize = 10;
@@ -22,24 +23,32 @@ const VERBOSE: bool = false; // true to show debug msgs
 // Type alias for the frame data tuple
 type FrameData = (Vec<u8>, u32, u32);
 
-pub struct FrameRecorder {
+struct WorkerThread {
+    thread_handle: JoinHandle<()>,
     frame_sender: Sender<FrameData>,
+    shutdown_requested: Arc<AtomicBool>,
+    frames_in_queue: Arc<AtomicUsize>,
+
+    // FFmpeg process info
+    ffmpeg_process: Arc<Mutex<Option<Child>>>,
+}
+
+pub struct FrameRecorder {
+    worker_thread: Arc<Mutex<Option<WorkerThread>>>,
+
     is_recording: Arc<Mutex<bool>>,
     frame_limit: u32,
     frame_number: Arc<Mutex<u32>>,
-    frames_in_queue: Arc<AtomicUsize>,
     capture_in_progress: Arc<AtomicBool>,
     frame_time: u64,
-    shutdown_requested: Arc<AtomicBool>,
+    output_dir: String,
+    fps: u64,
 
     // capture pipeline
     texture_reshaper: wgpu::TextureReshaper,
     resolved_texture: wgpu::Texture, // for MSAA resolution
     staging_buffers: Vec<Arc<wgpu::Buffer>>,
     current_buffer_index: Arc<AtomicUsize>,
-
-    // FFmpeg process info
-    ffmpeg_process: Arc<Mutex<Option<Child>>>,
 
     // Synchronization
     next_scheduled_capture: Arc<Mutex<u64>>,
@@ -55,134 +64,6 @@ impl FrameRecorder {
     ) -> Self {
         // Ensure output directory exists
         std::fs::create_dir_all(output_dir).expect("Failed to create output directory");
-
-        let frames_in_queue = Arc::new(AtomicUsize::new(0));
-        let frames_in_queue_clone = frames_in_queue.clone();
-
-        let ffmpeg_process = Arc::new(Mutex::new(None));
-        let ffmpeg_process_clone = ffmpeg_process.clone();
-
-        let thread_output_dir = output_dir.to_string();
-        let thread_fps = fps;
-
-        let (sender, receiver) = channel();
-
-        let shutdown_requested = Arc::new(AtomicBool::new(false));
-        let batched_frames = Arc::new(AtomicUsize::new(0));
-
-        let shutdown_requested_clone = shutdown_requested.clone();
-        let batched_frames_clone = batched_frames.clone();
-
-        // Spawn worker thread
-        std::thread::spawn(move || {
-            let ffmpeg_stdin = Arc::new(Mutex::new(None));
-
-            // Add batch handling
-            let mut frame_batch = Vec::new();
-            let mut batch_count = 0;
-
-            loop {
-                // Use recv_timeout to allow checking for shutdown
-                match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
-                    Ok((frame_data, width, height)) => {
-                        // Initialize FFmpeg if needed
-                        if batch_count == 0 {
-                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
-                            if stdin_guard.is_none() {
-                                // Initialize FFmpeg on first frame
-                                let (process, stdin) = start_ffmpeg_process(
-                                    &thread_output_dir,
-                                    width,
-                                    height,
-                                    thread_fps,
-                                );
-                                *ffmpeg_process_clone.lock().unwrap() = Some(process);
-                                *stdin_guard = Some(stdin);
-                            }
-                        }
-
-                        // Convert RGBA to RGB and add to batch as before
-                        if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
-                            let rgb_buffer =
-                                nannou::image::DynamicImage::ImageRgba8(image_buffer).to_rgb8();
-
-                            // Add to batch
-                            frame_batch.extend_from_slice(rgb_buffer.as_raw());
-                            batch_count += 1;
-                            batched_frames_clone.store(batch_count, Ordering::SeqCst);
-
-                            // Process batch if full
-                            if batch_count >= BATCH_SIZE {
-                                // Write batch to FFmpeg as before
-                                let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
-                                if let Some(stdin) = stdin_guard.as_mut() {
-                                    if let Err(e) = stdin.write_all(&frame_batch) {
-                                        eprintln!("Failed to write frames to FFmpeg: {}", e);
-                                    } else {
-                                        frames_in_queue_clone
-                                            .fetch_sub(batch_count, Ordering::SeqCst);
-                                    }
-                                }
-                                frame_batch.clear();
-                                batch_count = 0;
-                            }
-                        }
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        // Check if shutdown requested and handle any partial batch
-                        if shutdown_requested_clone.load(Ordering::SeqCst) {
-                            // Write any remaining frames in the batch
-                            if batch_count > 0 {
-                                let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
-                                if let Some(stdin) = stdin_guard.as_mut() {
-                                    if let Err(e) = stdin.write_all(&frame_batch) {
-                                        eprintln!(
-                                            "Failed to write remaining frames to FFmpeg: {}",
-                                            e
-                                        );
-                                    } else {
-                                        frames_in_queue_clone
-                                            .fetch_sub(batch_count, Ordering::SeqCst);
-                                    }
-                                }
-                            }
-
-                            // Close the FFmpeg stdin stream to signal end of input
-                            drop(ffmpeg_stdin.lock().unwrap().take());
-                            break; // Exit the loop
-                        }
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                        // Channel closed, handle any remaining frames
-                        if batch_count > 0 {
-                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
-                            if let Some(stdin) = stdin_guard.as_mut() {
-                                if let Err(e) = stdin.write_all(&frame_batch) {
-                                    eprintln!("Failed to write remaining frames to FFmpeg: {}", e);
-                                } else {
-                                    frames_in_queue_clone.fetch_sub(batch_count, Ordering::SeqCst);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // Wait for FFmpeg to finish after exiting the loop
-            if let Some(mut process) = ffmpeg_process_clone.lock().unwrap().take() {
-                match process.wait() {
-                    Ok(status) => {
-                        if !status.success() {
-                            eprintln!("FFmpeg exited with non-zero status: {}", status);
-                        } else if VERBOSE {
-                            println!("FFmpeg process completed successfully");
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to wait for FFmpeg process: {}", e),
-                }
-            }
-        });
 
         // Create a texture for resolving MSAA
         let resolved_texture = wgpu::TextureBuilder::new()
@@ -225,23 +106,163 @@ impl FrameRecorder {
         }
 
         Self {
-            frame_sender: sender,
+            worker_thread: Arc::new(Mutex::new(None)),
             is_recording: Arc::new(Mutex::new(false)),
             frame_limit,
             frame_number: Arc::new(Mutex::new(0)),
-            frames_in_queue,
             capture_in_progress: Arc::new(AtomicBool::new(false)),
             frame_time: 1_000_000_000 / fps,
-            shutdown_requested,
+            output_dir: output_dir.to_string(),
+            fps,
 
             texture_reshaper,
             resolved_texture,
             staging_buffers,
             current_buffer_index: Arc::new(AtomicUsize::new(0)),
 
-            ffmpeg_process,
-            //ffmpeg_stdin,
             next_scheduled_capture: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    fn create_worker_thread(&self) -> WorkerThread {
+        let frames_in_queue = Arc::new(AtomicUsize::new(0));
+        let ffmpeg_process = Arc::new(Mutex::new(None));
+        let shutdown_requested = Arc::new(AtomicBool::new(false));
+
+        let (sender, receiver) = channel();
+
+        let thread_output_dir = self.output_dir.clone();
+        let thread_fps = self.fps;
+
+        let frames_in_queue_clone = frames_in_queue.clone();
+        let ffmpeg_process_clone = ffmpeg_process.clone();
+        let shutdown_requested_clone = shutdown_requested.clone();
+
+        // Spawn worker thread
+        let thread_handle = thread::spawn(move || {
+            Self::worker_thread_function(
+                receiver,
+                thread_output_dir,
+                thread_fps,
+                frames_in_queue_clone,
+                ffmpeg_process_clone,
+                shutdown_requested_clone,
+            );
+        });
+
+        WorkerThread {
+            thread_handle,
+            frame_sender: sender,
+            shutdown_requested,
+            frames_in_queue,
+            ffmpeg_process,
+        }
+    }
+
+    fn worker_thread_function(
+        receiver: Receiver<FrameData>,
+        output_dir: String,
+        fps: u64,
+        frames_in_queue: Arc<AtomicUsize>,
+        ffmpeg_process: Arc<Mutex<Option<Child>>>,
+        shutdown_requested: Arc<AtomicBool>,
+    ) {
+        let ffmpeg_stdin = Arc::new(Mutex::new(None));
+
+        // Add batch handling
+        let mut frame_batch = Vec::new();
+        let mut batch_count = 0;
+
+        loop {
+            // Use recv_timeout to allow checking for shutdown
+            match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok((frame_data, width, height)) => {
+                    // Initialize FFmpeg if needed
+                    if batch_count == 0 {
+                        let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                        if stdin_guard.is_none() {
+                            // Initialize FFmpeg on first frame
+                            let (process, stdin) =
+                                start_ffmpeg_process(&output_dir, width, height, fps);
+                            *ffmpeg_process.lock().unwrap() = Some(process);
+                            *stdin_guard = Some(stdin);
+                        }
+                    }
+
+                    // Convert RGBA to RGB and add to batch as before
+                    if let Some(image_buffer) = RgbaImage::from_raw(width, height, frame_data) {
+                        let rgb_buffer =
+                            nannou::image::DynamicImage::ImageRgba8(image_buffer).to_rgb8();
+
+                        // Add to batch
+                        frame_batch.extend_from_slice(rgb_buffer.as_raw());
+                        batch_count += 1;
+
+                        // Process batch if full
+                        if batch_count >= BATCH_SIZE {
+                            // Write batch to FFmpeg as before
+                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                            if let Some(stdin) = stdin_guard.as_mut() {
+                                if let Err(e) = stdin.write_all(&frame_batch) {
+                                    eprintln!("Failed to write frames to FFmpeg: {}", e);
+                                } else {
+                                    frames_in_queue.fetch_sub(batch_count, Ordering::SeqCst);
+                                }
+                            }
+                            frame_batch.clear();
+                            batch_count = 0;
+                        }
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // Check if shutdown requested and handle any partial batch
+                    if shutdown_requested.load(Ordering::SeqCst) {
+                        // Write any remaining frames in the batch
+                        if batch_count > 0 {
+                            let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                            if let Some(stdin) = stdin_guard.as_mut() {
+                                if let Err(e) = stdin.write_all(&frame_batch) {
+                                    eprintln!("Failed to write remaining frames to FFmpeg: {}", e);
+                                } else {
+                                    frames_in_queue.fetch_sub(batch_count, Ordering::SeqCst);
+                                }
+                            }
+                        }
+
+                        // Close the FFmpeg stdin stream to signal end of input
+                        drop(ffmpeg_stdin.lock().unwrap().take());
+                        break; // Exit the loop
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    // Channel closed, handle any remaining frames
+                    if batch_count > 0 {
+                        let mut stdin_guard = ffmpeg_stdin.lock().unwrap();
+                        if let Some(stdin) = stdin_guard.as_mut() {
+                            if let Err(e) = stdin.write_all(&frame_batch) {
+                                eprintln!("Failed to write remaining frames to FFmpeg: {}", e);
+                            } else {
+                                frames_in_queue.fetch_sub(batch_count, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Wait for FFmpeg to finish after exiting the loop
+        if let Some(mut process) = ffmpeg_process.lock().unwrap().take() {
+            match process.wait() {
+                Ok(status) => {
+                    if !status.success() {
+                        eprintln!("FFmpeg exited with non-zero status: {}", status);
+                    } else if VERBOSE {
+                        println!("FFmpeg process completed successfully");
+                    }
+                }
+                Err(e) => eprintln!("Failed to wait for FFmpeg process: {}", e),
+            }
         }
     }
 
@@ -251,14 +272,41 @@ impl FrameRecorder {
 
         if *is_recording {
             // Starting a new recording
+            let mut worker_thread_guard = self.worker_thread.lock().unwrap();
+
+            // if already worker thread, terminate it
+            if let Some(worker) = worker_thread_guard.take() {
+                Self::terminate_worker_thread(worker);
+            }
+
+            // Create new worker thread
+            *worker_thread_guard = Some(self.create_worker_thread());
+
+            // Reset recording state
             *self.frame_number.lock().unwrap() = 0;
-            self.frames_in_queue.store(0, Ordering::SeqCst);
+            *self.next_scheduled_capture.lock().unwrap() = 0;
             println!("Recording started");
         } else {
             // Stopping recording
             println!("Recording stopped");
 
-            self.shutdown_requested.store(true, Ordering::SeqCst);
+            // Shut down worker thread
+            let mut worker_thread_guard = self.worker_thread.lock().unwrap();
+            if let Some(worker) = worker_thread_guard.take() {
+                Self::terminate_worker_thread(worker);
+            }
+        }
+    }
+
+    fn terminate_worker_thread(worker: WorkerThread) {
+        // Request thread to shut down
+        worker.shutdown_requested.store(true, Ordering::SeqCst);
+
+        // Wait for the thread to finish (with a timeout)
+        let result = worker.thread_handle.join();
+
+        if let Err(e) = result {
+            eprintln!("Error joining worker thread: {:?}", e);
         }
     }
 
@@ -275,6 +323,13 @@ impl FrameRecorder {
         if !self.is_recording() {
             return;
         }
+
+        // Get the worker thread
+        let worker_thread_guard = self.worker_thread.lock().unwrap();
+        let worker_thread = match worker_thread_guard.as_ref() {
+            Some(worker) => worker,
+            None => return, // No worker thread available
+        };
 
         // Check if enough time has passed since last capture
         let now = std::time::SystemTime::now()
@@ -401,8 +456,8 @@ impl FrameRecorder {
 
         // Step 3: Map the buffer and send the data
         let staging_buffer_clone = staging_buffer.clone();
-        let sender = self.frame_sender.clone();
-        let frames_in_queue = self.frames_in_queue.clone();
+        let sender = worker_thread.frame_sender.clone();
+        let frames_in_queue = worker_thread.frames_in_queue.clone();
         let capture_in_progress_outer = self.capture_in_progress.clone();
 
         let width = render_texture.width();
@@ -497,26 +552,44 @@ impl FrameRecorder {
     }
 
     pub fn get_queue_status(&self) -> (usize, usize) {
-        let total = self.frames_in_queue.load(Ordering::SeqCst);
+        // Get the worker thread
+        let worker_thread_guard = self.worker_thread.lock().unwrap();
 
-        // Check if FFmpeg process is still running
-        let is_running = self.ffmpeg_process.lock().unwrap().is_some();
+        match worker_thread_guard.as_ref() {
+            Some(worker) => {
+                let total = worker.frames_in_queue.load(Ordering::SeqCst);
 
-        if is_running {
-            // FFmpeg still running - show 0 processed
-            (0, total)
-        } else {
-            // FFmpeg finished - all frames processed
-            (total, total)
+                // Check if FFmpeg process is still running
+                let is_running = worker.ffmpeg_process.lock().unwrap().is_some();
+
+                if is_running {
+                    // FFmpeg still running - show 0 processed
+                    (0, total)
+                } else {
+                    // FFmpeg finished - all frames processed
+                    (total, total)
+                }
+            }
+            None => (0, 0),
         }
     }
 
     pub fn has_pending_frames(&self) -> bool {
-        self.ffmpeg_process.lock().unwrap().is_some()
+        let worker_thread_guard = self.worker_thread.lock().unwrap();
+
+        match worker_thread_guard.as_ref() {
+            Some(worker) => worker.ffmpeg_process.lock().unwrap().is_some(),
+            None => false, // No worker thread, no pending frames
+        }
     }
 
     pub fn request_shutdown(&self) {
-        self.shutdown_requested.store(true, Ordering::SeqCst);
+        let mut worker_thread_guard = self.worker_thread.lock().unwrap();
+
+        // If there's an existing worker thread, ensure it's terminated properly
+        if let Some(worker) = worker_thread_guard.take() {
+            Self::terminate_worker_thread(worker);
+        }
     }
 }
 

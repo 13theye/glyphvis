@@ -205,28 +205,12 @@ fn model(app: &App) -> Model {
 fn update(app: &App, model: &mut Model, _update: Update) {
     let now = Instant::now();
     let duration = now - model.last_update;
-    let frame_time = duration.as_secs_f32();
+    let dt = duration.as_secs_f32();
     model.last_update = now;
 
+    // FPS calculations
     if model.debug_flag {
-        model.frame_count += 1;
-        model.frame_time_accumulator += frame_time;
-        let elapsed_since_last_fps_update = app.time - model.last_fps_display_update;
-        if elapsed_since_last_fps_update >= model.fps_update_interval {
-            if model.frame_count > 0 {
-                let avg_frame_time = model.frame_time_accumulator / model.frame_count as f32;
-                model.fps = if avg_frame_time > 0.0 {
-                    1.0 / avg_frame_time
-                } else {
-                    0.0
-                };
-            }
-
-            // Reset accumulators
-            model.frame_count = 0;
-            model.frame_time_accumulator = 0.0;
-            model.last_fps_display_update = app.time;
-        }
+        calculate_fps(app, model, dt);
     }
 
     // Process OSC messages
@@ -250,7 +234,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     /*********************  Main update method for grids **********************/
     for (_, grid_instance) in model.grids.iter_mut() {
-        let dt = duration.as_secs_f32();
         grid_instance.update(&model.draw, &model.transition_engine, app.time, dt);
     }
 
@@ -301,6 +284,27 @@ fn debug_on(app: &App, model: &mut Model) {
     model.frame_count = 0;
     model.frame_time_accumulator = 0.0;
     model.last_fps_display_update = app.time;
+}
+
+fn calculate_fps(app: &App, model: &mut Model, dt: f32) {
+    model.frame_count += 1;
+    model.frame_time_accumulator += dt;
+    let elapsed_since_last_fps_update = app.time - model.last_fps_display_update;
+    if elapsed_since_last_fps_update >= model.fps_update_interval {
+        if model.frame_count > 0 {
+            let avg_frame_time = model.frame_time_accumulator / model.frame_count as f32;
+            model.fps = if avg_frame_time > 0.0 {
+                1.0 / avg_frame_time
+            } else {
+                0.0
+            };
+        }
+
+        // Reset accumulators
+        model.frame_count = 0;
+        model.frame_time_accumulator = 0.0;
+        model.last_fps_display_update = app.time;
+    }
 }
 
 // ************************ Multi-grid style coordination  *****************************

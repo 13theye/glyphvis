@@ -348,7 +348,7 @@ impl FrameRecorder {
                 // completed so it won't block
                 drop(completed_worker);
 
-                println!("Worker thread cleanup complete");
+                println!("Worker thread cleanup complete.\n");
             }
         }
     }

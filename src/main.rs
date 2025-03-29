@@ -75,6 +75,10 @@ struct Model {
     // FPS
     last_update: Instant,
     fps: f32,
+    fps_update_interval: f32,
+    last_fps_display_update: f32,
+    frame_count: u32,
+    frame_time_accumulator: f32,
 
     // When on, displays more verbose messages in the terminal
     debug_flag: bool,
@@ -189,6 +193,10 @@ fn model(app: &App) -> Model {
         // FPS
         last_update: Instant::now(),
         fps: 0.0,
+        fps_update_interval: 0.3,
+        last_fps_display_update: 0.0,
+        frame_count: 0,
+        frame_time_accumulator: 0.0,
 
         debug_flag: false,
     }
@@ -197,10 +205,28 @@ fn model(app: &App) -> Model {
 fn update(app: &App, model: &mut Model, _update: Update) {
     let now = Instant::now();
     let duration = now - model.last_update;
+    let frame_time = duration.as_secs_f32();
     model.last_update = now;
-    // FPS calculation
+
     if model.debug_flag {
-        model.fps = 1.0 / duration.as_secs_f32();
+        model.frame_count += 1;
+        model.frame_time_accumulator += frame_time;
+        let elapsed_since_last_fps_update = app.time - model.last_fps_display_update;
+        if elapsed_since_last_fps_update >= model.fps_update_interval {
+            if model.frame_count > 0 {
+                let avg_frame_time = model.frame_time_accumulator / model.frame_count as f32;
+                model.fps = if avg_frame_time > 0.0 {
+                    1.0 / avg_frame_time
+                } else {
+                    0.0
+                };
+            }
+
+            // Reset accumulators
+            model.frame_count = 0;
+            model.frame_time_accumulator = 0.0;
+            model.last_fps_display_update = app.time;
+        }
     }
 
     // Process OSC messages
@@ -213,6 +239,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Handle the background
     model.background.draw(&model.draw, app.time);
 
+    // Clean up any completed recording threads
     model.frame_recorder.cleanup_completed_worker();
 
     // Frames processing progress bar:
@@ -267,6 +294,13 @@ fn draw_fps(model: &Model) {
     draw.text(&format!("FPS: {:.1}", model.fps))
         .x_y(1100.0, 290.0)
         .color(RED);
+}
+
+fn debug_on(app: &App, model: &mut Model) {
+    model.fps = 0.0;
+    model.frame_count = 0;
+    model.frame_time_accumulator = 0.0;
+    model.last_fps_display_update = app.time;
 }
 
 // ************************ Multi-grid style coordination  *****************************
@@ -344,7 +378,7 @@ fn handle_exit_state(app: &App, model: &mut Model) {
 
 // ******************************* Keyboard Input *******************************
 
-fn key_pressed(_app: &App, model: &mut Model, key: Key) {
+fn key_pressed(app: &App, model: &mut Model, key: Key) {
     match key {
         // show next glyph
         Key::Space => {
@@ -544,6 +578,7 @@ fn key_pressed(_app: &App, model: &mut Model, key: Key) {
         /***************** Below functions aren't implemented in OSC ****************** */
         Key::P => {
             model.debug_flag = !model.debug_flag;
+            debug_on(app, model);
         }
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {

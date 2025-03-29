@@ -257,6 +257,8 @@ impl FrameRecorder {
         } else {
             // Stopping recording
             println!("Recording stopped");
+
+            self.shutdown_requested.store(true, Ordering::SeqCst);
         }
     }
 

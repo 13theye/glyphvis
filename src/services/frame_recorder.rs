@@ -346,9 +346,13 @@ impl FrameRecorder {
 
                 // Drop the worker thread - this will join the thread but it's already
                 // completed so it won't block
-                drop(completed_worker);
-
-                println!("Worker thread cleanup complete.\n");
+                if let Some(worker) = completed_worker {
+                    if let Err(e) = worker.thread_handle.join() {
+                        eprintln!("Error joining completed worker thread: {:?}", e);
+                    } else {
+                        println!("Worker thread cleanup complete.\n");
+                    }
+                }
             }
         }
     }

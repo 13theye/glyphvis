@@ -657,6 +657,7 @@ impl GridInstance {
         };
         self.apply_transform(&transform);
     }
+    /**************************** Stretch Effect *****************************/
 
     /**************************** Row/column Slide Effect *****************************/
     pub fn slide(&mut self, axis: &str, index: i32, position: f32, time: f32) {

@@ -1,5 +1,6 @@
 pub mod movement;
 pub mod slide_movement;
+pub mod stretch;
 pub mod stroke_order;
 pub mod transition;
 

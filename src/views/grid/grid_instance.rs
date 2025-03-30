@@ -12,14 +12,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        Movement, MovementChange, MovementEngine, SlideAnimation, Transition,
+        stretch, Movement, MovementChange, MovementEngine, SlideAnimation, Transition,
         TransitionAnimationType, TransitionEngine, TransitionTriggerType, TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
-    models::Project,
+    models::{Axis, Project},
     services::SegmentGraph,
-    views::{CachedGrid, DrawStyle, SegmentAction, StyleUpdateMsg, Transform2D},
+    views::{CachedGrid, DrawStyle, SegmentAction, SegmentType, StyleUpdateMsg, Transform2D},
 };
 
 pub struct GridInstance {
@@ -658,6 +658,57 @@ impl GridInstance {
         self.apply_transform(&transform);
     }
     /**************************** Stretch Effect *****************************/
+    pub fn boundary_test(&mut self, axis: Axis) {
+        let mut boundary_segments = stretch::boundary_segments(&self.grid, axis);
+        let mut stretch_points = Vec::new();
+        let target_style = DrawStyle {
+            color: rgba(0.0, 1.0, 0.0, 1.0),
+            stroke_weight: 10.0,
+        };
+
+        // throw out the boundaries on the edge of the grid
+        boundary_segments
+            .retain(|id| !stretch::is_outer_boundary(&self.grid, self.grid.segment(id).unwrap()));
+
+        self.stage_segments_instant_on(&boundary_segments, &target_style);
+
+        let mut neighbors = HashSet::new();
+        let neighbor_style = DrawStyle {
+            color: rgba(0.0, 0.0, 1.0, 1.0),
+            stroke_weight: 10.0,
+        };
+        let active_neighbor_style = DrawStyle {
+            color: rgba(1.0, 1.0, 0.0, 1.0),
+            stroke_weight: 10.0,
+        };
+
+        let neighbor_segment_type = match axis {
+            Axis::X => SegmentType::Horizontal,
+            Axis::Y => SegmentType::Vertical,
+        };
+
+        for segment in &boundary_segments {
+            self.graph
+                .neighbors_of(segment)
+                .iter()
+                .filter_map(|id| self.grid.segment(id))
+                .filter(|s| s.segment_type == neighbor_segment_type)
+                .for_each(|s| {
+                    neighbors.insert(s.id.clone());
+                    stretch_points.push(self.graph.get_connection_point(segment, &s.id));
+                });
+        }
+
+        // clone the neighbors set for processing later
+        let mut active_neighbors = neighbors.clone();
+
+        // diffeentiate between active and non-active neighbors
+        active_neighbors.retain(|s| self.current_active_segments.contains(s));
+        neighbors.retain(|s| !active_neighbors.contains(s));
+
+        //self.stage_segments_instant_on(&neighbors, &neighbor_style);
+        //self.stage_segments_instant_on(&active_neighbors, &active_neighbor_style);
+    }
 
     /**************************** Row/column Slide Effect *****************************/
     pub fn slide(&mut self, axis: &str, index: i32, position: f32, time: f32) {

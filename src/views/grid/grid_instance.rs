@@ -391,7 +391,7 @@ impl GridInstance {
         // Clear transition if complete; reset Power On effect
         if transition.is_complete() {
             self.active_transition = None;
-            self.use_power_on_effect = false;
+            //self.use_power_on_effect = false;
         }
 
         updates

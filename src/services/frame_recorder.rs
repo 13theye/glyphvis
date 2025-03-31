@@ -668,9 +668,9 @@ fn start_ffmpeg_process(
             "-c:v",
             "libx264", // Use H.264 codec
             "-preset",
-            "medium", // Encoding speed/quality tradeoff
+            "slow", // Encoding speed/quality tradeoff
             "-crf",
-            "23", // Quality level (lower is better quality, 23 is default)
+            "10", // Quality level (lower is better quality, 23 is default)
             "-pix_fmt",
             "yuv420p",    // Output pixel format
             "-y",         // Overwrite output file if it exists

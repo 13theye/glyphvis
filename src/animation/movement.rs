@@ -101,7 +101,7 @@ impl MovementEngine {
         let target_position = pt2(target_x, target_y);
 
         let start_transform = Transform2D {
-            translation: grid.current_location,
+            translation: grid.current_position,
             scale: grid.current_scale,
             rotation: grid.current_rotation,
         };

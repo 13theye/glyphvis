@@ -12,14 +12,18 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     animation::{
-        stretch, Movement, MovementChange, MovementEngine, SlideAnimation, Transition,
-        TransitionAnimationType, TransitionEngine, TransitionTriggerType, TransitionUpdates,
+        stretch, Movement, MovementChange, MovementEngine, SlideAnimation, StretchAnimation,
+        Transition, TransitionAnimationType, TransitionEngine, TransitionTriggerType,
+        TransitionUpdates,
     },
     config::TransitionConfig,
     effects::BackboneEffect,
-    models::{Axis, Project},
+    models::{Axis, EdgeType, PathElement, Project, ViewBox},
     services::SegmentGraph,
-    views::{CachedGrid, DrawStyle, SegmentAction, SegmentType, StyleUpdateMsg, Transform2D},
+    views::{
+        CachedGrid, CachedSegment, DrawStyle, SegmentAction, SegmentType, StyleUpdateMsg,
+        Transform2D,
+    },
 };
 
 pub struct GridInstance {
@@ -80,9 +84,10 @@ pub struct GridInstance {
     //
     // The currently active time-based movement animation
     pub active_movement: Option<Movement>,
-    pub current_location: Point2,
+    pub current_position: Point2,
     pub current_rotation: f32,
     pub current_scale: f32,
+
     pub is_visible: bool,
     spawn_location: Point2,
 
@@ -99,6 +104,9 @@ pub struct GridInstance {
     row_positions: HashMap<i32, f32>, // <index, position offset>
     col_positions: HashMap<i32, f32>, // <index, position offset>
     slide_animations: Vec<SlideAnimation>,
+
+    // Stretch segment state
+    stretch_animation: Option<StretchAnimation>,
 }
 
 impl GridInstance {
@@ -162,7 +170,7 @@ impl GridInstance {
             },
 
             active_movement: None,
-            current_location: position,
+            current_position: position,
             current_rotation: rotation,
             current_scale: 1.0,
             is_visible: false,
@@ -176,6 +184,8 @@ impl GridInstance {
             row_positions: HashMap::new(),
             col_positions: HashMap::new(),
             slide_animations: Vec::new(),
+
+            stretch_animation: None,
         }
     }
 
@@ -249,6 +259,11 @@ impl GridInstance {
         if self.has_slide_animations() {
             self.update_slide_animations(time);
         }
+
+        // d. handle stretch
+        //if self.has_active_stretch() {
+        //    todo!();
+        //}
 
         // 3. Stage any backbone style change
         if self.has_backbone_effects() {
@@ -487,7 +502,7 @@ impl GridInstance {
 
         // 1. Transform to pivot-relative space
         let to_local = Transform2D {
-            translation: -self.current_location,
+            translation: -self.current_position,
             scale: 1.0,
             rotation: 0.0,
         };
@@ -501,7 +516,7 @@ impl GridInstance {
 
         // 3. Transform back
         let to_world = Transform2D {
-            translation: self.current_location,
+            translation: self.current_position,
             scale: 1.0,
             rotation: 0.0,
         };
@@ -523,7 +538,7 @@ impl GridInstance {
 
         // 1. Transform to pivot-relative space
         let to_local = Transform2D {
-            translation: -self.current_location,
+            translation: -self.current_position,
             scale: 1.0,
             rotation: 0.0,
         };
@@ -537,7 +552,7 @@ impl GridInstance {
 
         // 3. Transform back
         let to_world = Transform2D {
-            translation: self.current_location,
+            translation: self.current_position,
             scale: 1.0,
             rotation: 0.0,
         };
@@ -575,7 +590,7 @@ impl GridInstance {
     }
 
     fn stage_zero_duration_movement(&mut self, target_x: f32, target_y: f32, time: f32) {
-        self.last_position = self.current_location;
+        self.last_position = self.current_position;
         self.target_position = pt2(target_x, target_y);
         self.position_update_time = time;
         self.movement_duration = 1.0 / 60.0;
@@ -612,7 +627,7 @@ impl GridInstance {
             let interp_position = pt2(interp_x, interp_y);
 
             // Calculate the delta from current position
-            let delta = interp_position - self.current_location;
+            let delta = interp_position - self.current_position;
 
             // Apply the transform
             if delta.length() > 0.01 {
@@ -626,7 +641,7 @@ impl GridInstance {
         } else {
             // We've reached the end of the interpolation
             // Set exact position to avoid floating point errors
-            let delta = self.target_position - self.current_location;
+            let delta = self.target_position - self.current_position;
             if delta.length() > 0.01 {
                 let transform = Transform2D {
                     translation: delta,
@@ -644,20 +659,21 @@ impl GridInstance {
     fn apply_transform(&mut self, transform: &Transform2D) {
         // update self.current_location here only.
         // the rotation and and scale states aren't as straightforward.
-        self.current_location += transform.translation;
+        self.current_position += transform.translation;
         self.grid.apply_transform(transform);
     }
 
     // go back to where grid spawned
     pub fn reset_location(&mut self) {
         let transform = Transform2D {
-            translation: self.spawn_location - self.current_location,
+            translation: self.spawn_location - self.current_position,
             scale: 1.0,
             rotation: 0.0,
         };
         self.apply_transform(&transform);
     }
     /**************************** Stretch Effect *****************************/
+
     pub fn boundary_test(&mut self, axis: Axis) {
         let mut boundary_segments = stretch::boundary_segments(&self.grid, axis);
         let mut stretch_points = Vec::new();
@@ -695,8 +711,36 @@ impl GridInstance {
                 .filter(|s| s.segment_type == neighbor_segment_type)
                 .for_each(|s| {
                     neighbors.insert(s.id.clone());
-                    stretch_points.push(self.graph.get_connection_point(segment, &s.id));
+                    stretch_points.push(self.graph.get_connection_point(segment, &s.id).unwrap());
                 });
+        }
+
+        // try putting a stretch segment at every stretch point
+        for point in stretch_points {
+            let stretch_segment = CachedSegment::new(
+                format!("Stretch-{:?}", point),
+                (9, 9),
+                &PathElement::Line {
+                    x1: point.x + self.current_position.x,
+                    x2: point.x + self.current_position.x + 50.0,
+                    y1: point.y,
+                    y2: point.y,
+                },
+                EdgeType::None,
+                &ViewBox {
+                    min_x: 0.0,
+                    min_y: 0.0,
+                    height: 0.0,
+                    width: 0.0,
+                },
+                (4, 4),
+            );
+
+            // track the stretch segment ids
+            self.stretch_segments.insert(stretch_segment.id.clone());
+
+            // insert the streetch segments into the grid. grid now owns the segment.
+            self.grid.add_stretch_segment(stretch_segment);
         }
 
         // clone the neighbors set for processing later
@@ -922,7 +966,7 @@ impl GridInstance {
     pub fn print_grid_info(&self) {
         println!("<====== Grid Instance: {} ======>", self.id);
         println!("\nGrid Info:");
-        println!("Location: {:?}", self.current_location);
+        println!("Location: {:?}", self.current_position);
         println!("Dimensions: {:?}", self.grid.dimensions);
         println!("Viewbox: {:?}", self.grid.viewbox);
         println!("Segment count: {}\n", self.grid.segments.len());

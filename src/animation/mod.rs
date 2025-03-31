@@ -6,6 +6,7 @@ pub mod transition;
 
 pub use movement::{EasingType, Movement, MovementChange, MovementEngine};
 pub use slide_movement::SlideAnimation;
+pub use stretch::StretchAnimation;
 pub use transition::{
     Transition, TransitionAnimationType, TransitionEngine, TransitionTriggerType, TransitionUpdates,
 };

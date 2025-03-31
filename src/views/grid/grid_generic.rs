@@ -66,7 +66,8 @@ impl DrawCommand {
         }
     }
 
-    fn draw(&self, draw: &Draw, style: &DrawStyle) {
+    // temporarily public
+    pub fn draw(&self, draw: &Draw, style: &DrawStyle) {
         match self {
             DrawCommand::Line { start, end, .. } => {
                 draw.line()
@@ -434,6 +435,9 @@ pub struct CachedGrid {
     pub dimensions: (u32, u32), // number of tiles in x and y
     pub segments: HashMap<String, CachedSegment>,
     pub viewbox: ViewBox,
+
+    // temporary segments for the stretch effect
+    pub stretch_segments: HashMap<String, CachedSegment>,
 }
 
 impl CachedGrid {
@@ -480,6 +484,7 @@ impl CachedGrid {
             dimensions: (project.grid_x, project.grid_y),
             segments,
             viewbox,
+            stretch_segments: HashMap::new(),
         }
     }
 
@@ -584,6 +589,15 @@ impl CachedGrid {
             .values_mut()
             .filter(|segment| segment.tile_coordinate.0 == index)
             .collect()
+    }
+
+    /************************ Stretch ****************************/
+    pub fn add_stretch_segment(&mut self, segment: CachedSegment) {
+        self.stretch_segments.insert(segment.id.clone(), segment);
+    }
+
+    pub fn remove_stretch_segment(&mut self, id: &str) {
+        self.stretch_segments.remove(id);
     }
 
     /************************ Validation ****************************/

@@ -2,6 +2,7 @@
 //
 // Tears the rows and columns of a grid apart visually.
 
+// todo: refactor to use the Axis type instead of char
 pub struct SlideAnimation {
     pub axis: char,
     pub index: i32,

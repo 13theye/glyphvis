@@ -673,8 +673,16 @@ impl GridInstance {
         self.apply_transform(&transform);
     }
     /**************************** Stretch Effect *****************************/
-    pub fn stretch(&mut self, axis: Axis) {
-        todo!();
+    pub fn stretch(&mut self, axis: Axis, target_amount: f32, start_time: f32) {
+        let stretch_animation = StretchAnimation::new(
+            &mut self.grid,
+            &self.current_position,
+            &self.graph,
+            axis,
+            target_amount,
+            start_time,
+        );
+        self.stretch_animation = Some(stretch_animation);
     }
 
     pub fn boundary_test(&mut self, axis: Axis) {

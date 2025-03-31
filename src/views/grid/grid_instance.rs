@@ -673,6 +673,9 @@ impl GridInstance {
         self.apply_transform(&transform);
     }
     /**************************** Stretch Effect *****************************/
+    pub fn stretch(&mut self, axis: Axis) {
+        todo!();
+    }
 
     pub fn boundary_test(&mut self, axis: Axis) {
         let mut boundary_segments = stretch::boundary_segments(&self.grid, axis);
@@ -737,10 +740,10 @@ impl GridInstance {
             );
 
             // track the stretch segment ids
-            self.stretch_segments.insert(stretch_segment.id.clone());
+            //self.stretch_segments.insert(stretch_segment.id.clone());
 
             // insert the streetch segments into the grid. grid now owns the segment.
-            self.grid.add_stretch_segment(stretch_segment);
+            //self.grid.add_stretch_segment(stretch_segment);
         }
 
         // clone the neighbors set for processing later

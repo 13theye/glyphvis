@@ -19,8 +19,8 @@ pub struct StretchAnimation {
 
 impl StretchAnimation {
     pub fn new(
-        grid: &CachedGrid,
-        current_grid_position: Point2,
+        grid: &mut CachedGrid,
+        current_grid_position: &Point2,
         graph: &SegmentGraph,
         axis: Axis,
         target_amount: f32,
@@ -59,8 +59,16 @@ impl StretchAnimation {
                 });
         }
 
+        let mut segment_ids = HashSet::new();
+
+        for point in stretch_points {
+            let segment = generate_stretch_segment(point, current_grid_position, axis);
+            segment_ids.insert(segment.id.clone());
+            grid.add_stretch_segment(segment);
+        }
+
         Self {
-            segment_ids: HashSet::new(),
+            segment_ids,
             axis,
             current_amount: 0.0,
             target_amount,
@@ -72,36 +80,46 @@ impl StretchAnimation {
     pub fn is_finished(&self) -> bool {
         (self.target_amount - self.current_amount).abs() < 0.001
     }
+}
 
-    fn generate_stretch_segment(
-        start_point: Point2,
-        current_grid_position: Point2,
-        axis: Axis,
-    ) -> CachedSegment {
-        let axis_label = match axis {
-            Axis::X => 'x',
-            Axis::Y => 'y',
-        };
-        CachedSegment::new(
-            format!("stretch-{}-{:?}", axis_label, current_grid_position),
-            (0, 0), // unused for stretch segment
-            &PathElement::Line {
-                x1: start_point.x + current_grid_position.x,
-                x2: start_point.x + current_grid_position.x, // starts with length 0
-                y1: start_point.y,
-                y2: start_point.y,
-            },
-            EdgeType::None,
-            &ViewBox {
-                // unused for stretch segment
-                min_x: 0.0,
-                min_y: 0.0,
-                height: 0.0,
-                width: 0.0,
-            },
-            (0, 0), // unused for stretch segment
-        )
-    }
+fn generate_stretch_segment(
+    start_point: &Point2,
+    current_grid_position: &Point2,
+    axis: Axis,
+) -> CachedSegment {
+    let axis_label = match axis {
+        Axis::X => 'x',
+        Axis::Y => 'y',
+    };
+
+    let x1 = match axis {
+        Axis::X => start_point.x + current_grid_position.x,
+        Axis::Y => start_point.x,
+    };
+    let y1 = match axis {
+        Axis::X => start_point.y,
+        Axis::Y => start_point.y + current_grid_position.y,
+    };
+
+    CachedSegment::new(
+        format!("stretch-{}-{:?}", axis_label, current_grid_position),
+        (0, 0), // unused for stretch segment
+        &PathElement::Line {
+            x1,
+            x2: x1, // zero length
+            y1,
+            y2: y1, // zero length
+        },
+        EdgeType::None,
+        &ViewBox {
+            // unused for stretch segment
+            min_x: 0.0,
+            min_y: 0.0,
+            height: 0.0,
+            width: 0.0,
+        },
+        (0, 0), // unused for stretch segment
+    )
 }
 
 pub fn boundary_segments(grid: &CachedGrid, axis: Axis) -> HashSet<String> {

@@ -304,7 +304,9 @@ impl CachedSegment {
                 target_style,
             } => {
                 let elapsed_time = start_time.elapsed().as_secs_f32();
-                let flash_color = rgba(1.0, 1.0, 0.8, 1.0);
+                //let flash_color = rgba(1.0, 1.0, 0.8, 1.0);
+                let flash_color = rgba(1.0, 0.0, 0.0, 1.0);
+
                 let color = if elapsed_time <= FLASH_DURATION {
                     flash_color
                 } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {

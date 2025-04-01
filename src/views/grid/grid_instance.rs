@@ -406,7 +406,7 @@ impl GridInstance {
         // Clear transition if complete; reset Power On effect
         if transition.is_complete() {
             self.active_transition = None;
-            self.use_power_on_effect = false;
+            //self.use_power_on_effect = false;
         }
 
         updates
@@ -936,6 +936,13 @@ impl GridInstance {
     pub fn add_backbone_effect(&mut self, effect_type: &str, effect: Box<dyn BackboneEffect>) {
         self.backbone_effects
             .insert(effect_type.to_string(), effect);
+    }
+
+    pub fn set_backbone_stroke_weight(&mut self, stroke_weight: f32) {
+        self.backbone_style = DrawStyle {
+            color: self.backbone_style.color,
+            stroke_weight,
+        }
     }
 
     /*********************** Utility Methods **************************** */

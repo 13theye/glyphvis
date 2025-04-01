@@ -16,6 +16,10 @@ pub enum OscCommand {
         a: f32,
         duration: f32,
     },
+    GridBackboneStroke {
+        name: String,
+        stroke_weight: f32,
+    },
     GridCreate {
         name: String,
         show: String,
@@ -153,6 +157,16 @@ impl OscController {
                                 b: *b,
                                 a: *a,
                                 duration: *duration,
+                            });
+                        }
+                    }
+                    "/grid/backbone_stroke" => {
+                        if let [osc::Type::String(name), osc::Type::Float(stroke_weight)] =
+                            &message.args[..]
+                        {
+                            self.command_queue.push(OscCommand::GridBackboneStroke {
+                                name: name.clone(),
+                                stroke_weight: *stroke_weight,
                             });
                         }
                     }
@@ -507,6 +521,17 @@ impl OscSender {
             osc::Type::Float(b),
             osc::Type::Float(a),
             osc::Type::Float(duration),
+        ];
+        self.sender
+            .send((addr, args), (self.target_addr.as_str(), self.target_port))
+            .ok();
+    }
+
+    pub fn send_grid_backbone_stroke(&self, name: &str, stroke_weight: f32) {
+        let addr = "/grid/backbone_stroke".to_string();
+        let args = vec![
+            osc::Type::String(name.to_string()),
+            osc::Type::Float(stroke_weight),
         ];
         self.sender
             .send((addr, args), (self.target_addr.as_str(), self.target_port))

@@ -839,6 +839,13 @@ impl GridInstance {
             .insert(effect_type.to_string(), effect);
     }
 
+    pub fn set_backbone_stroke_weight(&mut self, stroke_weight: f32) {
+        self.backbone_style = DrawStyle {
+            color: self.backbone_style.color,
+            stroke_weight,
+        }
+    }
+
     /*********************** Utility Methods **************************** */
 
     pub fn has_target_segments(&self) -> bool {

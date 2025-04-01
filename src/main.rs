@@ -484,6 +484,13 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
                 model.osc_sender.send_set_power_effect(name, 1);
             }
         }
+        Key::D => {
+            for name in model.grids.keys() {
+                if name == "grid_2" {
+                    model.osc_sender.send_grid_backbone_stroke(name, 10.0);
+                }
+            }
+        }
         Key::H => {
             for name in model.grids.keys() {
                 if name != "grid_2" {
@@ -638,6 +645,14 @@ fn launch_commands(app: &App, model: &mut Model) {
                         is_active: true,
                     };
                     grid.add_backbone_effect("backbone", Box::new(effect));
+                }
+            }
+            OscCommand::GridBackboneStroke {
+                name,
+                stroke_weight,
+            } => {
+                if let Some(grid) = model.grids.get_mut(&name) {
+                    grid.set_backbone_stroke_weight(stroke_weight);
                 }
             }
             OscCommand::GridCreate {

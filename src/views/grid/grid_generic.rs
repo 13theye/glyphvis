@@ -34,9 +34,9 @@ use crate::{
 
 // TODO: USE ANIMATION DURATION CONFIG INSTEAD OF THESE CONSTANTS
 pub const ARC_RESOLUTION: usize = 25;
-const FLASH_DURATION: f32 = 0.07;
-const FADE_DURATION: f32 = 0.15;
-const FLASH_FADE_DURATION: f32 = 0.12;
+const FLASH_DURATION: f32 = 0.132;
+const FADE_DURATION: f32 = 0.132;
+const FLASH_FADE_DURATION: f32 = 0.132;
 
 // DrawCommand is a single drawing operation that has been pre-processed from
 // SVG path data

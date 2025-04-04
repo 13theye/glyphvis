@@ -8,7 +8,10 @@
 // the system.
 
 use nannou::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use crate::{
     animation::{
@@ -26,12 +29,12 @@ pub struct GridInstance {
     // grid data
     pub id: String,
 
-    // The Generic grid defined from SVG data in the Project file and shared methods for
-    // drawing each Grid
+    // The generic grid defined from SVG data in the Project file and shared methods for
+    // drawing each Grid. Once owned by a GridInstance, it is unique and mutable.
     pub grid: CachedGrid,
 
-    // The network of relationships between segments
-    pub graph: SegmentGraph,
+    // The network of connections between segments. Shared among grids of the same CachedGrid.
+    pub graph: Rc<SegmentGraph>,
 
     // glyph state:
     // The Show attached to this Grid.
@@ -101,23 +104,27 @@ pub struct GridInstance {
     slide_animations: Vec<SlideAnimation>,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl GridInstance {
     pub fn new(
         id: String,
         project: &Project,
         show: &str,
+        base_grid: &CachedGrid,
+        base_graph: Rc<SegmentGraph>,
         position: Point2,
         rotation: f32,
         stroke_weight: f32,
         backbone_stroke_weight: f32,
     ) -> Self {
-        let mut grid = CachedGrid::new(project);
-        let graph = SegmentGraph::new(&grid);
         let transform = Transform2D {
             translation: position,
             scale: 1.0,
             rotation,
         };
+
+        let mut grid = base_grid.clone();
+
         grid.apply_transform(&transform);
 
         let index_max = project
@@ -131,8 +138,7 @@ impl GridInstance {
         Self {
             id,
             grid,
-            graph,
-
+            graph: base_graph,
             show: show.to_string(),
             current_glyph_index: 1,
             index_max,

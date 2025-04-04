@@ -1,8 +1,12 @@
 // src/main.rs
 use nannou::prelude::*;
 use rand::Rng;
-use std::collections::HashMap;
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    io::{self, Write},
+    rc::Rc,
+    time::Instant,
+};
 
 use glyphvis::{
     animation::{
@@ -13,10 +17,9 @@ use glyphvis::{
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
     models::Project,
-    services::FrameRecorder,
-    views::{BackgroundManager, DrawStyle, GridInstance},
+    services::{FrameRecorder, SegmentGraph},
+    views::{BackgroundManager, CachedGrid, DrawStyle, GridInstance},
 };
-use std::io::{self, Write};
 
 struct Model {
     // Data from the Project file including all Glyph definitions
@@ -26,6 +29,12 @@ struct Model {
     // By lighting up sets of segments, different characters are displayed.
     //
     // The CachedGrid is the generic grid structure.
+    // Currently, one project holds a single grid type. The draw instructions are cached
+    // as a CachedGrid.
+    // The Graph is the network of connections between segments.
+    base_grid: CachedGrid,
+    base_graph: Rc<SegmentGraph>,
+
     // A GridInstance manages the state of an individual grid and sends commands to its internal segments to turn on or off,
     // or display different colors.
     //
@@ -95,6 +104,10 @@ fn model(app: &App) -> Model {
     // Load project & config
     let project_path = config.resolve_project_path();
     let project = Project::load(project_path).expect("Failed to load project file");
+
+    // Cache grid draw instructions and the segment graph
+    let base_grid = CachedGrid::new(&project);
+    let base_graph = Rc::new(SegmentGraph::new(&base_grid));
 
     // Create OSC controller
     let osc_controller =
@@ -171,6 +184,9 @@ fn model(app: &App) -> Model {
 
     Model {
         project,
+        base_grid,
+        base_graph,
+
         grids: HashMap::new(), //grid,
         background: BackgroundManager::default(),
         osc_controller,
@@ -665,6 +681,8 @@ fn launch_commands(app: &App, model: &mut Model) {
                     name.clone(),
                     &model.project,
                     &show,
+                    &model.base_grid,
+                    Rc::clone(&model.base_graph),
                     pt2(position.0, position.1),
                     rotation,
                     model.default_stroke_weight,

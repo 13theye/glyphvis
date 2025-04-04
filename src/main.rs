@@ -16,7 +16,7 @@ use glyphvis::{
     config::*,
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
-    models::Project,
+    models::{Axis, Project},
     services::{FrameRecorder, SegmentGraph},
     views::{BackgroundManager, CachedGrid, DrawStyle, GridInstance},
 };
@@ -583,6 +583,11 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
         Key::Y => {
             for name in model.grids.keys() {
                 model.osc_sender.send_rotate_grid(name, -5.0);
+            }
+        }
+        Key::Z => {
+            for grid_instance in model.grids.values_mut() {
+                grid_instance.boundary_test(Axis::X);
             }
         }
         Key::RShift => {

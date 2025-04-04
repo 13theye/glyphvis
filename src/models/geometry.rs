@@ -34,6 +34,12 @@ pub enum EdgeType {
     None,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Axis {
+    X,
+    Y,
+}
+
 #[derive(Debug, Clone)]
 pub enum PathElement {
     Line {

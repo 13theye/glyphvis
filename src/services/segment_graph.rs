@@ -205,6 +205,14 @@ impl SegmentGraph {
             .unwrap_or_default()
     }
 
+    pub fn get_connection_point(&self, first: &str, second: &str) -> Option<&Point2> {
+        self.node(first)?
+            .connections
+            .iter()
+            .find(|c| c.segment_id == second)
+            .map(|c| &c.connection_point)
+    }
+
     // Debug helper
     pub fn print_connections(&self) {
         println!("\nSegment Graph Connections:");

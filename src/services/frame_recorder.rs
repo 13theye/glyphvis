@@ -172,6 +172,9 @@ impl FrameRecorder {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    // can't pass self into the worker thread so this function needs a large number
+    // of args.
     fn worker_thread_function(
         receiver: Receiver<FrameData>,
         output_dir: String,

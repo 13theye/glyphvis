@@ -125,7 +125,7 @@ impl FrameRecorder {
         }
     }
 
-    fn create_worker_thread(&self) -> WorkerThread {
+    fn create_worker_thread(&self, width: u32, height: u32) -> WorkerThread {
         let frames_in_queue = Arc::new(AtomicUsize::new(0));
         let ffmpeg_process = Arc::new(Mutex::new(None));
         let shutdown_requested = Arc::new(AtomicBool::new(false));
@@ -136,12 +136,19 @@ impl FrameRecorder {
         let thread_output_dir = self.output_dir.clone();
         let thread_fps = self.fps;
 
+        // Pre-initialize FFmpeg before spawning the thread
+        let (process, stdin) = start_ffmpeg_process(&thread_output_dir, width, height, thread_fps);
+        *ffmpeg_process.lock().unwrap() = Some(process);
+
         let frames_in_queue_clone = frames_in_queue.clone();
         let ffmpeg_process_clone = ffmpeg_process.clone();
         let shutdown_requested_clone = shutdown_requested.clone();
         let thread_completed_clone = thread_completed.clone();
 
-        // Spawn worker thread
+        // Pass the stdin to the thread
+        let ffmpeg_stdin = Arc::new(Mutex::new(Some(stdin)));
+
+        // Spawn worker thread with pre-initialized FFmpeg process
         let thread_handle = thread::spawn(move || {
             Self::worker_thread_function(
                 receiver,
@@ -151,6 +158,7 @@ impl FrameRecorder {
                 ffmpeg_process_clone,
                 shutdown_requested_clone,
                 thread_completed_clone,
+                ffmpeg_stdin, // Pass the pre-initialized stdin
             );
         });
 
@@ -164,6 +172,9 @@ impl FrameRecorder {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    // can't pass self into the worker thread so this function needs a large number
+    // of args.
     fn worker_thread_function(
         receiver: Receiver<FrameData>,
         output_dir: String,
@@ -172,9 +183,8 @@ impl FrameRecorder {
         ffmpeg_process: Arc<Mutex<Option<Child>>>,
         shutdown_requested: Arc<AtomicBool>,
         thread_completed: Arc<AtomicBool>,
+        ffmpeg_stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
     ) {
-        let ffmpeg_stdin = Arc::new(Mutex::new(None));
-
         // Add batch handling
         let mut frame_batch = Vec::new();
         let mut batch_count = 0;
@@ -290,8 +300,11 @@ impl FrameRecorder {
                 Self::request_worker_shutdown(worker);
             }
 
+            let width = self.resolved_texture.width();
+            let height = self.resolved_texture.height();
+
             // Create new worker thread
-            *worker_thread_guard = Some(self.create_worker_thread());
+            *worker_thread_guard = Some(self.create_worker_thread(width, height));
 
             // Reset recording state
             *self.frame_number.lock().unwrap() = 0;

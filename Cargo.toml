@@ -1,6 +1,6 @@
 [package]
 name = "glyphvis"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["13thEye <jjhh@13theye.com>"]
 edition = "2021"
 

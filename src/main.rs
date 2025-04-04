@@ -734,7 +734,15 @@ fn launch_commands(app: &App, model: &mut Model) {
                 position,
             } => {
                 if let Some(grid) = model.grids.get_mut(&name) {
-                    grid.slide(&axis, number, position, app.time);
+                    let axis_validated = match Axis::try_from(axis.as_str()) {
+                        Ok(axis) => axis,
+                        Err(err) => {
+                            println!("{}", err);
+                            return;
+                        }
+                    };
+
+                    grid.slide(axis_validated, number, position, app.time);
                 }
             }
             OscCommand::GridGlyph {

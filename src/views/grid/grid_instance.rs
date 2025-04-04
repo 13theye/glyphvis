@@ -772,24 +772,11 @@ impl GridInstance {
     }
 
     /**************************** Row/column Slide Effect *****************************/
-    pub fn slide(&mut self, axis: &str, index: i32, position: f32, time: f32) {
-        // Validate axis
-        if axis != "x" && axis != "y" {
-            println!("Slide axis value must be x or y. Current value is {}", axis);
-        }
-
-        // Transform axis to char
-        let axis_char = match axis {
-            "x" => 'x',
-            "y" => 'y',
-            _ => '0', // this case shouldn't happen
-        };
-
+    pub fn slide(&mut self, axis: Axis, index: i32, position: f32, time: f32) {
         // Get current row/col positions
-        let positions = match axis_char {
-            'x' => &mut self.row_positions,
-            'y' => &mut self.col_positions,
-            _ => return,
+        let positions = match axis {
+            Axis::X => &mut self.row_positions,
+            Axis::Y => &mut self.col_positions,
         };
 
         // Get current position (default to 0.0 if not set)
@@ -802,7 +789,7 @@ impl GridInstance {
         let existing_index = self
             .slide_animations
             .iter()
-            .position(|anim| anim.axis == axis_char && anim.index == index);
+            .position(|anim| anim.axis == axis && anim.index == index);
 
         if let Some(idx) = existing_index {
             // Update existing animation
@@ -813,7 +800,7 @@ impl GridInstance {
         } else {
             // Create new animation
             let animation = SlideAnimation {
-                axis: axis_char,
+                axis,
                 index,
                 start_position: current_position,
                 current_position,
@@ -827,7 +814,7 @@ impl GridInstance {
     }
 
     fn update_slide_animations(&mut self, time: f32) {
-        let mut transforms_to_apply: Vec<(i32, char, Transform2D)> = Vec::new();
+        let mut transforms_to_apply: Vec<(i32, Axis, Transform2D)> = Vec::new();
         let mut completed = Vec::new();
 
         // Calculate all transforms without applying them yet
@@ -846,9 +833,8 @@ impl GridInstance {
                 // Create transform if there's significant movement
                 if delta.abs() > 0.001 {
                     let translation = match animation.axis {
-                        'x' => vec2(delta, 0.0),
-                        'y' => vec2(0.0, delta),
-                        _ => vec2(0.0, 0.0),
+                        Axis::X => vec2(delta, 0.0),
+                        Axis::Y => vec2(0.0, delta),
                     };
 
                     let transform = Transform2D {
@@ -868,9 +854,8 @@ impl GridInstance {
 
                 if delta.abs() > 0.001 {
                     let translation = match animation.axis {
-                        'x' => vec2(delta, 0.0),
-                        'y' => vec2(0.0, delta),
-                        _ => vec2(0.0, 0.0),
+                        Axis::X => vec2(delta, 0.0),
+                        Axis::Y => vec2(0.0, delta),
                     };
 
                     let transform = Transform2D {
@@ -890,14 +875,14 @@ impl GridInstance {
         // Apply all calculated transforms
         for (index, axis, transform) in transforms_to_apply {
             match axis {
-                'x' => {
+                Axis::X => {
                     // Get row segments from CachedGrid and apply transform
                     let segments = self.grid.row_mut(index);
                     for segment in segments {
                         segment.apply_transform(&transform);
                     }
                 }
-                'y' => {
+                Axis::Y => {
                     // Get column segments from CachedGrid and apply transform
                     let segments = self.grid.col_mut(index);
                     for segment in segments {

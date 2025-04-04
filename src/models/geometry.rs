@@ -40,6 +40,18 @@ pub enum Axis {
     Y,
 }
 
+impl TryFrom<&str> for Axis {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "x" => Ok(Axis::X),
+            "y" => Ok(Axis::Y),
+            _ => Err(format!("Invalid axis: '{}'. Expected 'x' or 'y'", value)),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum PathElement {
     Line {

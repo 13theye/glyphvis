@@ -179,44 +179,6 @@ impl GridInstance {
         }
     }
 
-    /************************** Glyph System ********************************** */
-
-    // if the glyph exists in the show, retrieve the segments and stage
-    // in target_segments. Any anomalies result in no glyph
-    pub fn stage_glyph_by_index(&mut self, project: &Project, index: usize) {
-        match project.get_show(&self.show) {
-            Some(show) => match show.show_order.get(&(index as u32)) {
-                Some(show_element) => match project.get_glyph(&show_element.name) {
-                    Some(glyph) => {
-                        self.current_glyph_index = index;
-                        self.target_segments = (!glyph.segments.is_empty())
-                            .then(|| glyph.segments.iter().cloned().collect());
-                    }
-                    None => self.stage_empty_glyph(),
-                },
-                None => self.stage_empty_glyph(),
-            },
-            None => self.stage_empty_glyph(),
-        }
-    }
-
-    pub fn stage_empty_glyph(&mut self) {
-        self.target_segments = Some(HashSet::new());
-    }
-
-    pub fn stage_next_glyph(&mut self, project: &Project) {
-        self.advance_glyph_index(self.current_glyph_index);
-        self.stage_glyph_by_index(project, self.current_glyph_index);
-    }
-
-    fn advance_glyph_index(&mut self, index: usize) {
-        if index + 1 > self.index_max {
-            self.current_glyph_index = 1;
-        } else {
-            self.current_glyph_index += 1;
-        }
-    }
-
     /****************************** Update Flow ***************************** */
 
     // The highest level update orchestrator
@@ -337,6 +299,44 @@ impl GridInstance {
 
     pub fn set_effect_target_style(&mut self, style: DrawStyle) {
         self.target_style = style;
+    }
+
+    /************************** Glyph System ********************************** */
+
+    // if the glyph exists in the show, retrieve the segments and stage
+    // in target_segments. Any anomalies result in no glyph
+    pub fn stage_glyph_by_index(&mut self, project: &Project, index: usize) {
+        match project.get_show(&self.show) {
+            Some(show) => match show.show_order.get(&(index as u32)) {
+                Some(show_element) => match project.get_glyph(&show_element.name) {
+                    Some(glyph) => {
+                        self.current_glyph_index = index;
+                        self.target_segments = (!glyph.segments.is_empty())
+                            .then(|| glyph.segments.iter().cloned().collect());
+                    }
+                    None => self.stage_empty_glyph(),
+                },
+                None => self.stage_empty_glyph(),
+            },
+            None => self.stage_empty_glyph(),
+        }
+    }
+
+    pub fn stage_empty_glyph(&mut self) {
+        self.target_segments = Some(HashSet::new());
+    }
+
+    pub fn stage_next_glyph(&mut self, project: &Project) {
+        self.advance_glyph_index(self.current_glyph_index);
+        self.stage_glyph_by_index(project, self.current_glyph_index);
+    }
+
+    fn advance_glyph_index(&mut self, index: usize) {
+        if index + 1 > self.index_max {
+            self.current_glyph_index = 1;
+        } else {
+            self.current_glyph_index += 1;
+        }
     }
 
     /*********************** Glyph Transitions ******************************/

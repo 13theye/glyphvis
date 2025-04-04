@@ -1,8 +1,12 @@
 // src/main.rs
 use nannou::prelude::*;
 use rand::Rng;
-use std::collections::HashMap;
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    io::{self, Write},
+    rc::Rc,
+    time::Instant,
+};
 
 use glyphvis::{
     animation::{
@@ -13,10 +17,9 @@ use glyphvis::{
     controllers::{OscCommand, OscController, OscSender},
     effects::FadeEffect,
     models::Project,
-    services::FrameRecorder,
-    views::{BackgroundManager, DrawStyle, GridInstance},
+    services::{FrameRecorder, SegmentGraph},
+    views::{BackgroundManager, CachedGrid, DrawStyle, GridInstance},
 };
-use std::io::{self, Write};
 
 struct Model {
     // Data from the Project file including all Glyph definitions
@@ -26,15 +29,26 @@ struct Model {
     // By lighting up sets of segments, different characters are displayed.
     //
     // The CachedGrid is the generic grid structure.
+    // Currently, one project holds a single grid type. The draw instructions are held in Model
+    // as a CachedGrid. This helps avoid redundant calculations when GridInstances are created.
+    base_grid: CachedGrid,
+
+    // The Graph is the network of connections between segments. This is shared among Grids
+    // of the same type as it is read-only.
+    base_graph: Rc<SegmentGraph>,
+
     // A GridInstance manages the state of an individual grid and sends commands to its internal segments to turn on or off,
     // or display different colors.
     //
-    // When a Grid is created, a Show from the Project file is attached. It is hidden by default until it receives a command
-    // to be shown. A Grid cannot be destroyed once created.
+    // When a GridInstance is created, a Show from the Project file is attached. The GridInstance is hidden by default until it receives a command
+    // to be shown. A GridInstance cannot be destroyed once created.
     grids: HashMap<String, GridInstance>, //(grid_id : GridInstance)
 
     // BackgroundManager handles Background color state
     background: BackgroundManager,
+
+    // Handle to API that builds segment commands defining animation sequences between Glyphs.
+    transition_engine: TransitionEngine,
 
     // OSC Comms components:
     // OscController checks incoming OSC commands for validity and maintains a queue holding
@@ -48,6 +62,8 @@ struct Model {
     //
     // The full-resolution texture that is drawn every frame
     texture: wgpu::Texture,
+
+    // Nannou API
     draw: nannou::Draw,
     draw_renderer: nannou::draw::Renderer,
 
@@ -56,9 +72,6 @@ struct Model {
 
     // A random number generator
     random: rand::rngs::ThreadRng,
-
-    // Builds segment commands defining animation sequences between Glyphs.
-    transition_engine: TransitionEngine,
 
     // Segment default style as stored in config.toml
     // Need it here to pass into GridInstance when a Grid is created.
@@ -96,6 +109,10 @@ fn model(app: &App) -> Model {
     let project_path = config.resolve_project_path();
     let project = Project::load(project_path).expect("Failed to load project file");
 
+    // Cache grid draw instructions and the segment graph
+    let base_grid = CachedGrid::new(&project);
+    let base_graph = Rc::new(SegmentGraph::new(&base_grid));
+
     // Create OSC controller
     let osc_controller =
         OscController::new(config.osc.rx_port).expect("Failed to create OSC Controller");
@@ -126,8 +143,8 @@ fn model(app: &App) -> Model {
         .usage(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING)
         // Use nannou's default multisampling sample count.
         .sample_count(config.rendering.texture_samples)
-        // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing. Rgba16Float
-        // Use 8-bit for standard quality and better perforamnce. Rgba8Unorm Rgb10a2Unorm
+        // Use a spacious 16-bit linear sRGBA format suitable for high quality drawing: Rgba16Float
+        // Use 8-bit for standard quality and better perforamnce: Rgba8Unorm Rgb10a2Unorm
         .format(wgpu::TextureFormat::Rgba16Float)
         // Build
         .build(device);
@@ -171,8 +188,13 @@ fn model(app: &App) -> Model {
 
     Model {
         project,
+        base_grid,
+        base_graph,
+
         grids: HashMap::new(), //grid,
+        transition_engine: TransitionEngine::new(default_transition_config),
         background: BackgroundManager::default(),
+
         osc_controller,
         osc_sender,
 
@@ -184,8 +206,6 @@ fn model(app: &App) -> Model {
 
         default_stroke_weight: config.style.default_stroke_weight,
         default_backbone_stroke_weight: config.style.default_backbone_stroke_weight,
-
-        transition_engine: TransitionEngine::new(default_transition_config),
 
         frame_recorder,
         exit_requested: false,
@@ -245,6 +265,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Render to texture and handle frame recording
     render_and_capture(app, model);
 
+    // For benchmarking:
     //let total_duration = start_time.elapsed();
     //println!("Total update time: {:?}", total_duration);
 }
@@ -279,7 +300,7 @@ fn draw_fps(model: &Model) {
         .color(RED);
 }
 
-fn debug_on(app: &App, model: &mut Model) {
+fn init_fps(app: &App, model: &mut Model) {
     model.fps = 0.0;
     model.frame_count = 0;
     model.frame_time_accumulator = 0.0;
@@ -589,7 +610,7 @@ fn key_pressed(app: &App, model: &mut Model, key: Key) {
         /***************** Below functions aren't implemented in OSC ****************** */
         Key::P => {
             model.debug_flag = !model.debug_flag;
-            debug_on(app, model);
+            init_fps(app, model);
         }
         // Graceful quit that waits for frame queue to be processed
         Key::Q => {
@@ -665,6 +686,8 @@ fn launch_commands(app: &App, model: &mut Model) {
                     name.clone(),
                     &model.project,
                     &show,
+                    &model.base_grid,
+                    Rc::clone(&model.base_graph),
                     pt2(position.0, position.1),
                     rotation,
                     model.default_stroke_weight,

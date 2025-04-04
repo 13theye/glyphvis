@@ -467,12 +467,6 @@ impl CachedGrid {
                         &viewbox,
                         grid_dims,
                     );
-                    /*
-                    // Only print edge elements for brevity
-                    if edge_type != EdgeType::None {
-                        println!("Created {} at ({},{}) - {:?}", element_id, x, y, edge_type);
-                    }
-                    */
 
                     segments.insert(segment.id.clone(), segment);
                 }
@@ -480,6 +474,7 @@ impl CachedGrid {
         }
 
         // Remove overlapping segments
+        // this doesn't work so shelving for now
         //segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
 
         Self {

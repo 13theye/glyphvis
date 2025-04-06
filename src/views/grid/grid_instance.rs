@@ -242,7 +242,7 @@ impl GridInstance {
         // 4. Advance any active transition & generate update messages
         if self.has_active_transition() {
             if let Some(updates) = self.process_active_transition(dt) {
-                self.update_active_segments_state(&updates);
+                self.track_active_segments(&updates);
                 self.generate_transition_update_messages(&updates);
             }
         }
@@ -250,13 +250,24 @@ impl GridInstance {
         // 5. Generate update messages for remaining segments (backbone)
         self.stage_backbone_updates();
 
-        // 6. Draw
-        self.draw_grid_segments(draw);
+        // 6. Push updates to grid segments
+        self.push_updates();
+
+        // 7. Draw
+        if self.is_visible {
+            self.draw_grid(draw);
+        }
+
+        // 8. Clean up
+        self.clear_update_batch();
     }
 
-    fn draw_grid_segments(&mut self, draw: &Draw) {
-        self.grid.draw(draw, &self.update_batch, self.is_visible);
-        self.clear_update_batch();
+    fn push_updates(&mut self) {
+        self.grid.apply_updates(&self.update_batch);
+    }
+
+    fn draw_grid(&self, draw: &Draw) {
+        self.grid.draw(draw);
     }
 
     /************************** Update messages and state ******************************/
@@ -409,17 +420,16 @@ impl GridInstance {
         // Reset trigger flag
         self.transition_trigger_received = false;
 
-        // Clear transition if complete; reset Power On effect
+        // Clear transition if complete
         if transition.is_complete() {
             self.active_transition = None;
-            //self.use_power_on_effect = false;
         }
 
         updates
     }
 
-    // Update the active segments state based on TransitionUpdates
-    fn update_active_segments_state(&mut self, updates: &TransitionUpdates) {
+    // Update the active segments field based on TransitionUpdates
+    fn track_active_segments(&mut self, updates: &TransitionUpdates) {
         for segment_id in &updates.segments_on {
             self.current_active_segments.insert(segment_id.clone());
         }

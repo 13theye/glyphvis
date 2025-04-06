@@ -177,7 +177,7 @@ impl CachedSegment {
                 end_x,
                 end_y,
                 ..
-            } => grid_utility::classify_arc(start_x, start_y, end_x, end_y),
+            } => segment_utility::classify_arc(start_x, start_y, end_x, end_y),
 
             // this isn't currently used so it's just tossed into the "Unknown" pile
             PathElement::Circle { .. } => SegmentType::Unknown,
@@ -252,7 +252,7 @@ impl CachedSegment {
         }
     }
 
-    pub fn update_segment_style(&mut self) {
+    fn update_segment_style(&mut self) {
         // let the state perform its update for this frame
         if let Some(new_state) = self.state.update() {
             self.transition_to(new_state);
@@ -276,7 +276,7 @@ impl CachedSegment {
         }
     }
 
-    pub fn scale_stroke_weight(&mut self, scale_factor: f32) {
+    fn scale_stroke_weight(&mut self, scale_factor: f32) {
         self.current_style.stroke_weight *= scale_factor;
         self.state.scale_stroke_weight(scale_factor);
     }
@@ -350,15 +350,42 @@ impl CachedGrid {
     /************************ Rendering ****************************/
 
     // Draws the grid's current frame state
-    pub fn draw(
-        &mut self,
-        draw: &Draw,
-        update_batch: &HashMap<String, StyleUpdateMsg>,
-        visible: bool,
-    ) {
+    pub fn draw(&self, draw: &Draw) {
         let mut foreground_segments = Vec::new();
         let mut middle_segments = Vec::new();
 
+        for segment in self.segments.values() {
+            // draw background layer first, or prepare other layers
+
+            match segment.state.layer() {
+                Layer::Background => {
+                    for command in &segment.draw_commands {
+                        command.draw(draw, &segment.current_style);
+                    }
+                }
+                Layer::Middle => {
+                    middle_segments.push(segment);
+                }
+                Layer::Foreground => {
+                    foreground_segments.push(segment);
+                }
+            }
+        }
+
+        for segment in middle_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
+            }
+        }
+
+        for segment in foreground_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
+            }
+        }
+    }
+
+    pub fn apply_updates(&mut self, update_batch: &HashMap<String, StyleUpdateMsg>) {
         for segment in self.segments.values_mut() {
             // process update message
             if let Some(msg) = update_batch.get(&segment.id) {
@@ -367,37 +394,6 @@ impl CachedGrid {
 
             // update segment style
             segment.update_segment_style();
-
-            // draw background layer first, or prepare other layers
-            if visible {
-                match segment.state.layer() {
-                    Layer::Background => {
-                        for command in &segment.draw_commands {
-                            command.draw(draw, &segment.current_style);
-                        }
-                    }
-                    Layer::Middle => {
-                        middle_segments.push(segment.clone());
-                    }
-                    Layer::Foreground => {
-                        foreground_segments.push(segment.clone());
-                    }
-                }
-            }
-        }
-
-        if visible {
-            for segment in middle_segments {
-                for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style);
-                }
-            }
-
-            for segment in foreground_segments {
-                for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style);
-                }
-            }
         }
     }
 

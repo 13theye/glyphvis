@@ -6,7 +6,7 @@ use crate::{
     models::{PathElement, ViewBox},
     utilities::grid_utility,
     views::grid::grid_generic::ARC_RESOLUTION,
-    views::{DrawCommand, Transform2D},
+    views::{DrawCommand, SegmentType, Transform2D},
 };
 use nannou::prelude::*;
 
@@ -101,4 +101,25 @@ fn initial_transform(svg_x: f32, svg_y: f32, viewbox: &ViewBox, transform: &Tran
     let local_y = center_y - svg_y;
     // return:
     transform.apply_to_point(pt2(local_x, local_y))
+}
+
+// Determine the SegmentType of a given Arc element
+pub fn classify_arc(start_x: &f32, start_y: &f32, end_x: &f32, end_y: &f32) -> SegmentType {
+    // Top-left arc: starts high, ends left
+    if *start_y < *end_y && *end_x < *start_x {
+        return SegmentType::ArcTopLeft;
+    }
+    // Top-right arc: starts high, ends right
+    else if *start_y < *end_y && *end_x > *start_x {
+        return SegmentType::ArcTopRight;
+    }
+    // Bottom-left arc: starts low, ends left
+    else if *start_y > *end_y && *end_x < *start_x {
+        return SegmentType::ArcBottomLeft;
+    }
+    // Bottom-right arc: starts low, ends right
+    else if *start_y > *end_y && *end_x > *start_x {
+        return SegmentType::ArcBottomRight;
+    }
+    SegmentType::Unknown
 }

@@ -51,7 +51,7 @@ pub struct GridInstance {
     // The currently active transition
     active_transition: Option<Transition>,
     // Parameters that help define the next transition when created
-    pub transition_config: Option<TransitionConfig>,
+    pub transition_config: Option<TransitionConfig>, // probably don't need this
     pub transition_trigger_type: TransitionTriggerType,
     pub transition_next_animation_type: TransitionAnimationType,
     pub transition_trigger_received: bool,
@@ -79,7 +79,6 @@ pub struct GridInstance {
     pub target_style: DrawStyle,
 
     // backbone state (non-active segments)
-    //
     backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
     pub backbone_style: DrawStyle,
 
@@ -91,14 +90,14 @@ pub struct GridInstance {
     pub current_rotation: f32,
     pub current_scale: f32,
 
-    pub is_visible: bool,
-    spawn_location: Point2,
+    pub is_visible: bool,   // draw this grid to screen when true
+    spawn_location: Point2, // the original location of the grid
 
     // state for "instantaneous" movements -- helps interpolate position
     // so that OSC position commmands look sync'ed with refresh
     last_position: Point2,
     target_position: Point2,
-    position_update_time: f32,
+    position_update_time: f32, // time when the command was received
 
     // usually equal to time between updates (1.0/60.0)
     movement_duration: f32,

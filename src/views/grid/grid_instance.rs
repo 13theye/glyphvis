@@ -889,7 +889,6 @@ impl GridInstance {
                         segment.apply_transform(&transform);
                     }
                 }
-                _ => {}
             }
         }
 

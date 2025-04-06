@@ -238,8 +238,8 @@ impl TransitionEngine {
         // Filter out segments that are already in the target state and have the same style
 
         filtered_segments.retain(|seg| {
-            let current_style = grid.segments[seg].current_style();
-            if current_style == *target_style {
+            let current_style = &grid.segments[seg].current_style;
+            if *current_style == *target_style {
                 false // Remove if styles match
             } else {
                 true // Keep if no previous style

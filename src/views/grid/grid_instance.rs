@@ -242,7 +242,7 @@ impl GridInstance {
         // 4. Advance any active transition & generate update messages
         if self.has_active_transition() {
             if let Some(updates) = self.process_active_transition(dt) {
-                self.update_active_segments_state(&updates);
+                self.track_active_segments(&updates);
                 self.generate_transition_update_messages(&updates);
             }
         }
@@ -250,13 +250,24 @@ impl GridInstance {
         // 5. Generate update messages for remaining segments (backbone)
         self.stage_backbone_updates();
 
-        // 6. Draw
-        self.draw_grid_segments(draw);
+        // 6. Push updates to grid segments
+        self.push_updates();
+
+        // 7. Draw
+        if self.is_visible {
+            self.draw_grid(draw);
+        }
+
+        // 8. Clean up
+        self.clear_update_batch();
     }
 
-    fn draw_grid_segments(&mut self, draw: &Draw) {
-        self.grid.draw(draw, &self.update_batch, self.is_visible);
-        self.clear_update_batch();
+    fn push_updates(&mut self) {
+        self.grid.apply_updates(&self.update_batch);
+    }
+
+    fn draw_grid(&self, draw: &Draw) {
+        self.grid.draw(draw);
     }
 
     /************************** Update messages and state ******************************/
@@ -409,17 +420,16 @@ impl GridInstance {
         // Reset trigger flag
         self.transition_trigger_received = false;
 
-        // Clear transition if complete; reset Power On effect
+        // Clear transition if complete
         if transition.is_complete() {
             self.active_transition = None;
-            //self.use_power_on_effect = false;
         }
 
         updates
     }
 
-    // Update the active segments state based on TransitionUpdates
-    fn update_active_segments_state(&mut self, updates: &TransitionUpdates) {
+    // Update the active segments field based on TransitionUpdates
+    fn track_active_segments(&mut self, updates: &TransitionUpdates) {
         for segment_id in &updates.segments_on {
             self.current_active_segments.insert(segment_id.clone());
         }
@@ -772,24 +782,11 @@ impl GridInstance {
     }
 
     /**************************** Row/column Slide Effect *****************************/
-    pub fn slide(&mut self, axis: &str, index: i32, position: f32, time: f32) {
-        // Validate axis
-        if axis != "x" && axis != "y" {
-            println!("Slide axis value must be x or y. Current value is {}", axis);
-        }
-
-        // Transform axis to char
-        let axis_char = match axis {
-            "x" => 'x',
-            "y" => 'y',
-            _ => '0', // this case shouldn't happen
-        };
-
+    pub fn slide(&mut self, axis: Axis, index: i32, position: f32, time: f32) {
         // Get current row/col positions
-        let positions = match axis_char {
-            'x' => &mut self.row_positions,
-            'y' => &mut self.col_positions,
-            _ => return,
+        let positions = match axis {
+            Axis::X => &mut self.row_positions,
+            Axis::Y => &mut self.col_positions,
         };
 
         // Get current position (default to 0.0 if not set)
@@ -802,7 +799,7 @@ impl GridInstance {
         let existing_index = self
             .slide_animations
             .iter()
-            .position(|anim| anim.axis == axis_char && anim.index == index);
+            .position(|anim| anim.axis == axis && anim.index == index);
 
         if let Some(idx) = existing_index {
             // Update existing animation
@@ -813,7 +810,7 @@ impl GridInstance {
         } else {
             // Create new animation
             let animation = SlideAnimation {
-                axis: axis_char,
+                axis,
                 index,
                 start_position: current_position,
                 current_position,
@@ -827,7 +824,7 @@ impl GridInstance {
     }
 
     fn update_slide_animations(&mut self, time: f32) {
-        let mut transforms_to_apply: Vec<(i32, char, Transform2D)> = Vec::new();
+        let mut transforms_to_apply: Vec<(i32, Axis, Transform2D)> = Vec::new();
         let mut completed = Vec::new();
 
         // Calculate all transforms without applying them yet
@@ -846,9 +843,8 @@ impl GridInstance {
                 // Create transform if there's significant movement
                 if delta.abs() > 0.001 {
                     let translation = match animation.axis {
-                        'x' => vec2(delta, 0.0),
-                        'y' => vec2(0.0, delta),
-                        _ => vec2(0.0, 0.0),
+                        Axis::X => vec2(delta, 0.0),
+                        Axis::Y => vec2(0.0, delta),
                     };
 
                     let transform = Transform2D {
@@ -868,9 +864,8 @@ impl GridInstance {
 
                 if delta.abs() > 0.001 {
                     let translation = match animation.axis {
-                        'x' => vec2(delta, 0.0),
-                        'y' => vec2(0.0, delta),
-                        _ => vec2(0.0, 0.0),
+                        Axis::X => vec2(delta, 0.0),
+                        Axis::Y => vec2(0.0, delta),
                     };
 
                     let transform = Transform2D {
@@ -890,21 +885,20 @@ impl GridInstance {
         // Apply all calculated transforms
         for (index, axis, transform) in transforms_to_apply {
             match axis {
-                'x' => {
+                Axis::X => {
                     // Get row segments from CachedGrid and apply transform
                     let segments = self.grid.row_mut(index);
                     for segment in segments {
                         segment.apply_transform(&transform);
                     }
                 }
-                'y' => {
+                Axis::Y => {
                     // Get column segments from CachedGrid and apply transform
                     let segments = self.grid.col_mut(index);
                     for segment in segments {
                         segment.apply_transform(&transform);
                     }
                 }
-                _ => {}
             }
         }
 

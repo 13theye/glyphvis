@@ -2,9 +2,10 @@
 //
 // Tears the rows and columns of a grid apart visually.
 
-// todo: refactor to use the Axis type instead of char
+use crate::models::Axis;
+
 pub struct SlideAnimation {
-    pub axis: char,
+    pub axis: Axis,
     pub index: i32,
     pub start_position: f32,
     pub current_position: f32,

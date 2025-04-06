@@ -9,7 +9,7 @@
 
 use crate::{
     models::{EdgeType, PathElement, ViewBox},
-    views::{CachedSegment, SegmentType},
+    views::CachedSegment,
 };
 
 use nannou::prelude::*;
@@ -395,27 +395,6 @@ pub fn get_neighbor_direction(
         (-1, 0) => Some("West"),
         _ => None,
     }
-}
-
-// Determine the SegmentType of a given Arc element
-pub fn classify_arc(start_x: &f32, start_y: &f32, end_x: &f32, end_y: &f32) -> SegmentType {
-    // Top-left arc: starts high, ends left
-    if *start_y < *end_y && *end_x < *start_x {
-        return SegmentType::ArcTopLeft;
-    }
-    // Top-right arc: starts high, ends right
-    else if *start_y < *end_y && *end_x > *start_x {
-        return SegmentType::ArcTopRight;
-    }
-    // Bottom-left arc: starts low, ends left
-    else if *start_y > *end_y && *end_x < *start_x {
-        return SegmentType::ArcBottomLeft;
-    }
-    // Bottom-right arc: starts low, ends right
-    else if *start_y > *end_y && *end_x > *start_x {
-        return SegmentType::ArcBottomRight;
-    }
-    SegmentType::Unknown
 }
 
 #[cfg(test)]

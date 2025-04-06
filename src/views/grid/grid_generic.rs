@@ -38,70 +38,7 @@ const FLASH_DURATION: f32 = 0.132;
 const FADE_DURATION: f32 = 0.132;
 const FLASH_FADE_DURATION: f32 = 0.132;
 
-// DrawCommand is a single drawing operation that has been pre-processed from
-// SVG path data
-#[derive(Debug, Clone)]
-pub enum DrawCommand {
-    Line { start: Point2, end: Point2 },
-    Arc { points: Vec<Point2> },
-    Circle { center: Point2, radius: f32 },
-}
-
-impl DrawCommand {
-    fn apply_transform(&mut self, transform: &Transform2D) {
-        match self {
-            DrawCommand::Line { start, end, .. } => {
-                *start = transform.apply_to_point(*start);
-                *end = transform.apply_to_point(*end);
-            }
-            DrawCommand::Arc { points, .. } => {
-                for point in points {
-                    *point = transform.apply_to_point(*point);
-                }
-            }
-            DrawCommand::Circle { center, radius, .. } => {
-                *center = transform.apply_to_point(*center);
-                *radius *= transform.scale;
-            }
-        }
-    }
-
-    // temporarily public
-    pub fn draw(&self, draw: &Draw, style: &DrawStyle) {
-        match self {
-            DrawCommand::Line { start, end, .. } => {
-                draw.line()
-                    .start(*start)
-                    .end(*end)
-                    .stroke_weight(style.stroke_weight)
-                    .color(style.color)
-                    .caps_round();
-            }
-            DrawCommand::Arc { points, .. } => {
-                for window in points.windows(2) {
-                    if let [p1, p2] = window {
-                        draw.line()
-                            .start(*p1)
-                            .end(*p2)
-                            .stroke_weight(style.stroke_weight)
-                            .color(style.color)
-                            .caps_round();
-                    }
-                }
-            }
-            DrawCommand::Circle { center, radius, .. } => {
-                draw.ellipse()
-                    .x_y(center.x, center.y)
-                    .radius(*radius)
-                    .stroke(style.color)
-                    .stroke_weight(style.stroke_weight)
-                    .color(style.color)
-                    .caps_round();
-            }
-        }
-    }
-}
-
+// The color and thickness of the segment
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrawStyle {
     pub color: Rgba<f32>,
@@ -117,6 +54,7 @@ impl Default for DrawStyle {
     }
 }
 
+// Which screen layer does the segment need to be drawn to?
 #[derive(Debug, Clone, PartialEq)]
 pub enum Layer {
     Background,
@@ -124,17 +62,20 @@ pub enum Layer {
     Foreground,
 }
 
+// These messages tell the segment what to do on the next frame
 #[derive(Debug, Clone, PartialEq)]
 pub enum SegmentAction {
-    On,
-    Off,
-    BackboneUpdate,
-    InstantStyleChange,
+    On,                 // turn this segment on using PowerOn
+    Off,                // turn this segment off using PowerOff
+    BackboneUpdate,     // this segment is not active but needs to be updated via backbone effect
+    InstantStyleChange, // just change the segment to the target style without any animation
 }
 
+// All segments are collected in the Grid's update_batch field,
+// which is a Vec of segment_ids and StyleUpdateMsg.
 #[derive(Debug, Clone)]
 pub struct StyleUpdateMsg {
-    pub action: Option<SegmentAction>,
+    pub action: Option<SegmentAction>, // when None, the segment just redraws as the previous frame state
     pub target_style: Option<DrawStyle>,
 }
 
@@ -147,25 +88,17 @@ impl StyleUpdateMsg {
     }
 }
 
+// All the possible states of a segment.
 #[derive(Debug, Clone)]
-pub enum SegmentState {
-    Idle {
-        style: DrawStyle,
-    },
-    PoweringOn {
-        start_time: Instant,
-        target_style: DrawStyle,
-    },
-    PoweringOff {
-        start_time: Instant,
-        from_style: DrawStyle,
-        target_style: DrawStyle,
-    },
-    Active {
-        style: DrawStyle,
-    },
+pub enum SegmentStateType {
+    Idle,
+    PoweringOn,
+    PoweringOff,
+    Active,
 }
 
+// This is too custom for the Ulsan project's grid type, and may need to be changed in
+// the future. Currently it's used mostly for handwriting stroke-order simulation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum SegmentType {
     Horizontal,
@@ -177,23 +110,38 @@ pub enum SegmentType {
     Unknown,
 }
 
-// A CachedSegment contains pre-processed draw commands for a segment
-// Acts like a virtual light fixture, responds to style update messages
-#[derive(Debug, Clone)]
+// A CachedSegment is the basic element of a Grid.
+// Acts like a virtual light fixture, and is reponsible for its own drawing.
+// Receives messages from the Grid that dictate its behavior for the next frame.
 pub struct CachedSegment {
     // metadata
     pub id: String,
-    pub tile_coordinate: (u32, u32),
+    pub tile_coordinate: (u32, u32), // which tile in the grid
     pub segment_type: SegmentType,
-    pub layer: Layer,
 
-    // style state
-    state: SegmentState,
+    // state
+    pub current_style: DrawStyle, // current display style, here for quick access
+    state: Box<dyn SegmentState>, // manages update behavior
 
-    // draw commands cache
-    pub draw_commands: Vec<DrawCommand>,
-    pub original_path: PathElement,
-    pub edge_type: EdgeType,
+    // draw instructions cache
+    pub draw_commands: Vec<DrawCommand>, // Nannou draw command
+    pub original_path: PathElement,      // SVG path
+    pub edge_type: EdgeType,             // type of edge in the base tile
+}
+
+impl Clone for CachedSegment {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            tile_coordinate: self.tile_coordinate,
+            segment_type: self.segment_type,
+            current_style: self.current_style.clone(),
+            state: self.state.clone_box(),
+            draw_commands: self.draw_commands.clone(),
+            original_path: self.original_path.clone(),
+            edge_type: self.edge_type,
+        }
+    }
 }
 
 impl CachedSegment {
@@ -229,7 +177,9 @@ impl CachedSegment {
                 end_x,
                 end_y,
                 ..
-            } => grid_utility::classify_arc(start_x, start_y, end_x, end_y),
+            } => segment_utility::classify_arc(start_x, start_y, end_x, end_y),
+
+            // this isn't currently used so it's just tossed into the "Unknown" pile
             PathElement::Circle { .. } => SegmentType::Unknown,
         };
 
@@ -237,12 +187,12 @@ impl CachedSegment {
             id: element_id,
             tile_coordinate,
             segment_type,
-            layer: Layer::Background,
 
             // segment starts out in the Idle state
-            state: SegmentState::Idle {
+            state: Box::new(IdleState {
                 style: DrawStyle::default(),
-            },
+            }),
+            current_style: DrawStyle::default(),
 
             draw_commands,
             original_path: path.clone(),
@@ -250,147 +200,72 @@ impl CachedSegment {
         }
     }
 
-    /**************************  Style functions *************************************** */
+    /**************************  State management *************************************** */
 
-    fn update_animation(&mut self) {
-        match &self.state {
-            SegmentState::PoweringOn {
-                start_time,
-                target_style,
-            } => {
-                let elapsed_time = start_time.elapsed().as_secs_f32();
-                if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
-                    self.layer = Layer::Foreground;
-                } else {
-                    // Animation complete
-                    self.state = SegmentState::Active {
-                        style: target_style.clone(),
-                    }
-                }
-            }
-
-            SegmentState::PoweringOff {
-                start_time,
-                from_style: _,
-                target_style,
-            } => {
-                let elapsed_time = start_time.elapsed().as_secs_f32();
-                if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
-                    self.layer = Layer::Middle;
-                } else {
-                    // Animation complete
-                    self.layer = Layer::Background;
-                    self.state = SegmentState::Idle {
-                        style: target_style.clone(),
-                    }
-                }
-            }
-            _ => {}
-        };
-    }
-
-    pub fn current_style(&self) -> DrawStyle {
-        match &self.state {
-            SegmentState::Idle { style } | SegmentState::Active { style } => style.clone(),
-            SegmentState::PoweringOn { .. } => self.calculate_transition_style(),
-            SegmentState::PoweringOff { .. } => self.calculate_transition_style(),
-        }
-    }
-
-    fn calculate_transition_style(&self) -> DrawStyle {
-        match &self.state {
-            SegmentState::PoweringOn {
-                start_time,
-                target_style,
-            } => {
-                let elapsed_time = start_time.elapsed().as_secs_f32();
-                //let flash_color = rgba(1.0, 1.0, 0.8, 1.0);
-                let flash_color = rgba(1.0, 0.0, 0.0, 1.0);
-
-                let color = if elapsed_time <= FLASH_DURATION {
-                    flash_color
-                } else if elapsed_time <= FLASH_DURATION + FLASH_FADE_DURATION {
-                    // Fade to target color
-                    let fade_progress = (elapsed_time - FLASH_DURATION) / FLASH_FADE_DURATION;
-                    easing::color_exp_ease(flash_color, target_style.color, fade_progress, 6.0)
-                } else {
-                    // Animation complete
-                    target_style.color
-                };
-
-                DrawStyle {
-                    color,
-                    stroke_weight: target_style.stroke_weight,
-                }
-            }
-
-            SegmentState::PoweringOff {
-                start_time,
-                from_style,
-                target_style,
-            } => {
-                let elapsed_time = start_time.elapsed().as_secs_f32();
-
-                // Calculate color based on animation phase
-                let color = if elapsed_time <= FADE_DURATION {
-                    // Fade to target color
-                    let fade_progress = elapsed_time / FADE_DURATION;
-                    easing::color_exp_ease(from_style.color, target_style.color, fade_progress, 6.0)
-                } else {
-                    // Animation complete
-                    target_style.color
-                };
-
-                DrawStyle {
-                    color,
-                    stroke_weight: target_style.stroke_weight,
-                }
-            }
-
-            SegmentState::Idle { style } | SegmentState::Active { style } => style.clone(),
-        }
-    }
-
-    pub fn process_style_update_msg(&mut self, msg: &StyleUpdateMsg) {
+    // set up the segment state according to the StyleUpdateMessage in this frame's update batch
+    fn update_segment_state(&mut self, msg: &StyleUpdateMsg) {
         match (&msg.action, &msg.target_style) {
             (Some(action), Some(target_style)) => {
                 match action {
                     SegmentAction::On => {
                         // Update the style for active segments
-                        self.state = SegmentState::PoweringOn {
+                        let new_state = Box::new(PoweringOnState {
                             start_time: Instant::now(),
                             target_style: target_style.clone(),
-                        }
+                            flash_duration: FLASH_DURATION,
+                            fade_duration: FLASH_FADE_DURATION,
+                        });
+                        self.transition_to(new_state);
                     }
                     SegmentAction::Off => {
-                        self.state = SegmentState::PoweringOff {
+                        let new_state = Box::new(PoweringOffState {
                             start_time: Instant::now(),
-                            from_style: self.current_style(),
+                            from_style: self.current_style.clone(),
                             target_style: target_style.clone(),
-                        }
+                            duration: FADE_DURATION,
+                        });
+                        self.transition_to(new_state);
                     }
                     SegmentAction::BackboneUpdate => {
-                        self.state = SegmentState::Idle {
+                        let new_state = Box::new(IdleState {
                             style: target_style.clone(),
-                        }
+                        });
+                        self.transition_to(new_state);
                     }
                     SegmentAction::InstantStyleChange => {
                         // instantly change to target style without animations or effects
-                        self.state = SegmentState::Active {
+                        let new_state = Box::new(ActiveState {
                             style: target_style.clone(),
-                        };
-                        self.layer = Layer::Foreground;
+                        });
+                        self.transition_to(new_state);
                     }
                 }
             }
             (None, Some(target_style)) => {
                 // Direct style update without action
-                self.state = SegmentState::Active {
+                let new_state = Box::new(ActiveState {
                     style: target_style.clone(),
-                }
+                });
+                self.state = new_state;
             }
             _ => {}
         }
+    }
+
+    fn update_segment_style(&mut self) {
+        // let the state perform its update for this frame
+        if let Some(new_state) = self.state.update() {
+            self.transition_to(new_state);
+        }
+
+        // update the current style
+        self.current_style = self.state.calculate_style();
+    }
+
+    fn transition_to(&mut self, new_state: Box<dyn SegmentState>) {
+        self.state.exit();
+        self.state = new_state;
+        self.state.enter();
     }
 
     /**************************  Transform functions *************************************** */
@@ -401,38 +276,24 @@ impl CachedSegment {
         }
     }
 
-    pub fn scale_stroke_weight(&mut self, scale_factor: f32) {
-        match &mut self.state {
-            SegmentState::Idle { style } | SegmentState::Active { style } => {
-                style.stroke_weight *= scale_factor;
-            }
-            SegmentState::PoweringOn { target_style, .. } => {
-                target_style.stroke_weight *= scale_factor;
-            }
-            SegmentState::PoweringOff {
-                from_style,
-                target_style,
-                ..
-            } => {
-                from_style.stroke_weight *= scale_factor;
-                target_style.stroke_weight *= scale_factor;
-            }
-        }
+    fn scale_stroke_weight(&mut self, scale_factor: f32) {
+        self.current_style.stroke_weight *= scale_factor;
+        self.state.scale_stroke_weight(scale_factor);
     }
 
     /************************ Utility Methods ****************************/
 
     pub fn is_background(&self) -> bool {
-        matches!(self.layer, Layer::Background)
+        matches!(self.state.layer(), Layer::Background)
     }
 
     pub fn is_idle(&self) -> bool {
-        matches!(self.state, SegmentState::Idle { .. })
+        matches!(self.state.state_type(), SegmentStateType::Idle)
     }
 }
 
 // CachedGrid stores the pre-processed drawing commands for an entire grid
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CachedGrid {
     pub dimensions: (u32, u32), // number of tiles in x and y
     pub segments: HashMap<String, CachedSegment>,
@@ -474,7 +335,8 @@ impl CachedGrid {
         }
 
         // Remove overlapping segments
-        // this doesn't work so shelving for now
+        // this doesn't work, and slide effects look better without it
+        // so shelving for now
         //segments = purge_overlapping_segments(segments, project.grid_x, project.grid_y);
 
         Self {
@@ -486,59 +348,58 @@ impl CachedGrid {
     }
 
     /************************ Rendering ****************************/
-    pub fn draw(
-        &mut self,
-        draw: &Draw,
-        update_batch: &HashMap<String, StyleUpdateMsg>,
-        visible: bool,
-    ) {
+
+    // Draws the grid's current frame state
+    pub fn draw(&self, draw: &Draw) {
         let mut foreground_segments = Vec::new();
         let mut middle_segments = Vec::new();
 
-        for segment in self.segments.values_mut() {
-            if let Some(msg) = update_batch.get(&segment.id) {
-                segment.process_style_update_msg(msg);
-            }
-
-            segment.update_animation();
-
+        for segment in self.segments.values() {
             // draw background layer first, or prepare other layers
-            if visible {
-                match segment.layer {
-                    Layer::Background => {
-                        for command in &segment.draw_commands {
-                            command.draw(draw, &segment.current_style());
-                        }
+
+            match segment.state.layer() {
+                Layer::Background => {
+                    for command in &segment.draw_commands {
+                        command.draw(draw, &segment.current_style);
                     }
-                    Layer::Middle => {
-                        middle_segments.push(segment.clone());
-                    }
-                    Layer::Foreground => {
-                        foreground_segments.push(segment.clone());
-                    }
+                }
+                Layer::Middle => {
+                    middle_segments.push(segment);
+                }
+                Layer::Foreground => {
+                    foreground_segments.push(segment);
                 }
             }
         }
 
-        if visible {
-            for segment in middle_segments {
-                for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style());
-                }
+        for segment in middle_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
+            }
+        }
+
+        for segment in foreground_segments {
+            for command in &segment.draw_commands {
+                command.draw(draw, &segment.current_style);
+            }
+        }
+    }
+
+    pub fn apply_updates(&mut self, update_batch: &HashMap<String, StyleUpdateMsg>) {
+        for segment in self.segments.values_mut() {
+            // process update message
+            if let Some(msg) = update_batch.get(&segment.id) {
+                segment.update_segment_state(msg);
             }
 
-            for segment in foreground_segments {
-                for command in &segment.draw_commands {
-                    command.draw(draw, &segment.current_style());
-                }
-            }
+            // update segment style
+            segment.update_segment_style();
         }
     }
 
     /************************ Transform Methods **************************/
 
     pub fn apply_transform(&mut self, transform: &Transform2D) {
-        //self.transform = transform.clone();
         for segment in self.segments.values_mut() {
             segment.apply_transform(transform);
         }
@@ -552,16 +413,19 @@ impl CachedGrid {
 
     /************************ Utility Methods ****************************/
 
+    // returns an iterator for the segments of a given tile.
     pub fn get_tile_segments_iter(&self, x: u32, y: u32) -> impl Iterator<Item = &CachedSegment> {
         self.segments
             .values()
             .filter(move |segment| segment.tile_coordinate == (x, y))
     }
 
+    // returns a segment reference by ID
     pub fn segment(&self, id: &str) -> Option<&CachedSegment> {
         self.segments.get(id)
     }
 
+    // returns the segments of a given row
     pub fn row_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
         // check that number is a valid index
         if number < 0 {
@@ -575,6 +439,7 @@ impl CachedGrid {
             .collect()
     }
 
+    // returns the segments of a given column
     pub fn col_mut(&mut self, number: i32) -> Vec<&mut CachedSegment> {
         // check that number is a valid index
         if number < 0 {
@@ -632,6 +497,301 @@ impl CachedGrid {
             }
         }
         true
+    }
+}
+
+// DrawCommand is a single drawing operation that has been pre-processed from
+// SVG path data
+#[derive(Debug, Clone)]
+pub enum DrawCommand {
+    Line { start: Point2, end: Point2 },
+    Arc { points: Vec<Point2> },
+    Circle { center: Point2, radius: f32 },
+}
+
+impl DrawCommand {
+    fn apply_transform(&mut self, transform: &Transform2D) {
+        match self {
+            DrawCommand::Line { start, end, .. } => {
+                *start = transform.apply_to_point(*start);
+                *end = transform.apply_to_point(*end);
+            }
+            DrawCommand::Arc { points, .. } => {
+                for point in points {
+                    *point = transform.apply_to_point(*point);
+                }
+            }
+            DrawCommand::Circle { center, radius, .. } => {
+                *center = transform.apply_to_point(*center);
+                *radius *= transform.scale;
+            }
+        }
+    }
+
+    fn draw(&self, draw: &Draw, style: &DrawStyle) {
+        match self {
+            DrawCommand::Line { start, end, .. } => {
+                draw.line()
+                    .start(*start)
+                    .end(*end)
+                    .stroke_weight(style.stroke_weight)
+                    .color(style.color)
+                    .caps_round();
+            }
+            DrawCommand::Arc { points, .. } => {
+                for window in points.windows(2) {
+                    if let [p1, p2] = window {
+                        draw.line()
+                            .start(*p1)
+                            .end(*p2)
+                            .stroke_weight(style.stroke_weight)
+                            .color(style.color)
+                            .caps_round();
+                    }
+                }
+            }
+            DrawCommand::Circle { center, radius, .. } => {
+                draw.ellipse()
+                    .x_y(center.x, center.y)
+                    .radius(*radius)
+                    .stroke(style.color)
+                    .stroke_weight(style.stroke_weight)
+                    .color(style.color)
+                    .caps_round();
+            }
+        }
+    }
+}
+
+// SegmentState manages the current and future styles of a segment based on what it's
+// supposed to be doing at any given time
+pub trait SegmentState {
+    fn state_type(&self) -> SegmentStateType;
+    fn enter(&self);
+    fn update(&self) -> Option<Box<dyn SegmentState>>;
+    fn exit(&self);
+    fn layer(&self) -> Layer;
+    fn calculate_style(&self) -> DrawStyle;
+    fn scale_stroke_weight(&mut self, scale_factor: f32);
+    fn clone_box(&self) -> Box<dyn SegmentState>;
+}
+
+#[derive(Debug, Clone)]
+pub struct IdleState {
+    style: DrawStyle,
+}
+
+impl SegmentState for IdleState {
+    fn state_type(&self) -> SegmentStateType {
+        SegmentStateType::Idle
+    }
+
+    fn enter(&self) {
+        // No special entry behavior
+    }
+
+    fn update(&self) -> Option<Box<dyn SegmentState>> {
+        // An idle segment doesn't need to be updated
+        None
+    }
+
+    fn exit(&self) {
+        // No special exit behavior
+    }
+
+    fn layer(&self) -> Layer {
+        Layer::Background
+    }
+
+    fn calculate_style(&self) -> DrawStyle {
+        // An idle segment doesn't need to update its style
+        self.style.clone()
+    }
+
+    fn scale_stroke_weight(&mut self, scale_factor: f32) {
+        self.style.stroke_weight *= scale_factor;
+    }
+
+    fn clone_box(&self) -> Box<dyn SegmentState> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveState {
+    style: DrawStyle,
+}
+
+impl SegmentState for ActiveState {
+    fn state_type(&self) -> SegmentStateType {
+        SegmentStateType::Active
+    }
+
+    fn enter(&self) {
+        // No special entry behavior
+    }
+
+    fn update(&self) -> Option<Box<dyn SegmentState>> {
+        // An idle segment doesn't need to be updated
+        None
+    }
+
+    fn exit(&self) {
+        // No special exit behavior
+    }
+
+    fn layer(&self) -> Layer {
+        Layer::Foreground
+    }
+
+    fn calculate_style(&self) -> DrawStyle {
+        self.style.clone()
+    }
+
+    fn scale_stroke_weight(&mut self, scale_factor: f32) {
+        self.style.stroke_weight *= scale_factor;
+    }
+
+    fn clone_box(&self) -> Box<dyn SegmentState> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PoweringOnState {
+    target_style: DrawStyle,
+    start_time: Instant,
+    flash_duration: f32,
+    fade_duration: f32,
+}
+
+impl SegmentState for PoweringOnState {
+    fn state_type(&self) -> SegmentStateType {
+        SegmentStateType::PoweringOn
+    }
+
+    fn enter(&self) {
+        // No particular enter behavior
+    }
+
+    fn update(&self) -> Option<Box<dyn SegmentState>> {
+        let elapsed = self.start_time.elapsed().as_secs_f32();
+        if elapsed >= self.flash_duration + self.fade_duration {
+            // Change to active state
+            Some(Box::new(ActiveState {
+                style: self.target_style.clone(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn exit(&self) {
+        // No special behavior
+    }
+
+    fn layer(&self) -> Layer {
+        Layer::Foreground
+    }
+
+    fn calculate_style(&self) -> DrawStyle {
+        let elapsed = self.start_time.elapsed().as_secs_f32();
+        if elapsed <= self.flash_duration {
+            // Flash phase
+            DrawStyle {
+                color: rgba(1.0, 0.0, 0.0, 1.0),
+                stroke_weight: self.target_style.stroke_weight,
+            }
+        } else {
+            // Fade phase
+            let fade_progress = (elapsed - self.flash_duration) / self.fade_duration;
+            let flash_color = rgba(1.0, 0.0, 0.0, 1.0);
+
+            DrawStyle {
+                color: easing::color_exp_ease(
+                    flash_color,
+                    self.target_style.color,
+                    fade_progress,
+                    6.0,
+                ),
+                stroke_weight: self.target_style.stroke_weight,
+            }
+        }
+    }
+
+    fn scale_stroke_weight(&mut self, scale_factor: f32) {
+        self.target_style.stroke_weight *= scale_factor;
+    }
+
+    fn clone_box(&self) -> Box<dyn SegmentState> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PoweringOffState {
+    target_style: DrawStyle,
+    from_style: DrawStyle,
+    start_time: Instant,
+    duration: f32,
+}
+
+impl SegmentState for PoweringOffState {
+    fn state_type(&self) -> SegmentStateType {
+        SegmentStateType::PoweringOff
+    }
+
+    fn enter(&self) {
+        // No particular enter behavior
+    }
+
+    fn update(&self) -> Option<Box<dyn SegmentState>> {
+        let elapsed = self.start_time.elapsed().as_secs_f32();
+        if elapsed >= self.duration {
+            // Change to idle state
+            Some(Box::new(IdleState {
+                style: self.target_style.clone(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn exit(&self) {
+        // No special behavior
+    }
+
+    fn layer(&self) -> Layer {
+        Layer::Middle
+    }
+
+    fn calculate_style(&self) -> DrawStyle {
+        let elapsed = self.start_time.elapsed().as_secs_f32();
+        if elapsed <= self.duration {
+            // Fade phase
+            let fade_progress = elapsed / self.duration;
+
+            DrawStyle {
+                color: easing::color_exp_ease(
+                    self.from_style.color,
+                    self.target_style.color,
+                    fade_progress,
+                    6.0,
+                ),
+                stroke_weight: self.target_style.stroke_weight,
+            }
+        } else {
+            self.target_style.clone()
+        }
+    }
+
+    fn scale_stroke_weight(&mut self, scale_factor: f32) {
+        self.from_style.stroke_weight *= scale_factor;
+        self.target_style.stroke_weight *= scale_factor;
+    }
+
+    fn clone_box(&self) -> Box<dyn SegmentState> {
+        Box::new(self.clone())
     }
 }
 

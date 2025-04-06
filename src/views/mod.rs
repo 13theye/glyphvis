@@ -5,7 +5,7 @@ pub mod grid;
 
 pub use background::BackgroundManager;
 pub use grid::grid_generic::{
-    CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, SegmentAction, SegmentState,
+    CachedGrid, CachedSegment, DrawCommand, DrawStyle, Layer, SegmentAction, SegmentStateType,
     SegmentType, StyleUpdateMsg,
 };
 pub use grid::grid_instance::GridInstance;

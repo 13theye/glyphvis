@@ -15,7 +15,7 @@ use std::{
 
 use crate::{
     animation::{
-        stretch, Movement, MovementChange, MovementEngine, SlideAnimation, StretchAnimation,
+        stretch, Animation, MovementChange, MovementEngine, SlideAnimation, StretchAnimation,
         Transition, TransitionAnimationType, TransitionEngine, TransitionTriggerType,
         TransitionUpdates,
     },
@@ -51,7 +51,7 @@ pub struct GridInstance {
     // The currently active transition
     active_transition: Option<Transition>,
     // Parameters that help define the next transition when created
-    pub transition_config: Option<TransitionConfig>,
+    pub transition_config: Option<TransitionConfig>, // probably don't need this
     pub transition_trigger_type: TransitionTriggerType,
     pub transition_next_animation_type: TransitionAnimationType,
     pub transition_trigger_received: bool,
@@ -79,29 +79,21 @@ pub struct GridInstance {
     pub target_style: DrawStyle,
 
     // backbone state (non-active segments)
-    //
     backbone_effects: HashMap<String, Box<dyn BackboneEffect>>,
     pub backbone_style: DrawStyle,
 
     // grid transform state
     //
     // The currently active time-based movement animation
-    pub active_movement: Option<Movement>,
+    pub active_movement: Option<Box<dyn Animation>>,
+
+    // Current transform state
     pub current_position: Point2,
     pub current_rotation: f32,
     pub current_scale: f32,
 
-    pub is_visible: bool,
-    spawn_location: Point2,
-
-    // state for "instantaneous" movements -- helps interpolate position
-    // so that OSC position commmands look sync'ed with refresh
-    last_position: Point2,
-    target_position: Point2,
-    position_update_time: f32,
-
-    // usually equal to time between updates (1.0/60.0)
-    movement_duration: f32,
+    pub is_visible: bool,   // draw this grid to screen when true
+    spawn_location: Point2, // the original location of the grid
 
     // Slide animation states
     row_positions: HashMap<i32, f32>, // <index, position offset>
@@ -182,11 +174,6 @@ impl GridInstance {
             is_visible: false,
             spawn_location: position,
 
-            last_position: position,
-            target_position: position,
-            position_update_time: 0.0,
-            movement_duration: 1.0 / 60.0,
-
             row_positions: HashMap::new(),
             col_positions: HashMap::new(),
             slide_animations: Vec::new(),
@@ -211,24 +198,20 @@ impl GridInstance {
         }
 
         // 2. Update positioning
-        // a. Handle time-based position interpolation (duration = 0.0)
-        if self.has_zero_duration_movement() {
-            self.apply_zero_duration_movement(time);
-        }
 
-        // b. handle duration > 0.0 movements
+        // a. handle movement
         if self.has_active_movement() {
-            if let Some(update) = self.process_active_movement(dt) {
-                self.apply_movement_change(&update);
+            if let Some(change) = self.advance_movement(time, dt) {
+                self.apply_movement_change(&change);
             }
         }
 
-        // c. handle slide animations
+        // b. handle slide animations
         if self.has_slide_animations() {
             self.update_slide_animations(time);
         }
 
-        // d. handle stretch
+        // c. handle stretch
         //if self.has_active_stretch() {
         //    todo!();
         //}
@@ -243,7 +226,7 @@ impl GridInstance {
         if self.has_active_transition() {
             if let Some(updates) = self.process_active_transition(dt) {
                 self.track_active_segments(&updates);
-                self.generate_transition_update_messages(&updates);
+                self.generate_transition_updates(&updates);
             }
         }
 
@@ -393,7 +376,7 @@ impl GridInstance {
     }
 
     // Obtain TransitionUpdates by advancing the Transition
-    // Todo: extract functionality requiring mutable self
+    // Todo?: extract functionality requiring mutable self
     fn process_active_transition(&mut self, dt: f32) -> Option<TransitionUpdates> {
         // Exit if no active transition
         if !self.has_active_transition() {
@@ -440,7 +423,7 @@ impl GridInstance {
     }
 
     // Create style update messages
-    fn generate_transition_update_messages(&mut self, updates: &TransitionUpdates) {
+    fn generate_transition_updates(&mut self, updates: &TransitionUpdates) {
         let target_style = self.target_style.clone();
         let backbone_style = self.backbone_style.clone();
 
@@ -598,29 +581,28 @@ impl GridInstance {
     ) {
         // If duration is specified, use the existing MovementEngine
         if duration > 0.0 {
-            self.active_movement = Some(engine.build_timed_movement(self, target_x, target_y));
+            self.active_movement = Some(Box::new(
+                engine.build_timed_movement(self, target_x, target_y),
+            ));
         } else {
             // For immediate movements (duration = 0.0), use time-based interpolation
-            self.stage_zero_duration_movement(target_x, target_y, time);
+            self.active_movement = Some(Box::new(engine.build_zero_duration_movement(
+                pt2(target_x, target_y),
+                self.current_position,
+                time,
+            )));
         }
     }
 
-    fn stage_zero_duration_movement(&mut self, target_x: f32, target_y: f32, time: f32) {
-        self.last_position = self.current_position;
-        self.target_position = pt2(target_x, target_y);
-        self.position_update_time = time;
-        self.movement_duration = 1.0 / 60.0;
-    }
-
-    fn process_active_movement(&mut self, dt: f32) -> Option<MovementChange> {
+    fn advance_movement(&mut self, time: f32, dt: f32) -> Option<MovementChange> {
         let movement = self.active_movement.as_mut().unwrap();
 
-        if movement.update(dt) {
-            let update = movement.advance();
+        if movement.should_update(dt) {
+            let movement_change = movement.advance(self.current_position, time);
             if movement.is_complete() {
                 self.active_movement = None;
             }
-            update
+            movement_change
         } else {
             None
         }
@@ -628,48 +610,6 @@ impl GridInstance {
 
     fn apply_movement_change(&mut self, change: &MovementChange) {
         self.apply_transform(&change.transform);
-    }
-
-    fn apply_zero_duration_movement(&mut self, time: f32) {
-        let elapsed = time - self.position_update_time;
-        let progress = (elapsed / self.movement_duration).clamp(0.0, 1.0);
-
-        if progress < 1.0 {
-            // Calculate the interpolated position
-            let interp_x =
-                self.last_position.x + (self.target_position.x - self.last_position.x) * progress;
-            let interp_y =
-                self.last_position.y + (self.target_position.y - self.last_position.y) * progress;
-            let interp_position = pt2(interp_x, interp_y);
-
-            // Calculate the delta from current position
-            let delta = interp_position - self.current_position;
-
-            // Apply the transform
-            if delta.length() > 0.01 {
-                let transform = Transform2D {
-                    translation: delta,
-                    scale: 1.0,
-                    rotation: 0.0,
-                };
-                self.apply_transform(&transform);
-            }
-        } else {
-            // We've reached the end of the interpolation
-            // Set exact position to avoid floating point errors
-            let delta = self.target_position - self.current_position;
-            if delta.length() > 0.01 {
-                let transform = Transform2D {
-                    translation: delta,
-                    scale: 1.0,
-                    rotation: 0.0,
-                };
-                self.apply_transform(&transform);
-            }
-
-            // Mark interpolation as complete
-            self.last_position = self.target_position;
-        }
     }
 
     fn apply_transform(&mut self, transform: &Transform2D) {
@@ -688,7 +628,7 @@ impl GridInstance {
         };
         self.apply_transform(&transform);
     }
-    /**************************** Stretch Effect *****************************/
+    /**************************** WIP Stretch Effect *****************************/
     pub fn stretch(&mut self, axis: Axis, target_amount: f32, start_time: f32) {
         let stretch_animation = StretchAnimation::new(
             &mut self.grid,
@@ -773,7 +713,7 @@ impl GridInstance {
         // clone the neighbors set for processing later
         let mut active_neighbors = neighbors.clone();
 
-        // diffeentiate between active and non-active neighbors
+        // differentiate between active and non-active neighbors
         active_neighbors.retain(|s| self.current_active_segments.contains(s));
         neighbors.retain(|s| !active_neighbors.contains(s));
 
@@ -782,6 +722,8 @@ impl GridInstance {
     }
 
     /**************************** Row/column Slide Effect *****************************/
+    // todo: refactor with the Animation trait?
+
     pub fn slide(&mut self, axis: Axis, index: i32, position: f32, time: f32) {
         // Get current row/col positions
         let positions = match axis {
@@ -965,10 +907,6 @@ impl GridInstance {
 
     pub fn has_active_movement(&self) -> bool {
         self.active_movement.is_some()
-    }
-
-    pub fn has_zero_duration_movement(&self) -> bool {
-        self.last_position != self.target_position
     }
 
     pub fn has_backbone_effects(&self) -> bool {

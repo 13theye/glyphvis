@@ -12,12 +12,6 @@
 // CachedSegments hold the pre-processed draw commands for a single
 // segment. Also representing a segment's "hardware", it is responsible
 // for updating its style and drawing itself.
-//
-// Main Types in this module:
-// DrawCommand, DrawStyle, CachedSegment, and CachedGrid
-//
-// Suppporting Types:
-// Layer, SegmentAction, StyleUpdateMsg
 
 use nannou::prelude::*;
 use std::collections::HashMap;
@@ -48,6 +42,7 @@ pub struct DrawStyle {
 impl Default for DrawStyle {
     fn default() -> Self {
         Self {
+            // default active segment color
             color: rgba(0.82, 0.0, 0.14, 1.0),
             stroke_weight: 5.1,
         }
@@ -65,8 +60,8 @@ pub enum Layer {
 // These messages tell the segment what to do on the next frame
 #[derive(Debug, Clone, PartialEq)]
 pub enum SegmentAction {
-    On,                 // turn this segment on using PowerOn
-    Off,                // turn this segment off using PowerOff
+    On,                 // turn this segment on using PowerOn effect
+    Off,                // turn this segment off using PowerOff effect
     BackboneUpdate,     // this segment is not active but needs to be updated via backbone effect
     InstantStyleChange, // just change the segment to the target style without any animation
 }
@@ -263,9 +258,7 @@ impl CachedSegment {
     }
 
     fn transition_to(&mut self, new_state: Box<dyn SegmentState>) {
-        self.state.exit();
         self.state = new_state;
-        self.state.enter();
     }
 
     /**************************  Transform functions *************************************** */
@@ -567,9 +560,7 @@ impl DrawCommand {
 // supposed to be doing at any given time
 pub trait SegmentState {
     fn state_type(&self) -> SegmentStateType;
-    fn enter(&self);
     fn update(&self) -> Option<Box<dyn SegmentState>>;
-    fn exit(&self);
     fn layer(&self) -> Layer;
     fn calculate_style(&self) -> DrawStyle;
     fn scale_stroke_weight(&mut self, scale_factor: f32);
@@ -586,17 +577,9 @@ impl SegmentState for IdleState {
         SegmentStateType::Idle
     }
 
-    fn enter(&self) {
-        // No special entry behavior
-    }
-
     fn update(&self) -> Option<Box<dyn SegmentState>> {
         // An idle segment doesn't need to be updated
         None
-    }
-
-    fn exit(&self) {
-        // No special exit behavior
     }
 
     fn layer(&self) -> Layer {
@@ -627,17 +610,9 @@ impl SegmentState for ActiveState {
         SegmentStateType::Active
     }
 
-    fn enter(&self) {
-        // No special entry behavior
-    }
-
     fn update(&self) -> Option<Box<dyn SegmentState>> {
         // An idle segment doesn't need to be updated
         None
-    }
-
-    fn exit(&self) {
-        // No special exit behavior
     }
 
     fn layer(&self) -> Layer {
@@ -670,10 +645,6 @@ impl SegmentState for PoweringOnState {
         SegmentStateType::PoweringOn
     }
 
-    fn enter(&self) {
-        // No particular enter behavior
-    }
-
     fn update(&self) -> Option<Box<dyn SegmentState>> {
         let elapsed = self.start_time.elapsed().as_secs_f32();
         if elapsed >= self.flash_duration + self.fade_duration {
@@ -684,10 +655,6 @@ impl SegmentState for PoweringOnState {
         } else {
             None
         }
-    }
-
-    fn exit(&self) {
-        // No special behavior
     }
 
     fn layer(&self) -> Layer {
@@ -741,10 +708,6 @@ impl SegmentState for PoweringOffState {
         SegmentStateType::PoweringOff
     }
 
-    fn enter(&self) {
-        // No particular enter behavior
-    }
-
     fn update(&self) -> Option<Box<dyn SegmentState>> {
         let elapsed = self.start_time.elapsed().as_secs_f32();
         if elapsed >= self.duration {
@@ -755,10 +718,6 @@ impl SegmentState for PoweringOffState {
         } else {
             None
         }
-    }
-
-    fn exit(&self) {
-        // No special behavior
     }
 
     fn layer(&self) -> Layer {

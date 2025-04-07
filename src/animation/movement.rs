@@ -4,6 +4,7 @@
 // scaling and rotation are not currently supported
 
 use crate::{
+    animation::Animation,
     config::MovementConfig,
     views::{GridInstance, Transform2D},
 };
@@ -23,14 +24,87 @@ pub struct MovementChange {
 }
 
 #[derive(Debug, Clone)]
-pub struct Movement {
+pub struct InstantMovement {
+    target_position: Point2,
+    last_position: Point2,
+    trigger_time: f32, // time when command was received
+    duration: f32,     // usually equal to time between frame updates (1.0/60.0)
+}
+
+impl InstantMovement {
+    pub fn new(target_position: Point2, last_position: Point2, trigger_time: f32) -> Self {
+        Self {
+            target_position,
+            last_position,
+            trigger_time,
+            duration: 1.0 / 60.0,
+        }
+    }
+}
+
+impl Animation for InstantMovement {
+    fn should_update(&mut self, _dt: f32) -> bool {
+        // InstantMovement should update on very next frame
+        true
+    }
+
+    fn advance(&mut self, current_position: Point2, time: f32) -> Option<MovementChange> {
+        let elapsed = time - self.trigger_time;
+        let progress = (elapsed / self.duration).clamp(0.0, 1.0);
+
+        // Snap to exact target when very close to completion
+        if progress > 0.99 {
+            // Direct snap to target
+            let delta = self.target_position - current_position;
+
+            // Only return a transform if the delta is significant
+            if delta.length() < 0.001 {
+                return None;
+            }
+
+            let transform = Transform2D {
+                translation: delta,
+                scale: 1.0,
+                rotation: 0.0,
+            };
+
+            self.last_position = self.target_position;
+            return Some(MovementChange { transform });
+        }
+
+        let adjusted_target =
+            interpolate_position(current_position, self.target_position, progress);
+
+        // Apply threshold to avoid tiny movements
+        let delta = adjusted_target - current_position;
+        if delta.length() < 0.001 {
+            return None;
+        }
+
+        let transform = Transform2D {
+            translation: delta,
+            scale: 1.0,
+            rotation: 0.0,
+        };
+
+        self.last_position = adjusted_target;
+        Some(MovementChange { transform })
+    }
+
+    fn is_complete(&self) -> bool {
+        self.last_position == self.target_position
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TimedMovement {
     changes: Vec<MovementChange>,
     current_step: usize,
     frame_timer: f32,
     frame_duration: f32,
 }
 
-impl Movement {
+impl TimedMovement {
     pub fn new(changes: Vec<MovementChange>, frame_duration: f32) -> Self {
         Self {
             changes,
@@ -39,8 +113,10 @@ impl Movement {
             frame_duration,
         }
     }
+}
 
-    pub fn update(&mut self, dt: f32) -> bool {
+impl Animation for TimedMovement {
+    fn should_update(&mut self, dt: f32) -> bool {
         self.frame_timer += dt;
         if self.frame_timer >= self.frame_duration {
             self.frame_timer -= self.frame_duration;
@@ -50,7 +126,7 @@ impl Movement {
         }
     }
 
-    pub fn advance(&mut self) -> Option<MovementChange> {
+    fn advance(&mut self, _current_position: Point2, _time: f32) -> Option<MovementChange> {
         if self.current_step < self.changes.len() {
             let current_change = self.changes[self.current_step].clone();
             self.current_step += 1;
@@ -60,20 +136,8 @@ impl Movement {
         }
     }
 
-    pub fn is_complete(&self) -> bool {
+    fn is_complete(&self) -> bool {
         self.current_step >= self.changes.len()
-    }
-
-    pub fn get_current_step(&self) -> usize {
-        self.current_step
-    }
-
-    pub fn get_changes(&self) -> &Vec<MovementChange> {
-        &self.changes
-    }
-
-    pub fn get_frame_duration(&self) -> f32 {
-        self.frame_duration
     }
 }
 
@@ -97,7 +161,7 @@ impl MovementEngine {
         grid: &GridInstance,
         target_x: f32,
         target_y: f32,
-    ) -> Movement {
+    ) -> TimedMovement {
         let target_position = pt2(target_x, target_y);
 
         let start_transform = Transform2D {
@@ -114,7 +178,16 @@ impl MovementEngine {
 
         let changes = self.generate_movement_changes(start_transform, end_transform);
 
-        Movement::new(changes, 1.0 / 60.0)
+        TimedMovement::new(changes, 1.0 / 60.0)
+    }
+
+    pub fn build_zero_duration_movement(
+        &self,
+        target_position: Point2,
+        current_position: Point2,
+        trigger_time: f32,
+    ) -> InstantMovement {
+        InstantMovement::new(target_position, current_position, trigger_time)
     }
 
     fn generate_movement_changes(
@@ -183,4 +256,10 @@ fn ease_in(t: f32) -> f32 {
 
 fn ease_out(t: f32) -> f32 {
     t * (2.0 - t)
+}
+
+fn interpolate_position(last_position: Point2, target_position: Point2, progress: f32) -> Point2 {
+    let interp_x = last_position.x + (target_position.x - last_position.x) * progress;
+    let interp_y = last_position.y + (target_position.y - last_position.y) * progress;
+    pt2(interp_x, interp_y)
 }

@@ -39,13 +39,6 @@ pub enum TransitionTriggerType {
     Manual,
 }
 
-#[derive(Default, Clone, Copy)]
-pub enum TransitionEffect {
-    #[default]
-    Normal,
-    PowerOn,
-}
-
 #[derive(Default, Clone, Copy, PartialEq)]
 pub enum TransitionAnimationType {
     #[default]
@@ -319,7 +312,7 @@ impl TransitionEngine {
         start_segments: &HashSet<String>,
         target_segments: &HashSet<String>,
     ) -> Vec<Vec<SegmentChange>> {
-        // Call into our stroke order module
+        // Call into the stroke order module
         let ordered_segments =
             stroke_order::generate_stroke_order(grid_instance, start_segments, target_segments);
 
